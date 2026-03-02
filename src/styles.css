@@ -424,6 +424,125 @@ input  { font-family: var(--font-body); }
   font-size: 11px; color: var(--t3);
 }
 
+.footer-links {
+  display: flex; align-items: center; gap: 8px;
+}
+.footer-links a {
+  color: var(--t3); transition: color 0.18s;
+}
+.footer-links a:hover { color: var(--t2); }
+.footer-sep { color: var(--t3); opacity: 0.4; }
+
+/* ═══════════════════════════════════════════════
+   LEGAL PAGES (Privacy & Terms)
+═══════════════════════════════════════════════ */
+
+.legal-page {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.legal-main {
+  position: relative; z-index: 5;
+  display: flex; justify-content: center;
+  padding: 32px 24px 60px;
+}
+
+.legal-card {
+  width: 100%; max-width: 720px;
+  background: rgba(10,14,28,0.75);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 40px 48px;
+  display: flex; flex-direction: column; gap: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+}
+
+.legal-header {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+
+.legal-eyebrow {
+  font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--t3); font-weight: 500;
+}
+
+.legal-title {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 800; line-height: 1.05;
+  letter-spacing: 0.01em; color: var(--t1);
+}
+
+.legal-meta {
+  font-size: 12px; color: var(--t3); margin-top: 2px;
+}
+
+.legal-section {
+  margin-bottom: 28px;
+}
+
+.legal-section h2 {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: 0.02em; color: var(--t1);
+  margin-bottom: 10px;
+}
+
+.legal-section h3 {
+  font-size: 13px; font-weight: 600;
+  color: var(--t2); margin-bottom: 6px; margin-top: 14px;
+}
+
+.legal-section p {
+  font-size: 13.5px; color: var(--t2);
+  line-height: 1.72; font-weight: 300;
+  margin-bottom: 10px;
+}
+
+.legal-section p:last-child { margin-bottom: 0; }
+
+.legal-section ul {
+  list-style: none; padding: 0; margin: 0 0 10px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+
+.legal-section ul li {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13.5px; color: var(--t2);
+  line-height: 1.65; font-weight: 300;
+}
+
+.legal-section ul li::before {
+  content: '';
+  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  margin-top: 7px;
+}
+
+.legal-link {
+  color: var(--blue-l); transition: color 0.18s;
+}
+.legal-link:hover { color: var(--purple-l); }
+
+.legal-footer-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+  .legal-card { padding: 24px 20px; }
+  .legal-footer-nav { flex-direction: column; gap: 12px; align-items: flex-start; }
+}
+
 /* ═══════════════════════════════════════════════
    SHARE PAGE — can scroll if many files
 ═══════════════════════════════════════════════ */
@@ -535,7 +654,8 @@ input  { font-family: var(--font-body); }
   .upload-section { justify-content: center; }
   .glass-card { max-width: 100%; }
   .site-header { padding: 18px 22px; }
-  .site-footer { padding: 0 22px 18px; flex-direction: column; gap: 4px; text-align: center; }
+  .site-footer { padding: 0 22px 18px; flex-direction: column; gap: 6px; text-align: center; }
+  .footer-links { justify-content: center; }
 }
 
 @media (max-width: 480px) {

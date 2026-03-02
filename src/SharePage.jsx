@@ -246,7 +246,11 @@ export default function SharePage() {
 
       <footer className="site-footer">
         <span>© {new Date().getFullYear()} Eastape Films. All rights reserved.</span>
-        <span>Currently for Private use only</span>
+        <span className="footer-links">
+          <Link to="/privacy">Privacy Policy</Link>
+          <span className="footer-sep">·</span>
+          <Link to="/terms">Terms &amp; Conditions</Link>
+        </span>
       </footer>
     </div>
   );

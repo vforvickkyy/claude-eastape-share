@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CloudArrowUp, File, FileImage, FilePdf, FileZip, FileVideo, FileAudio,
@@ -366,7 +366,11 @@ export default function UploadPage() {
       {/* Footer */}
       <footer className="site-footer">
         <span>© {new Date().getFullYear()} Eastape Films. All rights reserved.</span>
-        <span>Currently for Private use only</span>
+        <span className="footer-links">
+          <Link to="/privacy">Privacy Policy</Link>
+          <span className="footer-sep">·</span>
+          <Link to="/terms">Terms &amp; Conditions</Link>
+        </span>
       </footer>
 
       <input ref={fileInputRef} type="file" multiple hidden
