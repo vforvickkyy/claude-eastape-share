@@ -1,92 +1,76 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { createContext, useContext, useEffect, useState } from "react";
 
+// Auth is now handled server-side via /api/auth/* endpoints.
+// Sessions are stored in localStorage so they survive page reloads.
+
+const SESSION_KEY = "ets_auth";
 const AuthContext = createContext(null);
 
-// Race any Supabase promise against a hard timeout so the UI never hangs forever
-function withTimeout(promise, ms = 10000) {
-  const timer = new Promise((_, reject) =>
-    setTimeout(
-      () => reject(new Error("Connection timed out. Make sure your Supabase project is not paused (Supabase Dashboard → Resume Project).")),
-      ms
-    )
-  );
-  return Promise.race([promise, timer]);
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; }
+}
+function saveSession(session) {
+  if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  else localStorage.removeItem(SESSION_KEY);
+}
+function isExpired(session) {
+  // expires_at is a Unix timestamp in seconds
+  return !session?.expires_at || Date.now() / 1000 > session.expires_at - 30;
 }
 
-// Turn a raw "Failed to fetch" into something actionable
-function friendlyError(err) {
-  if (err?.message === "Failed to fetch") {
-    return new Error(
-      "Cannot reach Supabase. Fix checklist:\n" +
-      "1. VITE_SUPABASE_URL must be https://[id].supabase.co (include https://)\n" +
-      "2. Supabase project may be paused — go to supabase.com and resume it\n" +
-      "3. Add https://claude-eastape-share.vercel.app to Supabase → Auth → URL Configuration"
-    );
-  }
-  return err;
+async function apiPost(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
+  function applySession(session) {
+    setUser(session?.user ?? null);
+    saveSession(session ?? null);
+  }
+
+  // Restore session on mount
   useEffect(() => {
-    if (!supabase) {
+    const session = loadSession();
+    if (!session) { setLoading(false); return; }
+
+    if (!isExpired(session)) {
+      setUser(session.user);
       setLoading(false);
       return;
     }
 
-    withTimeout(supabase.auth.getSession(), 8000)
-      .then(({ data: { session } }) => {
-        setUser(session?.user ?? null);
-      })
-      .catch(() => {
-        // Session check timed out or failed — treat as logged out
-        setUser(null);
-      })
+    // Session expired — try to refresh silently
+    apiPost("/api/auth/refresh", { refreshToken: session.refresh_token })
+      .then(({ session: newSession }) => applySession(newSession))
+      .catch(() => { saveSession(null); setUser(null); })
       .finally(() => setLoading(false));
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
   async function login(email, password) {
-    if (!supabase) throw new Error("Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel environment variables.");
-    try {
-      const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password })
-      );
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      throw friendlyError(err);
-    }
+    const { session } = await apiPost("/api/auth/login", { email, password });
+    applySession(session);
+    return session;
   }
 
   async function signup(email, password, fullName) {
-    if (!supabase) throw new Error("Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel environment variables.");
-    try {
-      const { data, error } = await withTimeout(
-        supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: fullName } },
-        })
-      );
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      throw friendlyError(err);
-    }
+    const { session } = await apiPost("/api/auth/signup", { email, password, fullName });
+    applySession(session);
+    return session;
   }
 
-  async function logout() {
-    if (!supabase) return;
-    await withTimeout(supabase.auth.signOut(), 5000).catch(() => {});
+  function logout() {
+    saveSession(null);
+    setUser(null);
   }
 
   return (
