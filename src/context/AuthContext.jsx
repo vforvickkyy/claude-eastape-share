@@ -7,11 +7,24 @@ const AuthContext = createContext(null);
 function withTimeout(promise, ms = 10000) {
   const timer = new Promise((_, reject) =>
     setTimeout(
-      () => reject(new Error("Connection timed out. Please check your Supabase URL in Vercel environment variables, and make sure your Supabase project is not paused.")),
+      () => reject(new Error("Connection timed out. Make sure your Supabase project is not paused (Supabase Dashboard → Resume Project).")),
       ms
     )
   );
   return Promise.race([promise, timer]);
+}
+
+// Turn a raw "Failed to fetch" into something actionable
+function friendlyError(err) {
+  if (err?.message === "Failed to fetch") {
+    return new Error(
+      "Cannot reach Supabase. Fix checklist:\n" +
+      "1. VITE_SUPABASE_URL must be https://[id].supabase.co (include https://)\n" +
+      "2. Supabase project may be paused — go to supabase.com and resume it\n" +
+      "3. Add https://claude-eastape-share.vercel.app to Supabase → Auth → URL Configuration"
+    );
+  }
+  return err;
 }
 
 export function AuthProvider({ children }) {
@@ -42,25 +55,33 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(email, password) {
-    if (!supabase) throw new Error("Auth is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your Vercel environment variables.");
-    const { data, error } = await withTimeout(
-      supabase.auth.signInWithPassword({ email, password })
-    );
-    if (error) throw error;
-    return data;
+    if (!supabase) throw new Error("Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel environment variables.");
+    try {
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password })
+      );
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      throw friendlyError(err);
+    }
   }
 
   async function signup(email, password, fullName) {
-    if (!supabase) throw new Error("Auth is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your Vercel environment variables.");
-    const { data, error } = await withTimeout(
-      supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      })
-    );
-    if (error) throw error;
-    return data;
+    if (!supabase) throw new Error("Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel environment variables.");
+    try {
+      const { data, error } = await withTimeout(
+        supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: fullName } },
+        })
+      );
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      throw friendlyError(err);
+    }
   }
 
   async function logout() {
