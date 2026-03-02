@@ -1,11 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Reads the env vars you already have set in Vercel:
-//   SUPABASE_URL              → your project URL
-//   SUPABASE_SERVICE_ROLE_KEY → your key
-// (exposed to the browser via envPrefix in vite.config.js)
-const supabaseUrl = import.meta.env.SUPABASE_URL;
-const supabaseKey = import.meta.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function initSupabase() {
   if (!supabaseUrl || !supabaseKey) return null;
