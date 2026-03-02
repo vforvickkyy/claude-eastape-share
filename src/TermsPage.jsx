@@ -1,18 +1,17 @@
-import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "@phosphor-icons/react";
+import SiteHeader from "./SiteHeader";
 
 export default function TermsPage() {
   return (
     <div className="page legal-page">
       <div className="noise" />
 
-      <header className="site-header">
-        <LogoSlot />
+      <SiteHeader extra={
         <Link to="/" className="back-link">
           <ArrowLeft size={14} weight="bold" /> Back to Home
         </Link>
-      </header>
+      } />
 
       <main className="legal-main">
         <div className="legal-card">
@@ -174,17 +173,5 @@ export default function TermsPage() {
         </span>
       </footer>
     </div>
-  );
-}
-
-function LogoSlot() {
-  const [hasLogo, setHasLogo] = React.useState(true);
-  return hasLogo ? (
-    <img src="/logo.png" alt="Eastape Share" className="logo-img" onError={() => setHasLogo(false)} />
-  ) : (
-    <span className="logo-text-fallback">
-      <span className="logo-dot" />
-      Eastape Share
-    </span>
   );
 }

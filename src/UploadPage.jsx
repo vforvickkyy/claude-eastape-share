@@ -3,8 +3,10 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CloudArrowUp, File, FileImage, FilePdf, FileZip, FileVideo, FileAudio,
-  FileCode, Trash, Copy, CheckCircle, ArrowRight, Warning,
+  FileCode, Trash, Copy, CheckCircle, ArrowRight, Warning, Lock,
 } from "@phosphor-icons/react";
+import { useAuth } from "./context/AuthContext";
+import SiteHeader from "./SiteHeader";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -39,6 +41,7 @@ function getFileIcon(name, size = 18) {
 
 export default function UploadPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
 
   const [files, setFiles]             = useState([]);
@@ -53,6 +56,7 @@ export default function UploadPage() {
   const [errorMsg, setErrorMsg]       = useState("");
   const [shareLink, setShareLink]     = useState("");
   const [copied, setCopied]           = useState(false);
+  const [loginRequired, setLoginRequired] = useState(false);
 
   const uploadStartTime = useRef(null);
 
@@ -82,6 +86,7 @@ export default function UploadPage() {
   function addFiles(newFiles) {
     setShareLink(""); setProgress(0); setStatus("idle");
     setErrorMsg(""); setFileProgresses({}); setSpeed(0); setEta(null);
+    setLoginRequired(false);
     setFiles(prev => {
       const seen = new Set(prev.map(f => f.name + f.size));
       return [...prev, ...newFiles.filter(f => !seen.has(f.name + f.size))];
@@ -94,6 +99,16 @@ export default function UploadPage() {
   /* ─── upload ─── */
   async function handleUpload() {
     if (!files.length || uploading) return;
+
+    // Auth guard — show brief message then redirect to login
+    if (!user) {
+      setLoginRequired(true);
+      setTimeout(() => {
+        navigate("/login", { state: { message: "Please log in to upload files." } });
+      }, 1200);
+      return;
+    }
+
     setUploading(true); setStatus("uploading");
     setProgress(0); setErrorMsg(""); setSpeed(0); setEta(null);
     uploadStartTime.current = Date.now();
@@ -194,12 +209,7 @@ export default function UploadPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="site-header">
-        <LogoSlot />
-        <div className="header-right">
-          <span className="header-tag">Currently for Private use only</span>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Two columns */}
       <main className="main-layout">
@@ -217,7 +227,7 @@ export default function UploadPage() {
           <div className="hero-features">
             <div className="hero-feature"><span className="hero-feature-dot"/>Direct upload — no server middleman</div>
             <div className="hero-feature"><span className="hero-feature-dot"/>Links expire automatically after 7 days</div>
-            <div className="hero-feature"><span className="hero-feature-dot"/>No account required</div>
+            <div className="hero-feature"><span className="hero-feature-dot"/>Free account required to upload</div>
           </div>
         </motion.section>
 
@@ -325,6 +335,18 @@ export default function UploadPage() {
               )}
             </AnimatePresence>
 
+            {/* Login required warning */}
+            <AnimatePresence>
+              {loginRequired && (
+                <motion.div className="login-required-msg"
+                  initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                >
+                  <Lock size={13} weight="fill" style={{ flexShrink: 0 }}/>
+                  Login required. Redirecting to sign in…
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Share link */}
             <AnimatePresence>
               {shareLink && (
@@ -350,8 +372,9 @@ export default function UploadPage() {
 
             {/* Upload button */}
             {files.length > 0 && !shareLink && (
-              <motion.button className="upload-btn" onClick={handleUpload} disabled={uploading}
-                whileHover={!uploading ? { scale: 1.01 } : {}} whileTap={!uploading ? { scale: 0.99 } : {}}
+              <motion.button className="upload-btn" onClick={handleUpload} disabled={uploading || loginRequired}
+                whileHover={!uploading && !loginRequired ? { scale: 1.01 } : {}}
+                whileTap={!uploading && !loginRequired ? { scale: 0.99 } : {}}
               >
                 {uploading
                   ? <><span className="spinner"/> Uploading… {progress}%</>
@@ -380,18 +403,6 @@ export default function UploadPage() {
           e.target.value = "";
         }}
       />
-    </div>
-  );
-}
-
-function LogoSlot() {
-  const [hasLogo, setHasLogo] = React.useState(true);
-  return hasLogo ? (
-    <img src="/logo.png" alt="Eastape Share" className="logo-img" onError={() => setHasLogo(false)}/>
-  ) : (
-    <div className="logo-text-fallback">
-      <span className="logo-dot"/>
-      Eastape Share
     </div>
   );
 }

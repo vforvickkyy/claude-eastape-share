@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DownloadSimple, File, FileImage, FilePdf, FileZip, FileVideo, FileAudio,
   FileCode, ArrowLeft, CheckCircle, Copy, Warning,
 } from "@phosphor-icons/react";
+import SiteHeader from "./SiteHeader";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -101,14 +102,11 @@ export default function SharePage() {
     <div className="page page-share">
       <div className="noise" />
 
-      <header className="site-header">
-        <LogoSlot />
-        <div className="header-right">
-          <Link to="/" className="back-link">
-            <ArrowLeft size={13} weight="bold" /> Upload More
-          </Link>
-        </div>
-      </header>
+      <SiteHeader extra={
+        <Link to="/" className="back-link">
+          <ArrowLeft size={13} weight="bold" /> Upload More
+        </Link>
+      } />
 
       {/* Two-column layout — same grid as upload page */}
       <main className="share-main-layout">
@@ -252,18 +250,6 @@ export default function SharePage() {
           <Link to="/terms">Terms &amp; Conditions</Link>
         </span>
       </footer>
-    </div>
-  );
-}
-
-function LogoSlot() {
-  const [hasLogo, setHasLogo] = React.useState(true);
-  return hasLogo ? (
-    <img src="/logo.png" alt="Eastape Share" className="logo-img" onError={() => setHasLogo(false)} />
-  ) : (
-    <div className="logo-text-fallback">
-      <span className="logo-dot" />
-      Eastape Share
     </div>
   );
 }
