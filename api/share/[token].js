@@ -1,14 +1,6 @@
 /**
- * GET /api/share/:token
- *
- * Returns metadata for all files in a share.
- * Does NOT return download URLs — those are fetched per-file via /api/download
- *
- * Response: {
- *   token: string,
- *   files: [{ id, file_name, file_size, created_at }],
- *   expires_at: string,
- * }
+ * GET /api/share/[token]
+ * Returns file metadata for a share token.
  */
 
 const { createClient } = require("@supabase/supabase-js");
@@ -19,17 +11,15 @@ const supabase = createClient(
 );
 
 module.exports = async function handler(req, res) {
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const { token } = req.query;
+  // Vercel passes dynamic path segment as query param matching the filename
+  // For api/share/[token].js, the token is req.query.token
+  const token = req.query.token;
 
   if (!token || typeof token !== "string") {
     return res.status(400).json({ error: "Token required" });
@@ -44,14 +34,13 @@ module.exports = async function handler(req, res) {
 
     if (error) {
       console.error("Supabase fetch error:", error);
-      return res.status(500).json({ error: "Database error" });
+      return res.status(500).json({ error: "Database error", detail: error.message });
     }
 
     if (!data || data.length === 0) {
-      return res.status(404).json({ error: "Share not found or expired" });
+      return res.status(404).json({ error: "Share not found" });
     }
 
-    // Check expiry (server-side guard)
     const expired = data[0].expires_at && new Date(data[0].expires_at) < new Date();
     if (expired) {
       return res.status(410).json({ error: "This share link has expired" });
