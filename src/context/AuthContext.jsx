@@ -8,13 +8,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get existing session on mount
+    // If Supabase env vars are missing, skip auth setup entirely
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Keep user in sync on login / logout / token refresh
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -23,12 +27,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(email, password) {
+    if (!supabase) throw new Error("Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel environment variables.");
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
   }
 
   async function signup(email, password, fullName) {
+    if (!supabase) throw new Error("Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel environment variables.");
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -39,6 +45,7 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    if (!supabase) return;
     await supabase.auth.signOut();
   }
 
