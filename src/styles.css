@@ -544,3 +544,125 @@ input  { font-family: var(--font-body); }
   .share-row   { flex-direction: column; }
   .copy-btn    { justify-content: center; }
 }
+/* ═══════════════════════════════════════════════
+   SHARE PAGE — two-column layout matching upload page
+═══════════════════════════════════════════════ */
+
+/* Override: share page is also fixed-height like upload page */
+.page-share {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Two-column layout — mirrors .main-layout */
+.share-main-layout {
+  position: relative; z-index: 5;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  padding: 0 52px;
+  overflow: hidden;
+}
+
+/* LEFT — hero */
+.share-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-right: 48px;
+}
+
+.share-hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 5.5vw, 80px);
+  font-weight: 800;
+  line-height: 1.0;
+  letter-spacing: 0.01em;
+  color: var(--t1);
+}
+
+.share-hero-accent {
+  display: block;
+  background: linear-gradient(120deg, var(--purple-l) 0%, var(--blue-l) 60%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.share-hero-desc {
+  font-size: 14px;
+  color: var(--t2);
+  line-height: 1.6;
+  font-weight: 300;
+  max-width: 320px;
+}
+
+/* RIGHT — card column */
+.share-card-section {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The glass card itself */
+.share-glass-card {
+  width: 100%;
+  max-width: 400px;
+  background: rgba(10,14,28,0.75);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+}
+
+/* "Your files are ready" inner heading */
+.share-card-inner-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t1);
+  letter-spacing: -0.01em;
+}
+
+/* Remove old share-main styles that cause centering/scrolling */
+.share-main { display: none; }
+.share-card { display: none; }
+.share-card-center { display: none; }
+
+/* Mobile — stack vertically, allow scroll */
+@media (max-width: 900px) {
+  .page-share {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+  .share-main-layout {
+    grid-template-columns: 1fr;
+    padding: 16px 22px 40px;
+    align-items: start;
+  }
+  .share-hero { display: none; }
+  .share-card-section { justify-content: center; }
+  .share-glass-card { max-width: 100%; }
+
+  /* Re-show the centered card for error/loading states on mobile */
+  .share-card { display: flex; }
+  .share-card-center { display: flex; }
+}
+```
+
+---
+
+## Favicon & iOS Icon — where to place files
+```
+eastape-share/
+└── public/
+    ├── favicon.png          ← your favicon (32x32px or 64x64px recommended)
+    ├── apple-touch-icon.png ← iOS home screen icon (exactly 180x180px)
+    └── logo.png             ← your logo (already there)
