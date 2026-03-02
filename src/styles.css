@@ -655,14 +655,3 @@ input  { font-family: var(--font-body); }
   .share-card { display: flex; }
   .share-card-center { display: flex; }
 }
-```
-
----
-
-## Favicon & iOS Icon — where to place files
-```
-eastape-share/
-└── public/
-    ├── favicon.png          ← your favicon (32x32px or 64x64px recommended)
-    ├── apple-touch-icon.png ← iOS home screen icon (exactly 180x180px)
-    └── logo.png             ← your logo (already there)
