@@ -1572,6 +1572,43 @@ input  { font-family: var(--font-body); }
   user-select: all;
 }
 
+/* ── Fixed-position right-click context menu ── */
+.ctx-fixed {
+  position: fixed;
+  z-index: 9999;
+  /* override any relative positioning from card-menu-dropdown */
+  top: unset;
+  right: unset;
+  left: unset;
+}
+.ctx-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
+}
+
+/* ── Inline rename input ── */
+.rename-input {
+  width: 100%;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--purple);
+  border-radius: var(--r-md);
+  color: var(--t1);
+  font-size: 12px;
+  font-family: var(--font-body);
+  padding: 3px 7px;
+  outline: none;
+  min-width: 0;
+}
+.rename-input:focus {
+  border-color: var(--purple-l);
+  box-shadow: 0 0 0 2px rgba(124,58,237,0.2);
+}
+.rename-input--row {
+  font-size: 13px;
+  padding: 2px 8px;
+}
+
 /* ════════════════════════════════════════════
    PRICING / PLANS PAGE
 ════════════════════════════════════════════ */

@@ -392,6 +392,8 @@ export default function UploadPage() {
       <footer className="site-footer">
         <span>© {new Date().getFullYear()} Eastape Films. All rights reserved.</span>
         <span className="footer-links">
+          <Link to="/pricing">Pricing</Link>
+          <span className="footer-sep">·</span>
           <Link to="/privacy">Privacy Policy</Link>
           <span className="footer-sep">·</span>
           <Link to="/terms">Terms &amp; Conditions</Link>

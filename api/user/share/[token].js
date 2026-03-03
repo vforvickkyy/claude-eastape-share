@@ -83,6 +83,19 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    if (action === "rename") {
+      const { name } = req.body || {};
+      if (!name?.trim()) return res.status(400).json({ error: "Name is required." });
+      // Update the first file row for this token (drives the display label)
+      const firstId = rows[0].id;
+      const { error } = await supabase
+        .from("shares")
+        .update({ file_name: name.trim() })
+        .eq("id", firstId);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+
     return res.status(400).json({ error: "Unknown action." });
   }
 

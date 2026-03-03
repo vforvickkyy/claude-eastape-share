@@ -41,13 +41,6 @@ export default function SiteHeader({ extra }) {
         </nav>
       )}
 
-      {/* Pricing link — only shown when NOT logged in */}
-      {!loading && !user && (
-        <nav className="header-nav">
-          <NavLink to="/pricing" className={({ isActive }) => `header-nav-link ${isActive ? "active" : ""}`}>Pricing</NavLink>
-        </nav>
-      )}
-
       <div className="header-right">
         {extra}
 

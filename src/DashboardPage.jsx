@@ -78,6 +78,19 @@ export default function DashboardPage() {
               await userApiFetch(`/api/user/share/${token}`, { method: "PUT", body: JSON.stringify({ action: "trash" }) });
               setShares(s => s.filter(sh => sh.token !== token));
             }}
+            onDelete={async ({ type, token }) => {
+              if (type !== "share") return;
+              if (!window.confirm("Permanently delete? This cannot be undone.")) return;
+              await userApiFetch(`/api/user/share/${token}`, { method: "DELETE" });
+              setShares(s => s.filter(sh => sh.token !== token));
+            }}
+            onRename={async (token, name) => {
+              await userApiFetch(`/api/user/share/${token}`, { method: "PUT", body: JSON.stringify({ action: "rename", name }) });
+              setShares(s => s.map(sh => sh.token === token
+                ? { ...sh, files: sh.files.map((f, i) => i === 0 ? { ...f, name } : f) }
+                : sh
+              ));
+            }}
           />
         )}
       </div>

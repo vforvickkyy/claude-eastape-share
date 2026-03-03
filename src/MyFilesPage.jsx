@@ -67,11 +67,20 @@ export default function MyFilesPage() {
     }
   }
 
+  async function handleRename(token, name) {
+    await userApiFetch(`/api/user/share/${token}`, { method: "PUT", body: JSON.stringify({ action: "rename", name }) });
+    setShares(s => s.map(sh => sh.token === token
+      ? { ...sh, files: sh.files.map((f, i) => i === 0 ? { ...f, name } : f) }
+      : sh
+    ));
+  }
+
   const viewProps = {
     shares, folders, isTrash: false,
     onFolderClick: f => navigate(`/my-files/folder/${f.id}`),
     onTrash: handleTrash,
     onDelete: handleDelete,
+    onRename: handleRename,
     onMove: token => setMoveToken(token),
   };
 
