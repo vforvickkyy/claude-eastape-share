@@ -12,6 +12,7 @@ import MyFilesPage       from "./MyFilesPage.jsx";
 import RecentPage        from "./RecentPage.jsx";
 import TrashPage         from "./TrashPage.jsx";
 import ProfilePage       from "./ProfilePage.jsx";
+import PricingPage       from "./PricingPage.jsx";
 
 export default function App() {
   return (
@@ -30,6 +31,8 @@ export default function App() {
           <Route path="/recent"              element={<RecentPage />} />
           <Route path="/trash"               element={<TrashPage />} />
           <Route path="/profile"             element={<ProfilePage />} />
+          <Route path="/pricing"             element={<PricingPage />} />
+          <Route path="/plans"               element={<PricingPage inDashboard />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

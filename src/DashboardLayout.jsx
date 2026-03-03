@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
-  CloudArrowUp, FolderOpen, Clock, Trash, CaretDown, SignOut, List, X, UserCircle,
+  CloudArrowUp, FolderOpen, Clock, Trash, CaretDown, SignOut, List, X, UserCircle, CurrencyInr,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 
 const NAV = [
-  { to: "/dashboard",  icon: <CloudArrowUp size={18} weight="duotone" />, label: "Dashboard" },
-  { to: "/my-files",   icon: <FolderOpen   size={18} weight="duotone" />, label: "My Files"  },
-  { to: "/recent",     icon: <Clock        size={18} weight="duotone" />, label: "Recent"     },
-  { to: "/trash",      icon: <Trash        size={18} weight="duotone" />, label: "Trash"      },
+  { to: "/dashboard",  icon: <CloudArrowUp  size={18} weight="duotone" />, label: "Dashboard" },
+  { to: "/my-files",   icon: <FolderOpen    size={18} weight="duotone" />, label: "My Files"  },
+  { to: "/recent",     icon: <Clock         size={18} weight="duotone" />, label: "Recent"     },
+  { to: "/trash",      icon: <Trash         size={18} weight="duotone" />, label: "Trash"      },
+  { to: "/plans",      icon: <CurrencyInr   size={18} weight="duotone" />, label: "Plans"      },
 ];
 
 export default function DashboardLayout({ children, title }) {
