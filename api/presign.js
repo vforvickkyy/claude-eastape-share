@@ -39,7 +39,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { files } = req.body;
+    const { files, userId, folderId } = req.body;
 
     if (!files || !Array.isArray(files) || files.length === 0)
       return res.status(400).json({ error: "No files provided" });
@@ -83,10 +83,12 @@ module.exports = async function handler(req, res) {
     // Insert one Supabase row per file
     const rows = uploads.map((u) => ({
       token,
-      file_name: u.safeName,           // clean display name
-      file_url:  u.s3Key,              // full S3 key used by download API
+      file_name: u.safeName,
+      file_url:  u.s3Key,
       file_size: u.size,
       expires_at: expiresAt,
+      user_id:   userId   || null,
+      folder_id: folderId || null,
     }));
 
     const { error: dbError } = await supabase.from("shares").insert(rows);

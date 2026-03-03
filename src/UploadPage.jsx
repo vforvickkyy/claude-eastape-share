@@ -119,6 +119,8 @@ export default function UploadPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           files: files.map(f => ({ name: f.name, size: f.size, type: f.type || "application/octet-stream" })),
+          userId: user?.id || null,
+          folderId: null,
         }),
       });
       if (!res.ok) {

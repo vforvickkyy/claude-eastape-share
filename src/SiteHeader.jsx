@@ -1,19 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { CaretDown, SignOut } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 
-/**
- * Shared auth-aware header used on every page.
- * @param {React.ReactNode} extra - Optional button/link to show before the auth UI (e.g. "Upload More" back-link).
- */
 export default function SiteHeader({ extra }) {
   const { user, logout, loading } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleOutside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
@@ -35,39 +30,36 @@ export default function SiteHeader({ extra }) {
   return (
     <header className="site-header">
       <LogoSlot />
+
+      {/* Dashboard nav links — only shown when logged in */}
+      {!loading && user && (
+        <nav className="header-nav">
+          <NavLink to="/dashboard" className={({ isActive }) => `header-nav-link ${isActive ? "active" : ""}`}>Dashboard</NavLink>
+          <NavLink to="/my-files"  className={({ isActive }) => `header-nav-link ${isActive ? "active" : ""}`}>My Files</NavLink>
+          <NavLink to="/recent"    className={({ isActive }) => `header-nav-link ${isActive ? "active" : ""}`}>Recent</NavLink>
+          <NavLink to="/trash"     className={({ isActive }) => `header-nav-link ${isActive ? "active" : ""}`}>Trash</NavLink>
+        </nav>
+      )}
+
       <div className="header-right">
         {extra}
 
-        {/* Don't render auth UI until initial session check is done */}
         {!loading && (
           user ? (
-            /* ── Authenticated: user menu ── */
             <div className="user-menu" ref={menuRef}>
-              <button
-                className="user-menu-trigger"
-                onClick={() => setOpen(o => !o)}
-                type="button"
-              >
+              <button className="user-menu-trigger" onClick={() => setOpen(o => !o)} type="button">
                 <div className="user-avatar">
-                  {avatarUrl
-                    ? <img src={avatarUrl} alt={displayName} />
-                    : <span>{initial}</span>
-                  }
+                  {avatarUrl ? <img src={avatarUrl} alt={displayName} /> : <span>{initial}</span>}
                 </div>
                 <span className="user-name">{displayName}</span>
                 <CaretDown size={11} weight="bold" className={`caret ${open ? "open" : ""}`} />
               </button>
-
               {open && (
                 <div className="user-dropdown">
                   <div className="dropdown-info">
                     <span className="dropdown-email">{user.email}</span>
                   </div>
-                  <button
-                    className="dropdown-item logout-item"
-                    onClick={handleLogout}
-                    type="button"
-                  >
+                  <button className="dropdown-item logout-item" onClick={handleLogout} type="button">
                     <SignOut size={13} weight="bold" />
                     Logout
                   </button>
@@ -75,7 +67,6 @@ export default function SiteHeader({ extra }) {
               )}
             </div>
           ) : (
-            /* ── Unauthenticated: login / sign-up buttons ── */
             <div className="auth-buttons">
               <Link to="/login" className="btn-ghost">Login</Link>
               <Link to="/signup" className="btn-primary-sm">Sign Up</Link>
@@ -90,16 +81,8 @@ export default function SiteHeader({ extra }) {
 function LogoSlot() {
   const [hasLogo, setHasLogo] = React.useState(true);
   return hasLogo ? (
-    <img
-      src="/logo.png"
-      alt="Eastape Share"
-      className="logo-img"
-      onError={() => setHasLogo(false)}
-    />
+    <img src="/logo.png" alt="Eastape Share" className="logo-img" onError={() => setHasLogo(false)} />
   ) : (
-    <div className="logo-text-fallback">
-      <span className="logo-dot" />
-      Eastape Share
-    </div>
+    <div className="logo-text-fallback"><span className="logo-dot" />Eastape Share</div>
   );
 }
