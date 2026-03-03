@@ -11,6 +11,7 @@ import DashboardPage     from "./DashboardPage.jsx";
 import MyFilesPage       from "./MyFilesPage.jsx";
 import RecentPage        from "./RecentPage.jsx";
 import TrashPage         from "./TrashPage.jsx";
+import ProfilePage       from "./ProfilePage.jsx";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/my-files/folder/:id" element={<MyFilesPage />} />
           <Route path="/recent"              element={<RecentPage />} />
           <Route path="/trash"               element={<TrashPage />} />
+          <Route path="/profile"             element={<ProfilePage />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

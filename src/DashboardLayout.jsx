@@ -1,22 +1,22 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
-  CloudArrowUp, FolderOpen, Clock, Trash, CaretDown, SignOut, List, X,
+  CloudArrowUp, FolderOpen, Clock, Trash, CaretDown, SignOut, List, X, UserCircle,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 
 const NAV = [
-  { to: "/dashboard",  icon: <CloudArrowUp size={18} weight="duotone" />, label: "Dashboard"  },
-  { to: "/my-files",   icon: <FolderOpen   size={18} weight="duotone" />, label: "My Files"   },
-  { to: "/recent",     icon: <Clock        size={18} weight="duotone" />, label: "Recent"      },
-  { to: "/trash",      icon: <Trash        size={18} weight="duotone" />, label: "Trash"       },
+  { to: "/dashboard",  icon: <CloudArrowUp size={18} weight="duotone" />, label: "Dashboard" },
+  { to: "/my-files",   icon: <FolderOpen   size={18} weight="duotone" />, label: "My Files"  },
+  { to: "/recent",     icon: <Clock        size={18} weight="duotone" />, label: "Recent"     },
+  { to: "/trash",      icon: <Trash        size={18} weight="duotone" />, label: "Trash"      },
 ];
 
 export default function DashboardLayout({ children, title }) {
   const { user, logout, loading } = useAuth();
   const navigate = useNavigate();
-  const [dropOpen, setDropOpen]   = useState(false);
-  const [sideOpen, setSideOpen]   = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
+  const [sideOpen, setSideOpen] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -66,6 +66,18 @@ export default function DashboardLayout({ children, title }) {
             </NavLink>
           ))}
         </nav>
+
+        {/* Profile link at bottom of sidebar */}
+        <div className="db-sidebar-footer">
+          <NavLink
+            to="/profile"
+            className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
+            onClick={() => setSideOpen(false)}
+          >
+            <UserCircle size={18} weight="duotone" />
+            <span>Profile Settings</span>
+          </NavLink>
+        </div>
       </aside>
 
       {/* Sidebar overlay on mobile */}
@@ -98,6 +110,14 @@ export default function DashboardLayout({ children, title }) {
                   <div className="dropdown-info">
                     <span className="dropdown-email">{user.email}</span>
                   </div>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => { setDropOpen(false); navigate("/profile"); }}
+                    type="button"
+                  >
+                    <UserCircle size={13} weight="bold" />
+                    Profile Settings
+                  </button>
                   <button className="dropdown-item logout-item" onClick={handleLogout} type="button">
                     <SignOut size={13} weight="bold" />
                     Logout

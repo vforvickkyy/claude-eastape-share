@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { CaretDown, SignOut } from "@phosphor-icons/react";
+import { CaretDown, SignOut, UserCircle } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 
 export default function SiteHeader({ extra }) {
@@ -59,6 +59,14 @@ export default function SiteHeader({ extra }) {
                   <div className="dropdown-info">
                     <span className="dropdown-email">{user.email}</span>
                   </div>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => { setOpen(false); navigate("/profile"); }}
+                    type="button"
+                  >
+                    <UserCircle size={13} weight="bold" />
+                    Profile Settings
+                  </button>
                   <button className="dropdown-item logout-item" onClick={handleLogout} type="button">
                     <SignOut size={13} weight="bold" />
                     Logout
