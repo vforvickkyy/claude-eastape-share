@@ -1,16 +1,13 @@
 /**
  * GET /api/download?token=xxx&fileId=yyy
  *
- * Returns a JSON object with a short-lived presigned GET URL.
- * The frontend then sets window.location.href = url to trigger a native
- * browser download — no blob fetching, no new tab, no CORS issues.
- *
- * Content-Disposition: attachment is baked into the presigned URL params
- * so Wasabi forces a download instead of opening in the browser.
+ * Returns a short-lived presigned GET URL.
+ * After issuing the URL, the file is marked as storage_deleted in the DB
+ * and queued for deletion from Wasabi — enforcing 1-download-then-delete.
  */
 
 const { createClient } = require("@supabase/supabase-js");
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, GetObjectCommand, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const supabase = createClient(
@@ -43,33 +40,67 @@ module.exports = async function handler(req, res) {
   try {
     const { data, error } = await supabase
       .from("shares")
-      .select("id, file_name, file_url, file_size, expires_at")
+      .select("id, file_name, file_url, file_size, expires_at, token, storage_deleted")
       .eq("token", token)
       .eq("id", fileId)
       .single();
 
     if (error || !data) {
-      console.error("DB lookup failed:", error);
       return res.status(404).json({ error: "File not found" });
+    }
+
+    // Already downloaded and deleted from storage
+    if (data.storage_deleted) {
+      return res.status(410).json({
+        error: "This file has already been downloaded and permanently deleted from our servers.",
+        reason: "downloaded",
+      });
     }
 
     if (data.expires_at && new Date(data.expires_at) < new Date()) {
       return res.status(410).json({ error: "This share link has expired" });
     }
 
-    // Build presigned GET URL — attachment disposition forces download in browser
+    // Generate presigned URL BEFORE marking as deleted
     const command = new GetObjectCommand({
       Bucket: BUCKET,
       Key: data.file_url,
       ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(data.file_name)}`,
       ResponseCacheControl: "no-store",
     });
-
     const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 120 });
 
-    // Return JSON with the URL — frontend will do window.location.href = url
-    // This avoids all CORS issues with fetch+blob approach and works for large files
-    return res.status(200).json({ url: presignedUrl, fileName: data.file_name });
+    // Fetch all files in the same share batch for batch deletion
+    const { data: batchFiles } = await supabase
+      .from("shares")
+      .select("id, file_url")
+      .eq("token", data.token);
+
+    // Mark the ENTIRE batch as storage_deleted immediately
+    // (prevents any subsequent download of any file in this batch)
+    await supabase
+      .from("shares")
+      .update({ storage_deleted: true, storage_deleted_at: new Date().toISOString() })
+      .eq("token", data.token);
+
+    // Return the presigned URL to the client now
+    res.status(200).json({ url: presignedUrl, fileName: data.file_name });
+
+    // Delete all files in the batch from Wasabi in the background
+    // (runs after response is sent — best-effort)
+    setImmediate(async () => {
+      try {
+        if (!batchFiles?.length) return;
+        const keys = batchFiles.map(f => ({ Key: f.file_url }));
+        await s3.send(new DeleteObjectsCommand({
+          Bucket: BUCKET,
+          Delete: { Objects: keys, Quiet: true },
+        }));
+      } catch (err) {
+        console.error("Auto-delete from Wasabi failed:", err);
+      }
+    });
+
   } catch (err) {
     console.error("download error:", err);
     return res.status(500).json({ error: "Internal server error" });

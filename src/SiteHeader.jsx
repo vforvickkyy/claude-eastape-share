@@ -29,7 +29,7 @@ export default function SiteHeader({ extra }) {
 
   return (
     <header className="site-header">
-      <LogoSlot />
+      <Link to="/" className="logo-link"><LogoSlot /></Link>
 
       {/* Dashboard nav links — only shown when logged in */}
       {!loading && user && (

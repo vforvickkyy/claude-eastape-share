@@ -177,11 +177,12 @@ export default function FileList({ shares, folders, isTrash, onFolderClick, onTr
             const firstName = share.files?.[0]?.name || "file";
             const isRenaming = renaming?.token === share.token;
             const wasCopied  = copied === share.token;
+            const isDeleted  = share.files?.every(f => f.storage_deleted);
 
             return (
               <tr
                 key={share.token}
-                className="file-list-row"
+                className={`file-list-row ${isDeleted ? "file-row--deleted" : ""}`}
                 onContextMenu={e => openAt(e, { token: share.token, isFolder: false })}
               >
                 <td className="file-list-name">
@@ -204,8 +205,9 @@ export default function FileList({ shares, folders, isTrash, onFolderClick, onTr
                       {wasCopied ? "Link copied!" : label}
                     </span>
                   )}
+                  {isDeleted && <span className="file-deleted-badge">Deleted</span>}
                 </td>
-                <td>{formatSize(totalShareSize(share))}</td>
+                <td>{isDeleted ? "—" : formatSize(totalShareSize(share))}</td>
                 <td>{formatDate(share.created_at)}</td>
                 <td>
                   <div className="card-menu" style={{ position: "relative" }}>

@@ -168,11 +168,13 @@ export default function FileGrid({ shares, folders, isTrash, onFolderClick, onTr
         const firstName = share.files?.[0]?.name || "file";
         const isRenaming = renaming?.token === share.token;
         const wasCopied  = copied === share.token;
+        const isDeleted  = share.files?.every(f => f.storage_deleted);
+        const hasDeleted = !isDeleted && share.files?.some(f => f.storage_deleted);
 
         return (
           <div
             key={share.token}
-            className="file-card"
+            className={`file-card ${isDeleted ? "file-card--deleted" : ""}`}
             onContextMenu={e => openAt(e, { token: share.token, isFolder: false })}
           >
             <div className="file-card-icon">{fileIcon(firstName)}</div>
@@ -195,8 +197,14 @@ export default function FileGrid({ shares, folders, isTrash, onFolderClick, onTr
                 <span className="file-card-name" title={label}>{label}</span>
               )}
               <span className="file-card-meta">
-                {wasCopied ? "Link copied!" : `${formatSize(totalShareSize(share))} · ${formatDate(share.created_at)}`}
+                {isDeleted  ? "Downloaded & deleted" :
+                 hasDeleted ? "Partially downloaded" :
+                 wasCopied  ? "Link copied!" :
+                 `${formatSize(totalShareSize(share))} · ${formatDate(share.created_at)}`}
               </span>
+              {(isDeleted || hasDeleted) && (
+                <span className="file-deleted-badge">{isDeleted ? "Deleted" : "Partial"}</span>
+              )}
             </div>
 
             <button

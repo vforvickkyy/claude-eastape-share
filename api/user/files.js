@@ -34,7 +34,7 @@ module.exports = async function handler(req, res) {
   // Fetch files
   let query = supabase
     .from("shares")
-    .select("id, token, file_name, file_url, file_size, created_at, expires_at, folder_id, is_trashed, trashed_at")
+    .select("id, token, file_name, file_url, file_size, created_at, expires_at, folder_id, is_trashed, trashed_at, storage_deleted")
     .eq("user_id", user.id)
     .eq("is_trashed", isTrash)
     .order("created_at", { ascending: false })
@@ -68,6 +68,7 @@ module.exports = async function handler(req, res) {
       name: file.file_name,
       size: file.file_size,
       url: file.file_url,
+      storage_deleted: file.storage_deleted,
     });
   }
 

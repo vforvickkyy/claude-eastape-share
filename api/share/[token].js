@@ -28,7 +28,7 @@ module.exports = async function handler(req, res) {
   try {
     const { data, error } = await supabase
       .from("shares")
-      .select("id, file_name, file_size, created_at, expires_at")
+      .select("id, file_name, file_size, created_at, expires_at, storage_deleted")
       .eq("token", token)
       .order("id", { ascending: true });
 
@@ -46,6 +46,15 @@ module.exports = async function handler(req, res) {
       return res.status(410).json({ error: "This share link has expired" });
     }
 
+    // All files already downloaded and deleted from storage
+    const allDeleted = data.every(row => row.storage_deleted);
+    if (allDeleted) {
+      return res.status(410).json({
+        error: "This file has already been downloaded and permanently deleted.",
+        reason: "downloaded",
+      });
+    }
+
     return res.status(200).json({
       token,
       expires_at: data[0].expires_at,
@@ -54,6 +63,7 @@ module.exports = async function handler(req, res) {
         file_name: row.file_name,
         file_size: row.file_size,
         created_at: row.created_at,
+        storage_deleted: row.storage_deleted,
       })),
     });
   } catch (err) {

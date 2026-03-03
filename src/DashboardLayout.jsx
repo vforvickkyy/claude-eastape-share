@@ -43,7 +43,7 @@ export default function DashboardLayout({ children, title }) {
       {/* ── Sidebar ── */}
       <aside className={`db-sidebar ${sideOpen ? "open" : ""}`}>
         <div className="db-logo">
-          <LogoSlot />
+          <Link to="/" className="logo-link"><LogoSlot /></Link>
           <button className="db-sidebar-close" onClick={() => setSideOpen(false)}>
             <X size={16} />
           </button>

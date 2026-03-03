@@ -117,7 +117,13 @@ input  { font-family: var(--font-body); }
 }
 
 .logo-img {
-  height: 34px; width: auto; display: block;
+  height: 42px; width: auto; display: block;
+}
+.logo-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
 }
 .logo-text-fallback {
   display: flex; align-items: center; gap: 8px;
@@ -1352,16 +1358,30 @@ input  { font-family: var(--font-body); }
 .folder-pick-item:hover { color: var(--t1); background: rgba(255,255,255,0.06); }
 .folder-pick-item:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Prevent all horizontal scroll ── */
+.db-wrap,
+.db-main,
+.db-content {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 /* ── Mobile responsive for dashboard ── */
 @media (max-width: 768px) {
   .db-sidebar {
     position: fixed;
     top: 0;
-    left: -240px;
+    left: -260px;
     height: 100%;
-    width: 240px;
-    transition: left 0.25s var(--ease);
+    width: 260px;
+    transition: left 0.28s var(--ease);
     z-index: 50;
+    /* Solid background — removes transparency on mobile overlay */
+    background: #0c1120;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: 4px 0 32px rgba(0,0,0,0.7);
+    border-right: 1px solid rgba(255,255,255,0.06);
   }
   .db-sidebar.open { left: 0; }
   .db-sidebar-close { display: flex; }
@@ -1369,15 +1389,17 @@ input  { font-family: var(--font-body); }
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.6);
     z-index: 40;
   }
   .db-menu-btn { display: flex; }
-  .db-content { padding: 16px; }
-  .stats-bar { gap: 10px; }
-  .stat-card { min-width: 120px; }
+  .db-content { padding: 14px; overflow-x: hidden; }
+  .db-main { overflow-x: hidden; }
+  .stats-bar { gap: 10px; flex-wrap: wrap; }
+  .stat-card { min-width: 110px; flex: 1; }
   .file-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .header-nav { display: none; }
+  .file-list-table { display: block; overflow-x: auto; }
 }
 
 /* ═══════════════════════════════════════════════
@@ -1570,6 +1592,45 @@ input  { font-family: var(--font-body); }
   cursor: not-allowed;
   -webkit-user-select: all;
   user-select: all;
+}
+
+/* ── Downloaded & deleted badge ── */
+.file-deleted-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(234,179,8,0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(234,179,8,0.25);
+  margin-top: 3px;
+  width: fit-content;
+}
+.file-card--deleted {
+  opacity: 0.55;
+}
+.file-card--deleted .file-card-icon {
+  filter: grayscale(1);
+}
+.file-row--deleted {
+  opacity: 0.55;
+}
+
+/* ── Share page: per-file deleted state ── */
+.share-file-item.file-deleted {
+  opacity: 0.6;
+}
+.download-btn-deleted {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fbbf24;
+  flex-shrink: 0;
 }
 
 /* ── Fixed-position right-click context menu ── */

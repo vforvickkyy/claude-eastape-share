@@ -44,7 +44,11 @@ export default function SharePage() {
       try {
         const res = await fetch(`${API_BASE}/api/share/${token}`);
         if (res.status === 404) { setStatus("error");   setErrorMsg("Share not found. This link may be invalid."); return; }
-        if (res.status === 410) { setStatus("expired"); setErrorMsg("This share link has expired after 7 days."); return; }
+        if (res.status === 410) {
+          const body = await res.json().catch(() => ({}));
+          if (body.reason === "downloaded") { setStatus("downloaded"); return; }
+          setStatus("expired"); setErrorMsg("This share link has expired after 7 days."); return;
+        }
         if (!res.ok)            { setStatus("error");   setErrorMsg(`Server error (${res.status}). Please try again.`); return; }
         const data = await res.json();
         setShareData(data);
@@ -124,6 +128,14 @@ export default function SharePage() {
               </h1>
               <p className="share-hero-desc">Your files are available. Click download to save them.</p>
             </>
+          ) : status === "downloaded" ? (
+            <>
+              <h1 className="share-hero-title">
+                Already<br />
+                <span className="share-hero-accent">Downloaded</span>
+              </h1>
+              <p className="share-hero-desc">This file was downloaded once and permanently deleted for privacy.</p>
+            </>
           ) : status === "loading" ? (
             <h1 className="share-hero-title">
               Loading<br />
@@ -156,6 +168,20 @@ export default function SharePage() {
               </motion.div>
             )}
 
+            {/* Downloaded & deleted */}
+            {status === "downloaded" && (
+              <motion.div key="downloaded" className="share-glass-card"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              >
+                <div className="not-found">
+                  <Warning size={38} weight="thin" style={{ color: "var(--purple-l)" }} />
+                  <h2>File Deleted</h2>
+                  <p>This file was downloaded once and has been permanently removed from our servers. Single-use links cannot be reused.</p>
+                  <Link to="/" className="upload-btn not-found-btn">Upload a new file</Link>
+                </div>
+              </motion.div>
+            )}
+
             {/* Error / Expired */}
             {(status === "error" || status === "expired") && (
               <motion.div key="error" className="share-glass-card"
@@ -181,28 +207,36 @@ export default function SharePage() {
                 {/* File list */}
                 <div className="share-file-list">
                   {shareData.files.map((file, idx) => (
-                    <motion.div key={file.id} className="share-file-item"
+                    <motion.div key={file.id} className={`share-file-item ${file.storage_deleted ? "file-deleted" : ""}`}
                       initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.05 + idx * 0.05 }}
                     >
                       <span className="share-file-icon">{getFileIcon(file.file_name)}</span>
                       <div className="share-file-info">
                         <span className="file-name">{file.file_name}</span>
-                        <span className="file-size">{formatSize(file.file_size)}</span>
+                        <span className="file-size">
+                          {file.storage_deleted ? "Downloaded & deleted" : formatSize(file.file_size)}
+                        </span>
                       </div>
-                      <motion.button
-                        className={`download-btn ${downloading[file.id] ? "downloading" : ""}`}
-                        onClick={() => handleDownload(file)}
-                        disabled={!!downloading[file.id]}
-                        whileHover={!downloading[file.id] ? { scale: 1.1 } : {}}
-                        whileTap={!downloading[file.id] ? { scale: 0.92 } : {}}
-                        title={`Download ${file.file_name}`}
-                      >
-                        {downloading[file.id]
-                          ? <span className="spinner spinner-sm" />
-                          : <DownloadSimple size={16} weight="bold" />
-                        }
-                      </motion.button>
+                      {file.storage_deleted ? (
+                        <span className="download-btn-deleted" title="Already downloaded and deleted">
+                          <Warning size={15} weight="fill" />
+                        </span>
+                      ) : (
+                        <motion.button
+                          className={`download-btn ${downloading[file.id] ? "downloading" : ""}`}
+                          onClick={() => handleDownload(file)}
+                          disabled={!!downloading[file.id]}
+                          whileHover={!downloading[file.id] ? { scale: 1.1 } : {}}
+                          whileTap={!downloading[file.id] ? { scale: 0.92 } : {}}
+                          title={`Download ${file.file_name}`}
+                        >
+                          {downloading[file.id]
+                            ? <span className="spinner spinner-sm" />
+                            : <DownloadSimple size={16} weight="bold" />
+                          }
+                        </motion.button>
+                      )}
                     </motion.div>
                   ))}
                 </div>
