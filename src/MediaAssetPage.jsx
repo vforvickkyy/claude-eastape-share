@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, DownloadSimple, Trash, Copy, CheckCircle,
   ChatCircle, ClockCounterClockwise, Info, PencilSimple,
-  Check, X,
+  Check, X, SidebarSimple,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./DashboardLayout";
@@ -32,6 +32,7 @@ export default function MediaAssetPage() {
   const [nameVal,     setNameVal]    = useState("");
   const [copied,      setCopied]     = useState(false);
   const [showShare,   setShowShare]  = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const iframeRef = useRef(null);
 
@@ -165,6 +166,9 @@ export default function MediaAssetPage() {
           <button className="btn-ghost" onClick={() => setShowShare(true)}>
             Share
           </button>
+          <button className="btn-ghost" onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar">
+            <SidebarSimple size={14} />
+          </button>
           <button className="btn-ghost danger" onClick={handleDelete}>
             <Trash size={14} />
           </button>
@@ -172,7 +176,7 @@ export default function MediaAssetPage() {
       </div>
 
       {/* Main layout: player + sidebar */}
-      <div className="asset-layout">
+      <div className={`asset-layout ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
 
         {/* LEFT — Video player */}
         <div className="asset-player-wrap">
@@ -202,7 +206,7 @@ export default function MediaAssetPage() {
         </div>
 
         {/* RIGHT — Tabbed sidebar */}
-        <div className="asset-sidebar">
+        <div className={`asset-sidebar ${sidebarOpen ? "" : "hidden"}`}>
           {/* Tabs */}
           <div className="asset-tabs">
             {[

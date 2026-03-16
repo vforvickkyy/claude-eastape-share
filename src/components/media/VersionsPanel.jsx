@@ -20,16 +20,28 @@ export default function VersionsPanel({ asset, onVersionUploaded }) {
   }, [asset.id]);
 
   async function handleVersionUploaded(newAsset) {
-    // Bump version number via API
-    await userApiFetch(`/api/media/assets?id=${asset.id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        version_bump: true,
-        bunny_video_guid:    newAsset.bunny_video_guid,
-        bunny_video_status:  newAsset.bunny_video_status,
-        bunny_thumbnail_url: newAsset.bunny_thumbnail_url,
-      }),
-    }).then(d => onVersionUploaded?.(d.asset)).catch(console.error);
+    try {
+      // Bump version and transfer new video details to original asset
+      const d = await userApiFetch(`/api/media/assets?id=${asset.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          version_bump:        true,
+          bunny_video_guid:    newAsset.bunny_video_guid,
+          bunny_video_status:  newAsset.bunny_video_status,
+          bunny_playback_url:  newAsset.bunny_playback_url,
+          bunny_thumbnail_url: newAsset.bunny_thumbnail_url,
+          duration:            newAsset.duration || null,
+        }),
+      });
+      // Delete the temporary duplicate asset created by UploadPanel
+      if (newAsset.id && newAsset.id !== asset.id) {
+        await userApiFetch(`/api/media/assets?id=${newAsset.id}`, { method: "DELETE" }).catch(() => {});
+      }
+      // Refresh versions list
+      const refreshed = await userApiFetch(`/api/media/assets?id=${asset.id}`);
+      setVersions(refreshed.asset?.media_asset_versions || []);
+      onVersionUploaded?.(d.asset);
+    } catch (err) { alert("Version upload failed: " + err.message); }
     setShowUpload(false);
   }
 

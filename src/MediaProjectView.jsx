@@ -7,6 +7,7 @@ import {
   FolderOpen, VideoCamera, FileImage, File, FileAudio,
   Trash, PencilSimple, Link, Copy, CheckCircle, X,
   DownloadSimple, ArrowsOut, CheckSquare, Square,
+  SidebarSimple, DotsThreeVertical,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./DashboardLayout";
@@ -61,6 +62,14 @@ export default function MediaProjectView() {
   // Bulk select
   const [selected,   setSelected]   = useState(new Set());
   const [bulkStatus, setBulkStatus] = useState("");
+
+  // UI state
+  const [folderSidebarOpen, setFolderSidebarOpen] = useState(true);
+  const [dragOver,          setDragOver]          = useState(false); // drag-to-upload
+
+  // Project rename/delete
+  const [showRenameProject, setShowRenameProject] = useState(false);
+  const [renameProjectVal,  setRenameProjectVal]  = useState("");
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login", { replace: true });
@@ -154,12 +163,14 @@ export default function MediaProjectView() {
     setAllFoldersList(data.folders || []);
   }
 
-  async function handleMoveAsset(targetFolderId) {
+  async function handleMoveAsset(targetFolderId, assetIdOverride) {
+    const id = assetIdOverride || moveAsset?.id;
+    if (!id) return;
     try {
-      await userApiFetch(`/api/media/assets?id=${moveAsset.id}`, {
+      await userApiFetch(`/api/media/assets?id=${id}`, {
         method: "PUT", body: JSON.stringify({ folder_id: targetFolderId }),
       });
-      setAssets(as => as.filter(a => a.id !== moveAsset.id));
+      setAssets(as => as.filter(a => a.id !== id));
       setMoveAsset(null);
     } catch (err) { alert("Failed to move asset: " + err.message); }
   }
@@ -235,6 +246,35 @@ export default function MediaProjectView() {
     setSelected(new Set());
   }
 
+  /* ── Project actions ── */
+  async function handleRenameProject() {
+    const name = renameProjectVal.trim();
+    if (!name || name === project?.name) { setShowRenameProject(false); return; }
+    try {
+      await userApiFetch(`/api/media/projects?id=${projectId}`, {
+        method: "PUT", body: JSON.stringify({ name }),
+      });
+      setProject(p => ({ ...p, name }));
+      setShowRenameProject(false);
+    } catch (err) { alert("Failed to rename project: " + err.message); }
+  }
+
+  async function handleDeleteProject() {
+    if (!window.confirm(`Delete project "${project?.name}"? All assets and folders will be deleted.`)) return;
+    try {
+      await userApiFetch(`/api/media/projects?id=${projectId}`, { method: "DELETE" });
+      navigate("/media");
+    } catch (err) { alert("Failed to delete project: " + err.message); }
+  }
+
+  /* ── Drag-to-upload ── */
+  function onDragOver(e) { e.preventDefault(); setDragOver(true); }
+  function onDragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }
+  function onDrop(e) {
+    e.preventDefault(); setDragOver(false);
+    setShowUpload(true); // open upload panel; actual file handling is in UploadPanel
+  }
+
   function filtered() {
     return assets.filter(a => {
       if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -249,21 +289,27 @@ export default function MediaProjectView() {
 
   return (
     <DashboardLayout title={project?.name || "Project"}>
-      {/* Breadcrumb */}
-      <div className="breadcrumb">
-        <button className="breadcrumb-item" onClick={() => navigate("/media")}>
-          <House size={13} /> Media
-        </button>
-        <CaretRight size={11} className="breadcrumb-sep" />
-        <button className="breadcrumb-item" onClick={() => navigate(`/media/project/${projectId}`)}>
-          {project?.name || "Project"}
-        </button>
-        {folderId && (
-          <>
-            <CaretRight size={11} className="breadcrumb-sep" />
-            <span className="breadcrumb-item active">{currentFolder?.name || "Folder"}</span>
-          </>
-        )}
+      {/* Breadcrumb + project actions */}
+      <div className="breadcrumb" style={{ justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button className="breadcrumb-item" onClick={() => navigate("/media")}>
+            <House size={13} /> Media
+          </button>
+          <CaretRight size={11} className="breadcrumb-sep" />
+          <button className="breadcrumb-item" onClick={() => navigate(`/media/project/${projectId}`)}>
+            {project?.name || "Project"}
+          </button>
+          {folderId && (
+            <>
+              <CaretRight size={11} className="breadcrumb-sep" />
+              <span className="breadcrumb-item active">{currentFolder?.name || "Folder"}</span>
+            </>
+          )}
+        </div>
+        <ProjectMenu
+          onRename={() => { setRenameProjectVal(project?.name || ""); setShowRenameProject(true); }}
+          onDelete={handleDeleteProject}
+        />
       </div>
 
       {/* Toolbar */}
@@ -333,6 +379,13 @@ export default function MediaProjectView() {
         </select>
 
         <div className="view-toggle" style={{ marginLeft: "auto" }}>
+          <button
+            className={`view-btn ${folderSidebarOpen ? "active" : ""}`}
+            onClick={() => setFolderSidebarOpen(o => !o)}
+            title="Toggle folder sidebar"
+          >
+            <SidebarSimple size={16} />
+          </button>
           <button className={`view-btn ${view === "grid" ? "active" : ""}`} onClick={() => setView("grid")}>
             <SquaresFour size={16} />
           </button>
@@ -345,33 +398,53 @@ export default function MediaProjectView() {
       {loading ? (
         <div className="empty-state"><span className="spinner" /></div>
       ) : (
-        <div className="media-project-layout">
+        <div className={`media-project-layout ${folderSidebarOpen ? "" : "no-sidebar"}`}>
 
           {/* Left sidebar — folder tree */}
-          <aside className="media-folder-sidebar">
-            <div className="media-folder-header">Folders</div>
-            <button
-              className={`media-folder-item ${!folderId ? "active" : ""}`}
-              onClick={() => navigate(`/media/project/${projectId}`)}
-            >
-              <VideoCamera size={14} weight="duotone" /> All assets
-            </button>
-            {folders.map(f => (
-              <FolderItem
-                key={f.id}
-                folder={f}
-                active={folderId === f.id}
-                copied={copied === "folder-" + f.id}
-                onClick={() => navigate(`/media/project/${projectId}/folder/${f.id}`)}
-                onRename={() => { setRenameFolder(f); setRenameFolderVal(f.name); }}
-                onDelete={() => handleDeleteFolder(f)}
-                onShareLink={() => shareFolderLink(f)}
-              />
-            ))}
-          </aside>
+          {folderSidebarOpen && (
+            <aside className="media-folder-sidebar">
+              <div className="media-folder-header">Folders</div>
+              {folders.length === 0 && (
+                <p style={{ fontSize: 12, color: "var(--t3)", padding: "8px 4px" }}>No folders yet</p>
+              )}
+              {folders.map(f => (
+                <FolderItem
+                  key={f.id}
+                  folder={f}
+                  active={folderId === f.id}
+                  copied={copied === "folder-" + f.id}
+                  onClick={() => navigate(`/media/project/${projectId}/folder/${f.id}`)}
+                  onRename={() => { setRenameFolder(f); setRenameFolderVal(f.name); }}
+                  onDelete={() => handleDeleteFolder(f)}
+                  onShareLink={() => shareFolderLink(f)}
+                  onDrop={assetId => handleMoveAsset(f.id, assetId)}
+                />
+              ))}
+              {folderId && (
+                <button
+                  className="media-folder-item"
+                  style={{ marginTop: 8, opacity: 0.7 }}
+                  onClick={() => navigate(`/media/project/${projectId}`)}
+                >
+                  ↑ Root
+                </button>
+              )}
+            </aside>
+          )}
 
           {/* Main content */}
-          <div className="media-asset-area">
+          <div
+            className={`media-asset-area ${dragOver ? "drag-over" : ""}`}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+          >
+            {dragOver && (
+              <div className="drag-upload-hint">
+                <CloudArrowUp size={32} weight="duotone" />
+                <p>Drop files to upload</p>
+              </div>
+            )}
             {filteredAssets.length === 0 && folders.length === 0 ? (
               <div className="empty-state">
                 <VideoCamera size={44} weight="thin" />
@@ -534,6 +607,26 @@ export default function MediaProjectView() {
         />
       </SimpleModal>
 
+      {/* Rename Project */}
+      <SimpleModal
+        open={showRenameProject}
+        title={<><PencilSimple size={16} /> Rename Project</>}
+        onClose={() => setShowRenameProject(false)}
+        onConfirm={handleRenameProject}
+        confirmLabel="Save"
+        confirmDisabled={!renameProjectVal.trim()}
+      >
+        <input
+          className="media-search"
+          style={{ width: "100%", boxSizing: "border-box" }}
+          placeholder="Project name"
+          value={renameProjectVal}
+          onChange={e => setRenameProjectVal(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") handleRenameProject(); }}
+          autoFocus
+        />
+      </SimpleModal>
+
       {/* Move to Folder */}
       <AnimatePresence>
         {moveAsset && (
@@ -614,9 +707,39 @@ function SimpleModal({ open, title, children, onClose, onConfirm, confirmLabel, 
   );
 }
 
+/* ── Project Menu ────────────────────────────────────────────────── */
+function ProjectMenu({ onRename, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  return (
+    <div style={{ position: "relative" }} ref={ref}>
+      <button className="btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setOpen(o => !o)}>
+        <DotsThreeVertical size={16} weight="bold" />
+      </button>
+      {open && (
+        <div className="card-menu-dropdown" style={{ right: 0, left: "auto", top: "calc(100% + 4px)", minWidth: 160 }}>
+          <button className="card-menu-item" onClick={() => { setOpen(false); onRename(); }}>
+            <PencilSimple size={13} /> Rename project
+          </button>
+          <div className="card-menu-divider" />
+          <button className="card-menu-item danger" onClick={() => { setOpen(false); onDelete(); }}>
+            <Trash size={13} /> Delete project
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Folder Item (sidebar) ───────────────────────────────────────── */
-function FolderItem({ folder, active, copied, onClick, onRename, onDelete, onShareLink }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+function FolderItem({ folder, active, copied, onClick, onRename, onDelete, onShareLink, onDrop }) {
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [dropTarget, setDropTarget] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -625,8 +748,22 @@ function FolderItem({ folder, active, copied, onClick, onRename, onDelete, onSha
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  function handleDragOver(e) { e.preventDefault(); setDropTarget(true); }
+  function handleDragLeave() { setDropTarget(false); }
+  function handleDrop(e) {
+    e.preventDefault(); setDropTarget(false);
+    const assetId = e.dataTransfer.getData("assetId");
+    if (assetId) onDrop?.(assetId);
+  }
+
   return (
-    <div className={`media-folder-item-wrap ${active ? "active" : ""}`} ref={menuRef}>
+    <div
+      className={`media-folder-item-wrap ${active ? "active" : ""} ${dropTarget ? "drop-target" : ""}`}
+      ref={menuRef}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <button className="media-folder-item-btn" onClick={onClick}>
         <FolderOpen size={14} weight="duotone" /> {folder.name}
       </button>
@@ -763,6 +900,8 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
         transition={{ delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         onClick={onOpen}
         onContextMenu={onContextMenu}
+        draggable
+        onDragStart={e => { e.dataTransfer.setData("assetId", asset.id); e.dataTransfer.effectAllowed = "move"; }}
       >
         {/* Checkbox */}
         <div className="asset-select-check" onClick={e => { e.stopPropagation(); onSelect(); }}>

@@ -2657,3 +2657,33 @@ input  { font-family: var(--font-body); }
   from { opacity: 0; transform: scale(0.96) translateY(-4px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
+/* ═══════════════════════════════════════════════════════════════
+   MEDIA — Collapsible sidebar / drag-upload / project actions
+═══════════════════════════════════════════════════════════════ */
+
+/* Asset page sidebar toggle */
+.asset-layout.sidebar-collapsed { grid-template-columns: 1fr; }
+.asset-layout.sidebar-collapsed .asset-sidebar.hidden { display: none; }
+
+/* Project view sidebar toggle */
+.media-project-layout.no-sidebar { grid-template-columns: 1fr; }
+.media-project-layout.no-sidebar .media-folder-sidebar { display: none; }
+
+/* Drag-to-upload */
+.media-asset-area { position: relative; }
+.media-asset-area.drag-over { outline: 2px dashed var(--purple-l); outline-offset: -4px; border-radius: var(--r-xl); }
+.drag-upload-hint {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(124,58,237,0.12); border-radius: var(--r-xl);
+  color: var(--purple-l); font-size: 14px; font-weight: 600; pointer-events: none;
+}
+
+/* Folder sidebar drag drop target */
+.media-folder-item-wrap.drop-target .media-folder-item-btn {
+  background: rgba(124,58,237,0.2); color: var(--purple-l);
+}
+
+/* Asset card dragging cursor */
+.media-asset-card[draggable="true"] { cursor: grab; }
+.media-asset-card[draggable="true"]:active { cursor: grabbing; }

@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       const body = await req.json()
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
-      const ALLOWED = ['name', 'status', 'folder_id', 'share_enabled', 'bunny_video_status', 'bunny_playback_url', 'bunny_thumbnail_url', 'duration']
+      const ALLOWED = ['name', 'status', 'folder_id', 'share_enabled', 'bunny_video_guid', 'bunny_video_status', 'bunny_playback_url', 'bunny_thumbnail_url', 'duration']
       for (const key of ALLOWED) {
         if (key in body) updates[key] = body[key]
       }
@@ -69,7 +69,21 @@ Deno.serve(async (req) => {
       }
 
       if (body.version_bump) {
-        const { data: current } = await supabase.from('media_assets').select('version').eq('id', id).single()
+        // Save current version snapshot before bumping
+        const { data: current } = await supabase
+          .from('media_assets')
+          .select('version, bunny_video_guid, bunny_playback_url, bunny_thumbnail_url')
+          .eq('id', id).single()
+        if (current) {
+          await supabase.from('media_asset_versions').insert({
+            asset_id: id,
+            version_number: current.version,
+            bunny_video_guid: current.bunny_video_guid,
+            bunny_playback_url: current.bunny_playback_url,
+            bunny_thumbnail_url: current.bunny_thumbnail_url,
+            uploaded_by: user.id,
+          })
+        }
         updates.version = ((current?.version as number) || 1) + 1
       }
 
