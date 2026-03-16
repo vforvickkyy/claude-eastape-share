@@ -1,24 +1,36 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
-  CloudArrowUp, FolderOpen, Clock, Trash, CaretDown, SignOut, List, X, UserCircle, CurrencyInr,
+  SquaresFour, HardDrive, Clock, Trash, CaretDown, SignOut, List, X,
+  UserCircle, CurrencyInr, VideoCamera, FolderOpen, ShareNetwork,
+  CloudArrowUp, CaretRight,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 
-const NAV = [
-  { to: "/dashboard",  icon: <CloudArrowUp  size={18} weight="duotone" />, label: "Dashboard" },
-  { to: "/my-files",   icon: <FolderOpen    size={18} weight="duotone" />, label: "My Files"  },
-  { to: "/recent",     icon: <Clock         size={18} weight="duotone" />, label: "Recent"     },
-  { to: "/trash",      icon: <Trash         size={18} weight="duotone" />, label: "Trash"      },
-  { to: "/plans",      icon: <CurrencyInr   size={18} weight="duotone" />, label: "Plans"      },
+const NAV_MAIN = [
+  { to: "/",       icon: <SquaresFour size={18} weight="duotone" />, label: "Dashboard", exact: true },
+  { to: "/drive",  icon: <HardDrive   size={18} weight="duotone" />, label: "Drive"     },
+  { to: "/recent", icon: <Clock       size={18} weight="duotone" />, label: "Recent"    },
+  { to: "/trash",  icon: <Trash       size={18} weight="duotone" />, label: "Trash"     },
+  { to: "/plans",  icon: <CurrencyInr size={18} weight="duotone" />, label: "Plans"     },
+];
+
+const NAV_MEDIA = [
+  { to: "/media",              icon: <VideoCamera  size={18} weight="duotone" />, label: "Projects" },
+  { to: "/media/recent",       icon: <Clock        size={16} weight="duotone" />, label: "Recent",  sub: true },
+  { to: "/media/shared",       icon: <ShareNetwork size={16} weight="duotone" />, label: "Shared",  sub: true },
 ];
 
 export default function DashboardLayout({ children, title }) {
   const { user, logout, loading } = useAuth();
-  const navigate = useNavigate();
-  const [dropOpen, setDropOpen] = useState(false);
-  const [sideOpen, setSideOpen] = useState(false);
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const [dropOpen, setDropOpen]   = useState(false);
+  const [sideOpen, setSideOpen]   = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(true);
   const menuRef = useRef(null);
+
+  const isMediaRoute = location.pathname.startsWith("/media");
 
   useEffect(() => {
     function outside(e) {
@@ -49,16 +61,18 @@ export default function DashboardLayout({ children, title }) {
           </button>
         </div>
 
-        <Link to="/" className="db-new-btn">
+        <Link to="/upload" className="db-new-btn">
           <CloudArrowUp size={16} weight="bold" />
           New Upload
         </Link>
 
         <nav className="db-nav">
-          {NAV.map(item => (
+          {/* Main nav */}
+          {NAV_MAIN.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.exact}
               className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
               onClick={() => setSideOpen(false)}
             >
@@ -66,9 +80,42 @@ export default function DashboardLayout({ children, title }) {
               <span>{item.label}</span>
             </NavLink>
           ))}
+
+          {/* Media section */}
+          <div className="db-nav-section">
+            <button
+              className="db-nav-section-header"
+              onClick={() => setMediaOpen(o => !o)}
+            >
+              <VideoCamera size={15} weight="duotone" />
+              <span>Media</span>
+              <CaretRight
+                size={11}
+                weight="bold"
+                className={`db-nav-caret ${mediaOpen ? "open" : ""}`}
+              />
+            </button>
+            {mediaOpen && (
+              <div className="db-nav-sub">
+                {NAV_MEDIA.map(item => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end
+                    className={({ isActive }) =>
+                      `db-nav-item ${item.sub ? "db-nav-item-sub" : ""} ${isActive ? "active" : ""}`
+                    }
+                    onClick={() => setSideOpen(false)}
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
 
-        {/* Profile link at bottom of sidebar */}
         <div className="db-sidebar-footer">
           <NavLink
             to="/profile"
@@ -81,12 +128,10 @@ export default function DashboardLayout({ children, title }) {
         </div>
       </aside>
 
-      {/* Sidebar overlay on mobile */}
       {sideOpen && <div className="db-overlay" onClick={() => setSideOpen(false)} />}
 
       {/* ── Main area ── */}
       <div className="db-main">
-        {/* Top bar */}
         <header className="db-topbar">
           <button className="db-menu-btn" onClick={() => setSideOpen(true)}>
             <List size={20} />
@@ -101,7 +146,9 @@ export default function DashboardLayout({ children, title }) {
                 type="button"
               >
                 <div className="user-avatar">
-                  {avatarUrl ? <img src={avatarUrl} alt={displayName} /> : <span>{initial}</span>}
+                  {avatarUrl
+                    ? <img src={avatarUrl} alt={displayName} />
+                    : <span>{initial}</span>}
                 </div>
                 <span className="user-name">{displayName}</span>
                 <CaretDown size={11} weight="bold" className={`caret ${dropOpen ? "open" : ""}`} />
@@ -129,7 +176,6 @@ export default function DashboardLayout({ children, title }) {
           )}
         </header>
 
-        {/* Page content */}
         <main className="db-content">
           {children}
         </main>
@@ -141,8 +187,8 @@ export default function DashboardLayout({ children, title }) {
 function LogoSlot() {
   const [hasLogo, setHasLogo] = React.useState(true);
   return hasLogo ? (
-    <img src="/logo.png" alt="Eastape Share" className="logo-img" onError={() => setHasLogo(false)} />
+    <img src="/logo.png" alt="Eastape" className="logo-img" onError={() => setHasLogo(false)} />
   ) : (
-    <div className="logo-text-fallback"><span className="logo-dot" />Eastape Share</div>
+    <div className="logo-text-fallback"><span className="logo-dot" />Eastape</div>
   );
 }
