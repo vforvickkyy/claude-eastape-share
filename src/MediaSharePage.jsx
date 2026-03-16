@@ -124,8 +124,6 @@ export default function MediaSharePage() {
   /* ── Asset view ── */
   const { asset, allowDownload, allowComments } = data;
   const bunnyGuid  = asset?.bunny_video_guid;
-  const BUNNY_LIB  = import.meta.env.VITE_BUNNY_STREAM_LIBRARY_ID;
-  const BUNNY_CDN  = import.meta.env.VITE_BUNNY_STREAM_CDN_HOSTNAME || "iframe.mediadelivery.net";
 
   return (
     <PageShell>
@@ -142,9 +140,9 @@ export default function MediaSharePage() {
               {asset?.file_size && (
                 <span style={{ color: "var(--t3)", fontSize: 12 }}>{formatSize(asset.file_size)}</span>
               )}
-              {allowDownload && bunnyGuid && (
+              {allowDownload && asset?.bunny_playback_url && (
                 <a
-                  href={`https://${BUNNY_CDN}/${bunnyGuid}/play`}
+                  href={asset.bunny_playback_url}
                   className="btn-ghost"
                   style={{ fontSize: 13 }}
                   target="_blank"
@@ -156,11 +154,11 @@ export default function MediaSharePage() {
             </div>
           </div>
 
-          {bunnyGuid ? (
+          {bunnyGuid && asset?.bunny_playback_url ? (
             <div className="asset-player share-player">
               <iframe
                 ref={iframeRef}
-                src={`https://iframe.mediadelivery.net/embed/${BUNNY_LIB}/${bunnyGuid}?autoplay=false&preload=true`}
+                src={`${asset.bunny_playback_url}?autoplay=false&preload=true`}
                 style={{ border: "none", width: "100%", height: "100%" }}
                 allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
                 allowFullScreen
