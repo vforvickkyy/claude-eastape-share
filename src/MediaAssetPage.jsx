@@ -96,7 +96,8 @@ export default function MediaAssetPage() {
       method: "POST",
       body: JSON.stringify({ assetId, allowDownload: true, allowComments: true }),
     });
-    const url = data.shareUrl || `${window.location.origin}/media/share/${data.link?.token}`;
+    const token = data.link?.token || (data.shareUrl || "").split("/").pop();
+    const url = `${window.location.origin}/media/share/${token}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -104,7 +105,6 @@ export default function MediaAssetPage() {
 
   const statusMeta = STATUS_OPTIONS.find(s => s.value === asset?.status) || STATUS_OPTIONS[0];
   const bunnyGuid = asset?.bunny_video_guid;
-  const BUNNY_LIB_ID = import.meta.env.VITE_BUNNY_STREAM_LIBRARY_ID;
 
   if (loading) return (
     <DashboardLayout title="Asset">
@@ -165,11 +165,11 @@ export default function MediaAssetPage() {
 
         {/* LEFT — Video player */}
         <div className="asset-player-wrap">
-          {bunnyGuid && asset.bunny_video_status === "ready" ? (
+          {bunnyGuid && asset.bunny_video_status === "ready" && asset.bunny_playback_url ? (
             <div className="asset-player">
               <iframe
                 ref={iframeRef}
-                src={`https://iframe.mediadelivery.net/embed/${BUNNY_LIB_ID}/${bunnyGuid}?autoplay=false&loop=false&muted=false&preload=true`}
+                src={`${asset.bunny_playback_url}?autoplay=false&loop=false&muted=false&preload=true`}
                 style={{ border: "none", width: "100%", height: "100%" }}
                 allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
                 allowFullScreen

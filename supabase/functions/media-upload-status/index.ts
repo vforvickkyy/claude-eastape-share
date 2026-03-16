@@ -55,9 +55,9 @@ Deno.serve(async (req) => {
     const video = await bunnyRes.json()
 
     if (video.status === 4) {
-      const cdnHost      = BUNNY_CDN_HOST || 'iframe.mediadelivery.net'
+      const cdnHost      = BUNNY_CDN_HOST || `${BUNNY_LIBRARY_ID}.b-cdn.net`
       const thumbnailUrl = `https://${cdnHost}/${asset.bunny_video_guid}/thumbnail.jpg`
-      const playbackUrl  = `https://${cdnHost}/${asset.bunny_video_guid}/play`
+      const playbackUrl  = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${asset.bunny_video_guid}`
       const duration     = video.length || null
 
       await supabase.from('media_assets').update({
