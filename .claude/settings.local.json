@@ -3,7 +3,9 @@
     "allow": [
       "WebFetch(domain:marketplace.visualstudio.com)",
       "mcp__claude_ai_Supabase__list_projects",
-      "mcp__claude_ai_Supabase__apply_migration"
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(npm install:*)",
+      "Bash(ls d:/Node/claude-eastape-share/.env*)"
     ]
   }
 }
