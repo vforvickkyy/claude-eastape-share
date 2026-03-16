@@ -7,7 +7,6 @@ import {
   FolderOpen, VideoCamera, FileImage, File, FileAudio,
   Trash, PencilSimple, Link, Copy, CheckCircle, X,
   DownloadSimple, ArrowsOut, CheckSquare, Square,
-  FolderArrowDown,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./DashboardLayout";
@@ -526,7 +525,7 @@ export default function MediaProjectView() {
               onClick={e => e.stopPropagation()}
             >
               <div className="modal-header">
-                <FolderArrowDown size={16} /> Move to Folder
+                <FolderSimplePlus size={16} /> Move to Folder
                 <button className="modal-close" onClick={() => setMoveAsset(null)}><X size={16} /></button>
               </div>
               <div className="folder-picker" style={{ marginBottom: 12 }}>
@@ -716,7 +715,7 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
               </button>
             )}
             <button className="card-menu-item" onClick={() => { setMenuOpen(false); onMove(); }}>
-              <FolderArrowDown size={13} /> Move to folder
+              <FolderSimplePlus size={13} /> Move to folder
             </button>
             <div className="card-menu-divider" />
             {["in_review", "approved", "revision"].map(s => (
@@ -840,7 +839,7 @@ function ListRowMenu({ asset, copied, onOpen, onRename, onCopyLink, onShare, onD
           {(asset.bunny_playback_url || asset.bunny_thumbnail_url) && (
             <button className="card-menu-item" onClick={() => { setOpen(false); onDownload(); }}><DownloadSimple size={13} /> Download</button>
           )}
-          <button className="card-menu-item" onClick={() => { setOpen(false); onMove(); }}><FolderArrowDown size={13} /> Move to folder</button>
+          <button className="card-menu-item" onClick={() => { setOpen(false); onMove(); }}><FolderSimplePlus size={13} /> Move to folder</button>
           <div className="card-menu-divider" />
           {["in_review", "approved", "revision"].map(s => (
             <button key={s} className={`card-menu-item ${asset.status === s ? "active" : ""}`} onClick={() => { setOpen(false); onStatusChange(s); }}>
