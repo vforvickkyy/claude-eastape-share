@@ -634,108 +634,169 @@ function FolderItem({ folder, active, copied, onClick, onRename, onDelete, onSha
   );
 }
 
+/* ── Floating context menu (right-click or three-dot) ───────────── */
+function AssetContextMenu({ asset, pos, copied, onClose, onOpen, onRename, onCopyLink, onShare, onDownload, onMove, onStatusChange, onDelete }) {
+  const menuRef = useRef(null);
+  const [style, setStyle] = useState({ position: "fixed", left: pos.x, top: pos.y, zIndex: 300 });
+
+  // Clamp to viewport on mount
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = Math.min(pos.x, window.innerWidth  - rect.width  - 8);
+    const y = Math.min(pos.y, window.innerHeight - rect.height - 8);
+    setStyle({ position: "fixed", left: Math.max(8, x), top: Math.max(8, y), zIndex: 300 });
+  }, []);
+
+  // Close on outside click or Escape
+  useEffect(() => {
+    const onDown  = e => { if (menuRef.current && !menuRef.current.contains(e.target)) onClose(); };
+    const onKey   = e => { if (e.key === "Escape") onClose(); };
+    const onScroll = () => onClose();
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown",   onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown",   onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [onClose]);
+
+  function act(fn) { onClose(); fn(); }
+
+  return (
+    <div ref={menuRef} className="floating-context-menu" style={style}>
+      <button className="card-menu-item" onClick={() => act(onOpen)}>
+        <ArrowsOut size={13} /> Open
+      </button>
+      <button className="card-menu-item" onClick={() => act(onRename)}>
+        <PencilSimple size={13} /> Rename
+      </button>
+      <button className="card-menu-item" onClick={() => act(onCopyLink)}>
+        {copied ? <CheckCircle size={13} /> : <Copy size={13} />}
+        {copied ? "Copied!" : "Copy link"}
+      </button>
+      <button className="card-menu-item" onClick={() => act(onShare)}>
+        <Link size={13} /> Share settings
+      </button>
+      {(asset.bunny_playback_url || asset.bunny_thumbnail_url) && (
+        <button className="card-menu-item" onClick={() => act(onDownload)}>
+          <DownloadSimple size={13} /> Download
+        </button>
+      )}
+      <button className="card-menu-item" onClick={() => act(onMove)}>
+        <FolderSimplePlus size={13} /> Move to folder
+      </button>
+      <div className="card-menu-divider" />
+      {["in_review", "approved", "revision"].map(s => (
+        <button
+          key={s}
+          className={`card-menu-item ${asset.status === s ? "active" : ""}`}
+          onClick={() => act(() => onStatusChange(s))}
+        >
+          <span className={`status-dot ${s}`} />
+          {STATUS_COLORS[s].label}
+        </button>
+      ))}
+      <div className="card-menu-divider" />
+      <button className="card-menu-item danger" onClick={() => act(onDelete)}>
+        <Trash size={13} /> Delete
+      </button>
+    </div>
+  );
+}
+
 /* ── Asset Card ─────────────────────────────────────────────────── */
 function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatusChange, onCopyLink, copied, onShare, onRename, onDownload, onMove }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
+  const [menuPos, setMenuPos] = useState(null); // {x, y} or null
 
-  useEffect(() => {
-    const h = e => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+  function openMenu(x, y) { setMenuPos({ x, y }); }
+  function closeMenu()     { setMenuPos(null); }
+
+  function onContextMenu(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    openMenu(e.clientX, e.clientY);
+  }
+
+  function onDotsClick(e) {
+    e.stopPropagation();
+    if (menuPos) { closeMenu(); return; }
+    const rect = e.currentTarget.getBoundingClientRect();
+    openMenu(rect.left, rect.bottom + 4);
+  }
 
   const status = STATUS_COLORS[asset.status] || STATUS_COLORS.in_review;
 
   return (
-    <motion.div
-      className={`media-asset-card ${selected ? "selected" : ""}`}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      onClick={onOpen}
-    >
-      {/* Checkbox */}
-      <div
-        className="asset-select-check"
-        onClick={e => { e.stopPropagation(); onSelect(); }}
+    <>
+      <motion.div
+        className={`media-asset-card ${selected ? "selected" : ""}`}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        onClick={onOpen}
+        onContextMenu={onContextMenu}
       >
-        {selected
-          ? <CheckSquare size={16} weight="fill" style={{ color: "var(--purple-l)" }} />
-          : <Square size={16} style={{ color: "var(--t3)" }} />
-        }
-      </div>
+        {/* Checkbox */}
+        <div className="asset-select-check" onClick={e => { e.stopPropagation(); onSelect(); }}>
+          {selected
+            ? <CheckSquare size={16} weight="fill" style={{ color: "var(--purple-l)" }} />
+            : <Square size={16} style={{ color: "var(--t3)" }} />
+          }
+        </div>
 
-      {/* Thumbnail */}
-      <div className="media-asset-thumb">
-        {asset.bunny_video_status === "ready" && asset.bunny_thumbnail_url ? (
-          <img src={asset.bunny_thumbnail_url} alt={asset.name} />
-        ) : asset.bunny_video_status === "uploading" ? (
-          <div className="media-asset-thumb-processing">
-            <span className="spinner" /><span>Processing…</span>
-          </div>
-        ) : (
-          <AssetTypeIcon type={asset.type} size={36} />
-        )}
-        <span className={`media-status-badge ${status.class}`}>{status.label}</span>
-        {asset.version > 1 && <span className="media-version-badge">v{asset.version}</span>}
-        {asset.duration && <span className="media-duration-badge">{formatDuration(asset.duration)}</span>}
-      </div>
+        {/* Thumbnail */}
+        <div className="media-asset-thumb">
+          {asset.bunny_video_status === "ready" && asset.bunny_thumbnail_url ? (
+            <img src={asset.bunny_thumbnail_url} alt={asset.name} />
+          ) : asset.bunny_video_status === "uploading" ? (
+            <div className="media-asset-thumb-processing">
+              <span className="spinner" /><span>Processing…</span>
+            </div>
+          ) : (
+            <AssetTypeIcon type={asset.type} size={36} />
+          )}
+          <span className={`media-status-badge ${status.class}`}>{status.label}</span>
+          {asset.version > 1 && <span className="media-version-badge">v{asset.version}</span>}
+          {asset.duration && <span className="media-duration-badge">{formatDuration(asset.duration)}</span>}
+        </div>
 
-      {/* Info */}
-      <div className="media-asset-info">
-        <span className="media-asset-name">{asset.name}</span>
-        <span className="media-asset-meta">{asset.file_size ? formatSize(asset.file_size) : "—"}</span>
-      </div>
+        {/* Info */}
+        <div className="media-asset-info">
+          <span className="media-asset-name">{asset.name}</span>
+          <span className="media-asset-meta">{asset.file_size ? formatSize(asset.file_size) : "—"}</span>
+        </div>
 
-      {/* Context menu */}
-      <div className="card-menu" ref={menuRef} onClick={e => e.stopPropagation()}>
-        <button className="card-menu-btn" onClick={() => setMenuOpen(m => !m)}>
-          <DotsThree size={16} weight="bold" />
-        </button>
-        {menuOpen && (
-          <div className="card-menu-dropdown">
-            <button className="card-menu-item" onClick={() => { setMenuOpen(false); onOpen(); }}>
-              <ArrowsOut size={13} /> Open
-            </button>
-            <button className="card-menu-item" onClick={() => { setMenuOpen(false); onRename(); }}>
-              <PencilSimple size={13} /> Rename
-            </button>
-            <button className="card-menu-item" onClick={() => { setMenuOpen(false); onCopyLink(); }}>
-              {copied ? <CheckCircle size={13} /> : <Copy size={13} />}
-              {copied ? "Copied!" : "Copy link"}
-            </button>
-            <button className="card-menu-item" onClick={() => { setMenuOpen(false); onShare(); }}>
-              <Link size={13} /> Share settings
-            </button>
-            {(asset.bunny_playback_url || asset.bunny_thumbnail_url) && (
-              <button className="card-menu-item" onClick={() => { setMenuOpen(false); onDownload(); }}>
-                <DownloadSimple size={13} /> Download
-              </button>
-            )}
-            <button className="card-menu-item" onClick={() => { setMenuOpen(false); onMove(); }}>
-              <FolderSimplePlus size={13} /> Move to folder
-            </button>
-            <div className="card-menu-divider" />
-            {["in_review", "approved", "revision"].map(s => (
-              <button
-                key={s}
-                className={`card-menu-item ${asset.status === s ? "active" : ""}`}
-                onClick={() => { setMenuOpen(false); onStatusChange(s); }}
-              >
-                <span className={`status-dot ${s}`} />
-                {STATUS_COLORS[s].label}
-              </button>
-            ))}
-            <div className="card-menu-divider" />
-            <button className="card-menu-item danger" onClick={() => { setMenuOpen(false); onDelete(); }}>
-              <Trash size={13} /> Delete
-            </button>
-          </div>
-        )}
-      </div>
-    </motion.div>
+        {/* Three-dot button */}
+        <div className="card-menu" onClick={e => e.stopPropagation()}>
+          <button className="card-menu-btn" onClick={onDotsClick} title="More options">
+            <DotsThree size={16} weight="bold" />
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Floating context menu — rendered outside card to avoid overflow clipping */}
+      {menuPos && (
+        <AssetContextMenu
+          asset={asset}
+          pos={menuPos}
+          copied={copied}
+          onClose={closeMenu}
+          onOpen={onOpen}
+          onRename={onRename}
+          onCopyLink={onCopyLink}
+          onShare={onShare}
+          onDownload={onDownload}
+          onMove={onMove}
+          onStatusChange={onStatusChange}
+          onDelete={onDelete}
+        />
+      )}
+    </>
   );
 }
 

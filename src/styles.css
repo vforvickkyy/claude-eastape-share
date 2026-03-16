@@ -1253,7 +1253,8 @@ input  { font-family: var(--font-body); }
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 .file-card:hover .card-menu-btn,
-.file-list-row:hover .card-menu-btn { opacity: 1; }
+.file-list-row:hover .card-menu-btn,
+.media-asset-card .card-menu-btn { opacity: 1; }
 .card-menu-btn:hover { color: var(--t1); background: rgba(255,255,255,0.1); }
 .card-menu-dropdown {
   position: absolute;
@@ -2342,6 +2343,17 @@ input  { font-family: var(--font-body); }
 .media-asset-info { padding: 10px 12px 10px; }
 .media-asset-name { display: block; font-size: 13px; font-weight: 500; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .media-asset-meta { display: block; font-size: 11.5px; color: var(--t3); margin-top: 2px; }
+
+/* Floating context menu (right-click / three-dot) */
+.floating-context-menu {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  padding: 4px;
+  min-width: 180px;
+  animation: dropIn 0.12s var(--ease);
+}
 
 /* Context menu extras */
 .card-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
