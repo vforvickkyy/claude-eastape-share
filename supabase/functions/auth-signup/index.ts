@@ -10,15 +10,19 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   try {
-    const supabase = createClient(
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!
     )
 
     const { email, password, fullName } = await req.json()
     if (!email || !password) return new Response(JSON.stringify({ error: 'Email and password are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
-    const { error: createError } = await supabase.auth.admin.createUser({
+    const { error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       user_metadata: { full_name: fullName || '' },
