@@ -38,6 +38,12 @@ Deno.serve(async (req) => {
     if (dbErr || !asset) return json({ error: 'Asset not found' }, 404)
 
     if (asset.bunny_video_status === 'ready') {
+      // Fix old-format playback URLs (pre-fix stored wrong path, not /embed/)
+      if (BUNNY_LIBRARY_ID && asset.bunny_video_guid && asset.bunny_playback_url && !asset.bunny_playback_url.includes('/embed/')) {
+        const fixedUrl = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${asset.bunny_video_guid}`
+        await supabase.from('media_assets').update({ bunny_playback_url: fixedUrl }).eq('id', assetId)
+        return json({ status: 'ready', thumbnailUrl: asset.bunny_thumbnail_url, playbackUrl: fixedUrl, assetId })
+      }
       return json({ status: 'ready', thumbnailUrl: asset.bunny_thumbnail_url, playbackUrl: asset.bunny_playback_url, assetId })
     }
 

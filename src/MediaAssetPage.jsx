@@ -42,7 +42,18 @@ export default function MediaAssetPage() {
   useEffect(() => {
     if (!user || !assetId) return;
     userApiFetch(`/api/media/assets?id=${assetId}`)
-      .then(d => { setAsset(d.asset); setNameVal(d.asset?.name || ""); })
+      .then(async d => {
+        let asset = d.asset;
+        // Fix old-format playback URL stored before the embed URL fix
+        if (asset?.bunny_video_status === "ready" && asset.bunny_playback_url && !asset.bunny_playback_url.includes("/embed/")) {
+          try {
+            const fixed = await userApiFetch(`/api/media/upload-status?assetId=${assetId}`);
+            if (fixed.playbackUrl) asset = { ...asset, bunny_playback_url: fixed.playbackUrl };
+          } catch { /* ignore */ }
+        }
+        setAsset(asset);
+        setNameVal(asset?.name || "");
+      })
       .catch(() => navigate("/media"))
       .finally(() => setLoading(false));
   }, [user, assetId]);
