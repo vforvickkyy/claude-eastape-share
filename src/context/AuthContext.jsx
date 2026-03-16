@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
     saveSession(session ?? null);
   }
 
-  // Restore session on mount
+  // Restore session on mount + proactive auto-refresh
   useEffect(() => {
     const session = loadSession();
     if (!session) { setLoading(false); return; }
@@ -55,14 +55,27 @@ export function AuthProvider({ children }) {
     if (!isExpired(session)) {
       setUser(session.user);
       setLoading(false);
-      return;
+    } else {
+      // Session expired on load — try to refresh silently
+      apiPost("/api/auth/refresh", { refreshToken: session.refresh_token })
+        .then(({ session: newSession }) => applySession(newSession))
+        .catch(() => { saveSession(null); setUser(null); })
+        .finally(() => setLoading(false));
     }
 
-    // Session expired — try to refresh silently
-    apiPost("/api/auth/refresh", { refreshToken: session.refresh_token })
-      .then(({ session: newSession }) => applySession(newSession))
-      .catch(() => { saveSession(null); setUser(null); })
-      .finally(() => setLoading(false));
+    // Check every 4 minutes; refresh if token expires within 5 minutes
+    const interval = setInterval(() => {
+      const current = loadSession();
+      if (!current?.refresh_token) return;
+      const expiresInSeconds = (current.expires_at || 0) - Date.now() / 1000;
+      if (expiresInSeconds < 300) {
+        apiPost("/api/auth/refresh", { refreshToken: current.refresh_token })
+          .then(({ session: newSession }) => applySession(newSession))
+          .catch(() => { saveSession(null); setUser(null); });
+      }
+    }, 4 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   async function login(email, password) {

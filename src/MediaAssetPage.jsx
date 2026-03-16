@@ -33,6 +33,8 @@ export default function MediaAssetPage() {
   const [copied,      setCopied]     = useState(false);
   const [showShare,   setShowShare]  = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [editNotes,   setEditNotes]   = useState(false);
+  const [notesVal,    setNotesVal]    = useState("");
 
   const iframeRef = useRef(null);
 
@@ -54,6 +56,7 @@ export default function MediaAssetPage() {
         }
         setAsset(asset);
         setNameVal(asset?.name || "");
+        setNotesVal(asset?.notes || "");
       })
       .catch(() => navigate("/media"))
       .finally(() => setLoading(false));
@@ -84,6 +87,16 @@ export default function MediaAssetPage() {
     });
     setAsset(a => ({ ...a, name: nameVal.trim() }));
     setEditName(false);
+  }
+
+  // ── Save notes ───────────────────────────────────────────
+  async function saveNotes() {
+    await userApiFetch(`/api/media/assets?id=${assetId}`, {
+      method: "PUT",
+      body: JSON.stringify({ notes: notesVal }),
+    });
+    setAsset(a => ({ ...a, notes: notesVal }));
+    setEditNotes(false);
   }
 
   // ── Status change ────────────────────────────────────────────────
@@ -202,7 +215,32 @@ export default function MediaAssetPage() {
             </div>
           )}
 
-          {/* Comment markers on progress bar would need iframe time tracking */}
+          {/* Notes / description */}
+          <div className="asset-notes-wrap">
+            {editNotes ? (
+              <div className="asset-notes-edit">
+                <textarea
+                  className="asset-notes-textarea"
+                  value={notesVal}
+                  onChange={e => setNotesVal(e.target.value)}
+                  placeholder="Add notes or context for this asset…"
+                  rows={4}
+                  autoFocus
+                />
+                <div className="asset-notes-actions">
+                  <button className="btn-primary-sm" onClick={saveNotes}>Save</button>
+                  <button className="btn-ghost" onClick={() => { setNotesVal(asset.notes || ""); setEditNotes(false); }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="asset-notes-display" onClick={() => setEditNotes(true)}>
+                {asset.notes
+                  ? <p className="asset-notes-text">{asset.notes}</p>
+                  : <span className="asset-notes-placeholder">Add notes or context… (click to edit)</span>
+                }
+              </button>
+            )}
+          </div>
         </div>
 
         {/* RIGHT — Tabbed sidebar */}

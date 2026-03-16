@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       const body = await req.json()
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
-      const ALLOWED = ['name', 'status', 'folder_id', 'share_enabled', 'bunny_video_guid', 'bunny_video_status', 'bunny_playback_url', 'bunny_thumbnail_url', 'duration']
+      const ALLOWED = ['name', 'status', 'folder_id', 'share_enabled', 'bunny_video_guid', 'bunny_video_status', 'bunny_playback_url', 'bunny_thumbnail_url', 'duration', 'notes']
       for (const key of ALLOWED) {
         if (key in body) updates[key] = body[key]
       }

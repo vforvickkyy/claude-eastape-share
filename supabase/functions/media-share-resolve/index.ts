@@ -32,14 +32,14 @@ Deno.serve(async (req) => {
       if (password !== link.password) return json({ error: 'Incorrect password' }, 403)
     }
 
-    supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('token', token).then(() => {}).catch(() => {})
+    supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1, last_accessed_at: new Date().toISOString() }).eq('token', token).then(() => {}).catch(() => {})
 
     const payload = { allowDownload: link.allow_download, allowComments: link.allow_comments, expiresAt: link.expires_at }
 
     if (link.asset_id) {
       const { data: asset } = await supabase
         .from('media_assets')
-        .select('id, name, type, bunny_video_guid, bunny_video_status, bunny_playback_url, bunny_thumbnail_url, duration, file_size, status, mime_type, created_at')
+        .select('id, name, type, bunny_video_guid, bunny_video_status, bunny_playback_url, bunny_thumbnail_url, duration, file_size, status, mime_type, created_at, notes')
         .eq('id', link.asset_id)
         .single()
       if (!asset) return json({ error: 'Asset not found' }, 404)

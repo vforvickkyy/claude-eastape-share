@@ -196,6 +196,13 @@ export default function MediaSharePage() {
           )}
         </div>
 
+        {/* Notes */}
+        {asset?.notes && (
+          <div className="share-asset-notes">
+            <p className="share-asset-notes-text">{asset.notes}</p>
+          </div>
+        )}
+
         {/* Comments */}
         {allowComments && (
           <div className="share-public-comments">

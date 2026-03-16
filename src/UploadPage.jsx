@@ -7,8 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import SiteHeader from "./SiteHeader";
-
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+import { driveApi } from "./lib/api.js";
 
 /* ─── helpers ─── */
 function formatSize(bytes) {
@@ -114,25 +113,11 @@ export default function UploadPage() {
     uploadStartTime.current = Date.now();
 
     try {
-      const _session = JSON.parse(localStorage.getItem("ets_auth") || "{}");
-      const _token = _session?.access_token || "";
-      const res = await fetch(`${EDGE_BASE}/presign`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ..._token ? { Authorization: `Bearer ${_token}` } : {},
-        },
-        body: JSON.stringify({
-          files: files.map(f => ({ name: f.name, size: f.size, type: f.type || "application/octet-stream" })),
-          userId: user?.id || null,
-          folderId: null,
-        }),
+      const { token, uploads } = await driveApi.presign({
+        files: files.map(f => ({ name: f.name, size: f.size, type: f.type || "application/octet-stream" })),
+        userId: user?.id || null,
+        folderId: null,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Server error (${res.status})`);
-      }
-      const { token, uploads } = await res.json();
 
       const loadedMap = {};
       await Promise.all(

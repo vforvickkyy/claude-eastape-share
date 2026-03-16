@@ -64,7 +64,19 @@ Deno.serve(async (req) => {
       if ('resolved' in body) updates.resolved = body.resolved
       if ('body' in body) updates.body = body.body
 
-      const { data, error } = await supabase.from('media_comments').update(updates).eq('id', id).eq('user_id', user.id).select().single()
+      // Allow comment author OR asset owner to update (e.g. resolve)
+      const { data: comment } = await supabase.from('media_comments').select('user_id, asset_id').eq('id', id).single()
+      if (!comment) return json({ error: 'Not found' }, 404)
+
+      const isAuthor = comment.user_id === user.id
+      let allowed = isAuthor
+      if (!isAuthor) {
+        const { data: asset } = await supabase.from('media_assets').select('user_id').eq('id', comment.asset_id).single()
+        allowed = asset?.user_id === user.id
+      }
+      if (!allowed) return json({ error: 'Forbidden' }, 403)
+
+      const { data, error } = await supabase.from('media_comments').update(updates).eq('id', id).select().single()
       if (error) return json({ error: error.message }, 500)
       return json({ comment: data })
     }
