@@ -8,7 +8,7 @@ import {
 import { useAuth } from "./context/AuthContext";
 import SiteHeader from "./SiteHeader";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 /* ─── helpers ─── */
 function formatSize(bytes) {
@@ -114,7 +114,7 @@ export default function UploadPage() {
     uploadStartTime.current = Date.now();
 
     try {
-      const res = await fetch(`${API_BASE}/api/presign`, {
+      const res = await fetch(`${EDGE_BASE}/presign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

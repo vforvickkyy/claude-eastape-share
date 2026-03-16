@@ -1,22 +1,5 @@
-/** Authenticated fetch helper — adds Bearer token from stored session */
-function getToken() {
-  try { return JSON.parse(localStorage.getItem("ets_auth"))?.access_token; } catch { return null; }
-}
-
-export async function userApiFetch(path, options = {}) {
-  const token = getToken();
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(options.headers || {}),
-    },
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
-}
+// Re-export from the central api utility — routes all /api/ calls to Supabase Edge Functions
+export { userApiFetch } from "./api.js";
 
 export function formatSize(bytes) {
   if (!bytes) return "—";

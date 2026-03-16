@@ -30,9 +30,7 @@ export default function DashboardPage() {
     if (!user) return;
     Promise.all([
       userApiFetch("/api/user/files?limit=6").then(d => d.shares || []).catch(() => []),
-      fetch("/api/media/projects", {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }).then(r => r.ok ? r.json() : { projects: [] }).then(d => d.projects || []).catch(() => []),
+      userApiFetch("/api/media/projects").then(d => d.projects || []).catch(() => []),
     ]).then(([s, p]) => { setShares(s); setProjects(p); })
       .finally(() => setLoading(false));
   }, [user]);

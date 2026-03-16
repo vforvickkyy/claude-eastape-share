@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
+import { mediaApi } from "./lib/api.js";
 
 export default function MediaSharePage() {
   const { token } = useParams();
@@ -32,21 +33,18 @@ export default function MediaSharePage() {
   }, []);
 
   async function loadShare(pw) {
-    const qs = pw ? `?password=${encodeURIComponent(pw)}` : "";
-    const res = await fetch(`/api/media/share/${token}${qs}`);
-    const body = await res.json();
-
-    if (!res.ok) {
-      if (res.status === 401 || body.passwordRequired) { setState("pw"); return; }
-      if (res.status === 403) { setPwError("Incorrect password."); return; }
-      if (res.status === 410) { setState("expired"); return; }
+    try {
+      const body = await mediaApi.resolveShare(token, pw || undefined);
+      setData(body);
+      setComments(body.comments || []);
+      setState("ready");
+    } catch (err) {
+      const msg = err.message || "";
+      if (msg.includes("Password required") || msg.includes("passwordRequired")) { setState("pw"); return; }
+      if (msg.includes("Incorrect password")) { setPwError("Incorrect password."); return; }
+      if (msg.includes("expired")) { setState("expired"); return; }
       setState("error");
-      return;
     }
-
-    setData(body);
-    setComments(body.comments || []);
-    setState("ready");
   }
 
   function handlePasswordSubmit(e) {
@@ -59,22 +57,16 @@ export default function MediaSharePage() {
     e.preventDefault();
     if (!newComment.trim()) return;
     setSubmitting(true);
-    // Public share comments — use a guest comment endpoint (server-side allows)
-    const res = await fetch(`/api/media/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const d = await mediaApi.createComment({
         assetId: data?.asset?.id,
         body: newComment.trim(),
         timestampSeconds: currentTime > 0 ? Math.floor(currentTime) : null,
         shareToken: token,
-      }),
-    });
-    if (res.ok) {
-      const d = await res.json();
+      });
       setComments(cs => [...cs, d.comment]);
       setNewComment("");
-    }
+    } catch {}
     setSubmitting(false);
   }
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-// Auth is now handled server-side via /api/auth/* endpoints.
+// Auth is handled via Supabase Edge Functions.
 // Sessions are stored in localStorage so they survive page reloads.
 
 const SESSION_KEY = "ets_auth";
@@ -18,8 +18,17 @@ function isExpired(session) {
   return !session?.expires_at || Date.now() / 1000 > session.expires_at - 30;
 }
 
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+const AUTH_PATHS = {
+  "/api/auth/login":   `${EDGE_BASE}/auth-login`,
+  "/api/auth/signup":  `${EDGE_BASE}/auth-signup`,
+  "/api/auth/refresh": `${EDGE_BASE}/auth-refresh`,
+};
+
 async function apiPost(path, body) {
-  const res = await fetch(path, {
+  const url = AUTH_PATHS[path] || path;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

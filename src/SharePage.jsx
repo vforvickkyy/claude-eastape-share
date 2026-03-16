@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import SiteHeader from "./SiteHeader";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 function formatSize(bytes) {
   if (!bytes && bytes !== 0) return "—";
@@ -42,7 +42,7 @@ export default function SharePage() {
     if (!token) return;
     async function load() {
       try {
-        const res = await fetch(`${API_BASE}/api/share/${token}`);
+        const res = await fetch(`${EDGE_BASE}/share-resolve?token=${encodeURIComponent(token)}`);
         if (res.status === 404) { setStatus("error");   setErrorMsg("Share not found. This link may be invalid."); return; }
         if (res.status === 410) {
           const body = await res.json().catch(() => ({}));
@@ -66,7 +66,7 @@ export default function SharePage() {
     setDownloading(d => ({ ...d, [file.id]: true }));
     try {
       const res = await fetch(
-        `${API_BASE}/api/download?token=${encodeURIComponent(token)}&fileId=${encodeURIComponent(file.id)}`
+        `${EDGE_BASE}/download?token=${encodeURIComponent(token)}&fileId=${encodeURIComponent(file.id)}`
       );
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
