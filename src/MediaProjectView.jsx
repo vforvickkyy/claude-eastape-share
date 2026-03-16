@@ -39,6 +39,9 @@ export default function MediaProjectView() {
   const [shareAsset,   setShareAsset]   = useState(null);
   const [copied,       setCopied]       = useState(null);
 
+  // Current folder (for breadcrumb name)
+  const [currentFolder, setCurrentFolder] = useState(null);
+
   // New Folder
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -85,19 +88,31 @@ export default function MediaProjectView() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Fetch current folder name for breadcrumb
+  useEffect(() => {
+    if (!folderId) { setCurrentFolder(null); return; }
+    userApiFetch(`/api/media/folders?id=${folderId}`)
+      .then(d => setCurrentFolder(d.folder || null))
+      .catch(() => setCurrentFolder(null));
+  }, [folderId]);
+
   /* ── Asset actions ── */
   async function handleDeleteAsset(assetId) {
     if (!window.confirm("Delete this asset? This cannot be undone.")) return;
-    await userApiFetch(`/api/media/assets?id=${assetId}`, { method: "DELETE" });
-    setAssets(as => as.filter(a => a.id !== assetId));
-    setSelected(s => { const n = new Set(s); n.delete(assetId); return n; });
+    try {
+      await userApiFetch(`/api/media/assets?id=${assetId}`, { method: "DELETE" });
+      setAssets(as => as.filter(a => a.id !== assetId));
+      setSelected(s => { const n = new Set(s); n.delete(assetId); return n; });
+    } catch (err) { alert("Failed to delete asset: " + err.message); }
   }
 
   async function handleStatusChange(assetId, status) {
-    await userApiFetch(`/api/media/assets?id=${assetId}`, {
-      method: "PUT", body: JSON.stringify({ status }),
-    });
-    setAssets(as => as.map(a => a.id === assetId ? { ...a, status } : a));
+    try {
+      await userApiFetch(`/api/media/assets?id=${assetId}`, {
+        method: "PUT", body: JSON.stringify({ status }),
+      });
+      setAssets(as => as.map(a => a.id === assetId ? { ...a, status } : a));
+    } catch (err) { alert("Failed to update status: " + err.message); }
   }
 
   async function copyShareLink(asset) {
@@ -114,11 +129,13 @@ export default function MediaProjectView() {
   async function handleRenameAsset() {
     const name = renameVal.trim();
     if (!name || name === renameAsset.name) { setRenameAsset(null); return; }
-    await userApiFetch(`/api/media/assets?id=${renameAsset.id}`, {
-      method: "PUT", body: JSON.stringify({ name }),
-    });
-    setAssets(as => as.map(a => a.id === renameAsset.id ? { ...a, name } : a));
-    setRenameAsset(null);
+    try {
+      await userApiFetch(`/api/media/assets?id=${renameAsset.id}`, {
+        method: "PUT", body: JSON.stringify({ name }),
+      });
+      setAssets(as => as.map(a => a.id === renameAsset.id ? { ...a, name } : a));
+      setRenameAsset(null);
+    } catch (err) { alert("Failed to rename: " + err.message); }
   }
 
   function handleDownload(asset) {
@@ -138,11 +155,13 @@ export default function MediaProjectView() {
   }
 
   async function handleMoveAsset(targetFolderId) {
-    await userApiFetch(`/api/media/assets?id=${moveAsset.id}`, {
-      method: "PUT", body: JSON.stringify({ folderId: targetFolderId }),
-    });
-    setAssets(as => as.filter(a => a.id !== moveAsset.id));
-    setMoveAsset(null);
+    try {
+      await userApiFetch(`/api/media/assets?id=${moveAsset.id}`, {
+        method: "PUT", body: JSON.stringify({ folder_id: targetFolderId }),
+      });
+      setAssets(as => as.filter(a => a.id !== moveAsset.id));
+      setMoveAsset(null);
+    } catch (err) { alert("Failed to move asset: " + err.message); }
   }
 
   /* ── Folder actions ── */
@@ -162,18 +181,22 @@ export default function MediaProjectView() {
   async function handleRenameFolder() {
     const name = renameFolderVal.trim();
     if (!name || name === renameFolder.name) { setRenameFolder(null); return; }
-    await userApiFetch(`/api/media/folders?id=${renameFolder.id}`, {
-      method: "PUT", body: JSON.stringify({ name }),
-    });
-    setFolders(fs => fs.map(f => f.id === renameFolder.id ? { ...f, name } : f));
-    setRenameFolder(null);
+    try {
+      await userApiFetch(`/api/media/folders?id=${renameFolder.id}`, {
+        method: "PUT", body: JSON.stringify({ name }),
+      });
+      setFolders(fs => fs.map(f => f.id === renameFolder.id ? { ...f, name } : f));
+      setRenameFolder(null);
+    } catch (err) { alert("Failed to rename folder: " + err.message); }
   }
 
   async function handleDeleteFolder(folder) {
     if (!window.confirm(`Delete folder "${folder.name}"? Assets inside will not be deleted.`)) return;
-    await userApiFetch(`/api/media/folders?id=${folder.id}`, { method: "DELETE" });
-    setFolders(fs => fs.filter(f => f.id !== folder.id));
-    if (folderId === folder.id) navigate(`/media/project/${projectId}`);
+    try {
+      await userApiFetch(`/api/media/folders?id=${folder.id}`, { method: "DELETE" });
+      setFolders(fs => fs.filter(f => f.id !== folder.id));
+      if (folderId === folder.id) navigate(`/media/project/${projectId}`);
+    } catch (err) { alert("Failed to delete folder: " + err.message); }
   }
 
   async function shareFolderLink(folder) {
@@ -238,7 +261,7 @@ export default function MediaProjectView() {
         {folderId && (
           <>
             <CaretRight size={11} className="breadcrumb-sep" />
-            <span className="breadcrumb-item active">Folder</span>
+            <span className="breadcrumb-item active">{currentFolder?.name || "Folder"}</span>
           </>
         )}
       </div>

@@ -25,6 +25,12 @@ Deno.serve(async (req) => {
     const parentId = url.searchParams.get('parentId')
 
     if (req.method === 'GET') {
+      // Single folder by id
+      if (id) {
+        const { data, error } = await supabase.from('media_folders').select('*').eq('id', id).eq('user_id', user.id).single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ folder: data })
+      }
       let q = supabase.from('media_folders').select('*').eq('user_id', user.id)
       if (projectId) q = q.eq('project_id', projectId)
       if (parentId === 'null' || parentId === 'root') q = q.is('parent_folder_id', null)

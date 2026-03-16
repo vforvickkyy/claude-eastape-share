@@ -121,6 +121,29 @@ export default function MediaSharePage() {
     </PageShell>
   );
 
+  /* ── Folder / Project view ── */
+  if (data.type === "folder" || data.type === "project") {
+    const { folder, project, assets: folderAssets = [], allowDownload: dlOk } = data;
+    const title = folder?.name || project?.name || "Shared Folder";
+    return (
+      <PageShell>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 0" }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{title}</h1>
+          <p style={{ color: "var(--t3)", fontSize: 12, marginBottom: 24 }}>{folderAssets.length} file{folderAssets.length !== 1 ? "s" : ""}</p>
+          {folderAssets.length === 0 ? (
+            <p style={{ color: "var(--t3)", fontSize: 13 }}>No files in this shared folder.</p>
+          ) : (
+            <div className="media-asset-grid">
+              {folderAssets.map(a => (
+                <SharedAssetTile key={a.id} asset={a} allowDownload={dlOk} />
+              ))}
+            </div>
+          )}
+        </div>
+      </PageShell>
+    );
+  }
+
   /* ── Asset view ── */
   const { asset, allowDownload, allowComments } = data;
   const bunnyGuid  = asset?.bunny_video_guid;
@@ -227,6 +250,39 @@ export default function MediaSharePage() {
         )}
       </div>
     </PageShell>
+  );
+}
+
+function SharedAssetTile({ asset, allowDownload }) {
+  const hasVideo = asset.bunny_video_status === "ready" && asset.bunny_playback_url;
+  return (
+    <div className="media-asset-card" style={{ cursor: "default" }}>
+      <div className="media-asset-thumb">
+        {asset.bunny_thumbnail_url ? (
+          <img src={asset.bunny_thumbnail_url} alt={asset.name} />
+        ) : (
+          <VideoCamera size={36} weight="duotone" style={{ color: "#a78bfa" }} />
+        )}
+        {asset.duration && (
+          <span className="media-duration-badge">{formatDuration(asset.duration)}</span>
+        )}
+      </div>
+      <div className="media-asset-info">
+        <span className="media-asset-name">{asset.name}</span>
+        {allowDownload && hasVideo && (
+          <a
+            href={asset.bunny_playback_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost"
+            style={{ fontSize: 11, padding: "2px 8px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <DownloadSimple size={12} /> Download
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
