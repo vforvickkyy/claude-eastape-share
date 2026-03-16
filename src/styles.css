@@ -2239,6 +2239,28 @@ input  { font-family: var(--font-body); }
   font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--t3); padding: 4px 4px 10px;
 }
+/* Folder sidebar item — wrapper with context menu */
+.media-folder-item-wrap {
+  display: flex; align-items: center; border-radius: var(--r-md);
+  transition: background 0.12s;
+  position: relative;
+}
+.media-folder-item-wrap:hover { background: rgba(255,255,255,0.05); }
+.media-folder-item-wrap.active { background: rgba(124,58,237,0.15); }
+.media-folder-item-wrap .folder-menu-btn {
+  opacity: 0; transition: opacity 0.12s; flex-shrink: 0; margin-right: 4px;
+}
+.media-folder-item-wrap:hover .folder-menu-btn { opacity: 1; }
+.media-folder-item-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; color: var(--t2); font-size: 13px;
+  padding: 8px 8px; cursor: pointer; text-align: left; flex: 1; min-width: 0;
+  transition: color 0.12s;
+}
+.media-folder-item-wrap:hover .media-folder-item-btn { color: var(--t1); }
+.media-folder-item-wrap.active .media-folder-item-btn { color: var(--purple-l); }
+
+/* Legacy single-element folder item (All assets button) */
 .media-folder-item {
   display: flex; align-items: center; gap: 8px;
   background: none; border: none; color: var(--t2); font-size: 13px;
@@ -2267,6 +2289,20 @@ input  { font-family: var(--font-body); }
   transition: border-color 0.15s;
 }
 .media-asset-card:hover { border-color: var(--border-hover); }
+.media-asset-card.selected { border-color: var(--purple-l); background: rgba(124,58,237,0.08); }
+
+/* Checkbox in top-left of card */
+.asset-select-check {
+  position: absolute; top: 8px; left: 8px; z-index: 4;
+  opacity: 0; transition: opacity 0.15s;
+  cursor: pointer; line-height: 0;
+  background: rgba(0,0,0,0.5); border-radius: 4px; padding: 1px;
+}
+.media-asset-card:hover .asset-select-check,
+.media-asset-card.selected .asset-select-check { opacity: 1; }
+
+/* Selected row in list view */
+.file-list-row.selected { background: rgba(124,58,237,0.08); }
 
 .media-asset-thumb {
   position: relative; width: 100%; height: 120px;
