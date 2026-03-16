@@ -114,9 +114,14 @@ export default function UploadPage() {
     uploadStartTime.current = Date.now();
 
     try {
+      const _session = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+      const _token = _session?.access_token || "";
       const res = await fetch(`${EDGE_BASE}/presign`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ..._token ? { Authorization: `Bearer ${_token}` } : {},
+        },
         body: JSON.stringify({
           files: files.map(f => ({ name: f.name, size: f.size, type: f.type || "application/octet-stream" })),
           userId: user?.id || null,

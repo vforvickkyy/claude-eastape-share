@@ -78,7 +78,7 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
         // 2. TUS upload to Bunny Stream
         await new Promise((resolve, reject) => {
           const upload = new tus.Upload(f, {
-            uploadUrl: initData.uploadUrl,
+            endpoint: initData.uploadUrl,
             retryDelays: [0, 3000, 5000, 10000, 20000],
             chunkSize: 50 * 1024 * 1024,
             metadata: { name: f.name, filetype: f.type },

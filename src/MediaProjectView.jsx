@@ -33,11 +33,13 @@ export default function MediaProjectView() {
   const [search,     setSearch]     = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [showUpload, setShowUpload] = useState(false);
-  const [showTeam,   setShowTeam]   = useState(false);
-  const [shareAsset, setShareAsset] = useState(null);
-  const [copied,     setCopied]     = useState(null);
-  const [menuAsset,  setMenuAsset]  = useState(null);
+  const [showUpload,    setShowUpload]    = useState(false);
+  const [showTeam,      setShowTeam]      = useState(false);
+  const [shareAsset,    setShareAsset]    = useState(null);
+  const [copied,        setCopied]        = useState(null);
+  const [menuAsset,     setMenuAsset]     = useState(null);
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login", { replace: true });
@@ -88,10 +90,27 @@ export default function MediaProjectView() {
       method: "POST",
       body: JSON.stringify({ assetId: asset.id, allowDownload: true, allowComments: true }),
     });
-    const url = data.shareUrl || `${window.location.origin}/media/share/${data.link?.token}`;
+    const token = data.link?.token || (data.shareUrl || "").split("/").pop();
+    const url = `${window.location.origin}/media/share/${token}`;
     await navigator.clipboard.writeText(url);
     setCopied(asset.id);
     setTimeout(() => setCopied(null), 2000);
+  }
+
+  async function createFolder() {
+    const name = newFolderName.trim();
+    if (!name) return;
+    try {
+      const data = await userApiFetch("/api/media/folders", {
+        method: "POST",
+        body: JSON.stringify({ name, projectId, parentFolderId: folderId || null }),
+      });
+      setFolders(fs => [...fs, data.folder]);
+      setShowNewFolder(false);
+      setNewFolderName("");
+    } catch (err) {
+      alert("Failed to create folder: " + err.message);
+    }
   }
 
   function filtered() {
@@ -129,7 +148,7 @@ export default function MediaProjectView() {
         <button className="btn-primary-sm" onClick={() => setShowUpload(true)}>
           <CloudArrowUp size={14} /> Upload
         </button>
-        <button className="btn-ghost" onClick={() => {/* TODO: new folder */}}>
+        <button className="btn-ghost" onClick={() => { setShowNewFolder(true); setNewFolderName(""); }}>
           <FolderSimplePlus size={14} /> New Folder
         </button>
         <button className="btn-ghost" onClick={() => setShowTeam(true)}>
@@ -271,6 +290,43 @@ export default function MediaProjectView() {
             asset={shareAsset}
             onClose={() => setShareAsset(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* New Folder modal */}
+      <AnimatePresence>
+        {showNewFolder && (
+          <motion.div
+            className="modal-backdrop"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowNewFolder(false)}
+          >
+            <motion.div
+              className="modal-card glass-card"
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <FolderSimplePlus size={16} /> New Folder
+                <button className="modal-close" onClick={() => setShowNewFolder(false)}><X size={16} /></button>
+              </div>
+              <input
+                className="media-search"
+                style={{ width: "100%", marginBottom: 16, boxSizing: "border-box" }}
+                placeholder="Folder name"
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") createFolder(); }}
+                autoFocus
+              />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn-ghost" onClick={() => setShowNewFolder(false)}>Cancel</button>
+                <button className="btn-primary-sm" onClick={createFolder} disabled={!newFolderName.trim()}>
+                  Create
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </DashboardLayout>
