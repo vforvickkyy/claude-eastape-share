@@ -252,20 +252,21 @@ function PlanFormModal({ mode, plan, onClose, onSaved }) {
       if (mode === "edit") {
         res = await fetch(`${BASE}/rest/v1/plans?id=eq.${plan.id}`, {
           method: "PATCH",
-          headers: { ...headers, Prefer: "return=representation" },
+          headers,
           body: JSON.stringify(payload),
         });
       } else {
         res = await fetch(`${BASE}/rest/v1/plans`, {
           method: "POST",
-          headers: { ...headers, Prefer: "return=representation" },
+          headers: { ...headers, Prefer: "return=minimal" },
           body: JSON.stringify(payload),
         });
       }
-      if (!res.ok) throw new Error(await res.text());
-      const saved = await res.json();
-      const savedId = Array.isArray(saved) ? saved[0]?.id : saved?.id;
-      await auditLog(mode === "edit" ? "plan.updated" : "plan.created", "plan", savedId ?? plan?.id ?? "new", payload);
+      if (!res.ok) {
+        const body = await res.text().catch(() => res.statusText);
+        throw new Error(`Save failed (${res.status}): ${body}`);
+      }
+      auditLog(mode === "edit" ? "plan.updated" : "plan.created", "plan", plan?.id ?? "new", payload).catch(() => {});
       onSaved();
     } catch (e) {
       setError(e.message || "Save failed.");
