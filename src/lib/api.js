@@ -18,7 +18,11 @@ async function post(url, body, auth = false) {
   if (auth) Object.assign(headers, authHeaders())
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Request failed')
+  if (!res.ok) {
+    const err = new Error(data.error || 'Request failed')
+    if (data.code) err.code = data.code
+    throw err
+  }
   return data
 }
 

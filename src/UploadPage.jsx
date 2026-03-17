@@ -163,7 +163,11 @@ export default function UploadPage() {
     } catch (err) {
       console.error("Upload error:", err);
       setStatus("error");
-      setErrorMsg(err.message || "Upload failed. Please try again.");
+      setErrorMsg(
+        err.code === "STORAGE_QUOTA_EXCEEDED"
+          ? err.message + " Upgrade your plan to get more storage."
+          : err.message || "Upload failed. Please try again."
+      );
     } finally {
       setUploading(false);
     }

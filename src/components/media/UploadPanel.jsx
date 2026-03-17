@@ -102,7 +102,12 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
       }
     } catch (err) {
       console.error("Upload error:", err);
-      updateFile(item.id, { status: "error", error: err.message });
+      updateFile(item.id, {
+        status: "error",
+        error: err.code === "STORAGE_QUOTA_EXCEEDED"
+          ? err.message + " Upgrade your plan."
+          : err.message,
+      });
     }
   }
 
