@@ -3194,3 +3194,141 @@ input  { font-family: var(--font-body); }
   .admin-hamburger { display: flex !important; }
   .admin-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL MOBILE FIXES — prevent horizontal scroll everywhere
+═══════════════════════════════════════════════════════════════ */
+
+/* Hard stop for horizontal overflow globally */
+html { overflow-x: hidden; }
+body { overflow-x: hidden; }
+
+/* ── 768px: Tablet / large phone ── */
+@media (max-width: 768px) {
+
+  /* Dashboard topbar: truncate username */
+  .db-topbar { gap: 8px; padding: 0 12px; }
+  .user-name  { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-page-title { font-size: 15px; }
+
+  /* Dashboard stats bar: wrap into 2 columns */
+  .stats-bar { gap: 8px; }
+  .stat-card  { min-width: 0; flex: 1 1 calc(50% - 4px); }
+
+  /* File grid: 2 columns minimum */
+  .file-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+
+  /* Tables: always scrollable */
+  .file-list-table,
+  .admin-table-wrap,
+  .admin-table { display: block; overflow-x: auto; }
+
+  /* Profile page */
+  .profile-section-body { padding: 16px; }
+  .profile-section-head { padding: 14px 16px 12px; }
+
+  /* Admin layout padding */
+  .admin-content { padding: 16px; }
+  .admin-page-title { font-size: 20px; }
+
+  /* Admin modal: full-width on mobile */
+  .admin-modal-overlay { padding: 16px; align-items: flex-end; }
+  .admin-modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90vh;
+    border-radius: 16px 16px 0 0;
+    overflow-y: auto;
+  }
+
+  /* Plan form modal in admin: full width */
+  .plan-form-modal { width: 100% !important; max-width: 100% !important; }
+
+  /* Media project layout */
+  .media-project-layout { flex-direction: column; height: auto; }
+
+  /* Share profile: no min-width */
+  .share-profile { min-width: 0; width: 100%; }
+
+  /* Media share frames: responsive */
+  .media-share-frame-lg,
+  .media-share-frame-md { width: 100% !important; height: auto !important; aspect-ratio: 1; }
+
+  /* Asset name input: full width */
+  .asset-name-input { width: 100%; max-width: 100%; }
+
+  /* Sidebar settings menu: full available width */
+  .db-settings-menu { left: 4px; right: 4px; }
+}
+
+/* ── 480px: Small phones ── */
+@media (max-width: 480px) {
+
+  /* Upload/share page: tighter padding */
+  .main-layout    { padding: 12px 14px 32px; }
+  .site-header    { padding: 14px 16px; }
+  .share-main-layout { padding: 12px 14px 32px; }
+
+  /* Glass card: tighter padding */
+  .glass-card     { padding: 16px 14px; }
+  .share-glass-card { padding: 16px 14px; }
+
+  /* Dashboard stat cards: full-width stack */
+  .stat-card { flex: 1 1 100%; min-width: 0; }
+  .stats-bar { flex-direction: column; }
+
+  /* Dashboard: tighter padding */
+  .db-content { padding: 10px; }
+  .db-topbar  { padding: 0 10px; }
+
+  /* Dash grid always 1 column */
+  .dash-grid { grid-template-columns: 1fr !important; }
+
+  /* Profile section padding */
+  .profile-section-body { padding: 12px; }
+  .profile-section-head { padding: 12px 14px 10px; }
+  .profile-wrap { gap: 14px; }
+
+  /* Topbar username: hide on very small screens */
+  .user-name { display: none; }
+
+  /* Admin stats: 1 column */
+  .admin-stats-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Pricing: tighter */
+  .pricing-wrap { padding: 28px 12px 48px; }
+  .pricing-card { padding: 20px 14px 16px; }
+
+  /* File grid: 2 per row minimum */
+  .file-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Modal: full screen */
+  .admin-modal-overlay { padding: 0; align-items: flex-end; }
+  .admin-modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 95vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* Share card */
+  .share-card { padding: 18px 14px; }
+
+  /* Inputs: always full width */
+  .form-input  { min-width: 0; width: 100%; }
+  .modal-input { min-width: 0; width: 100%; }
+
+  /* Tables: scrollable with hint */
+  .file-list-table,
+  .admin-table-wrap { min-width: 0; }
+}
+
+/* ── 360px: Very small phones ── */
+@media (max-width: 360px) {
+  .db-topbar { gap: 6px; }
+  .db-page-title { font-size: 13px; }
+  .db-new-btn { font-size: 12px; padding: 9px 12px; }
+  .site-header { padding: 12px; }
+  .file-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-card { padding: 10px 12px; }
+}
