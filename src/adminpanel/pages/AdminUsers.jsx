@@ -914,7 +914,7 @@ function UserDetailDrawer({ user, planName, planId, plans, onClose, onChangePlan
       transition={{ type: "spring", stiffness: 320, damping: 32 }}
       style={{
         position: "fixed", top: 0, right: 0, bottom: 0,
-        width: "420px", background: "var(--card)", borderLeft: "1px solid var(--border)",
+        width: "420px", background: "#0d1320", borderLeft: "1px solid var(--border)",
         zIndex: 300, display: "flex", flexDirection: "column", overflow: "hidden",
       }}
     >
