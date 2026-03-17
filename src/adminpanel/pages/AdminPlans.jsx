@@ -186,7 +186,13 @@ const DEFAULT_FORM = {
 };
 
 function PlanFormModal({ mode, plan, onClose, onSaved }) {
-  const [form, setForm]           = useState(mode === "edit" ? { ...DEFAULT_FORM, ...plan } : { ...DEFAULT_FORM });
+  const [form, setForm]           = useState(() => {
+    if (mode !== "edit") return { ...DEFAULT_FORM };
+    const safe = Object.fromEntries(
+      Object.entries(plan).map(([k, v]) => [k, v === null || v === undefined ? (DEFAULT_FORM[k] ?? "") : v])
+    );
+    return { ...DEFAULT_FORM, ...safe };
+  });
   const [newFeature, setNewFeature] = useState("");
   const [newAddonLabel, setNewAddonLabel] = useState("");
   const [newAddonPrice, setNewAddonPrice] = useState("");
