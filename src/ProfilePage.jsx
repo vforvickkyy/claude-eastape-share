@@ -5,8 +5,9 @@ import {
   CheckCircle, Warning, Eye, EyeSlash, FloppyDisk,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
+import { usePlan } from "./context/PlanContext";
 import DashboardLayout from "./DashboardLayout";
-import { userApiFetch } from "./lib/userApi";
+import { userApiFetch, formatSize } from "./lib/userApi";
 
 /* ─── tiny helpers ─── */
 function Section({ title, description, children }) {
@@ -49,6 +50,7 @@ function Toast({ type, message, onDone }) {
 /* ════════════════════════════════════════════ */
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
+  const plan = usePlan();
   const navigate = useNavigate();
 
   // Redirect if not logged in
@@ -98,6 +100,7 @@ export default function ProfilePage() {
           onUpdate={updates => setProfile(p => ({ ...p, ...updates }))}
           notify={notify}
         />
+        <PlanStorageSection plan={plan} navigate={navigate} />
         <AccountSection profile={profile} />
         <PasswordSection notify={notify} />
         <DangerSection notify={notify} navigate={navigate} />
@@ -339,6 +342,84 @@ function PasswordSection({ notify }) {
           </button>
         </div>
       </form>
+    </Section>
+  );
+}
+
+/* ── Plan & Storage section ─────────────────── */
+function PlanStorageSection({ plan, navigate }) {
+  const planName    = plan.display_name ?? "Starter";
+  const usedBytes   = plan.used_bytes   ?? 0;
+  const limitBytes  = plan.limit_bytes  ?? (2 * 1024 * 1024 * 1024);
+  const percentUsed = plan.percent_used ?? 0;
+
+  const PLAN_COLORS = {
+    starter:      { bg: "rgba(148,163,184,0.12)", color: "#94a3b8", border: "rgba(148,163,184,0.3)" },
+    creator:      { bg: "rgba(124,58,237,0.12)",  color: "#a78bfa", border: "rgba(124,58,237,0.3)"  },
+    professional: { bg: "rgba(59,130,246,0.12)",  color: "#60a5fa", border: "rgba(59,130,246,0.3)"  },
+  };
+  const pc = PLAN_COLORS[planName.toLowerCase()] || PLAN_COLORS.starter;
+
+  return (
+    <Section title="Plan & Storage" description="Your current subscription and storage usage.">
+      {/* Plan badge */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", marginBottom: "20px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ background: pc.bg, border: `1px solid ${pc.border}`, borderRadius: "10px", padding: "10px 18px" }}>
+            <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", color: pc.color, textTransform: "uppercase", marginBottom: "2px" }}>
+              Current Plan
+            </div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: pc.color }}>{planName}</div>
+          </div>
+          <div style={{ fontSize: "13px", color: "var(--t2)" }}>
+            <div>{plan.storage_limit_gb} GB storage</div>
+            <div style={{ color: "var(--t3)", fontSize: "12px", marginTop: "2px" }}>
+              {plan.max_videos != null ? `${plan.max_videos} media videos` : "Unlimited videos"} ·{" "}
+              {plan.max_team_members} team member{plan.max_team_members !== 1 ? "s" : ""}
+            </div>
+          </div>
+        </div>
+        {planName !== "Professional" && (
+          <button className="btn-primary-sm" onClick={() => navigate("/plans")}>
+            Upgrade Plan →
+          </button>
+        )}
+      </div>
+
+      {/* Storage meter */}
+      <div style={{ background: "var(--hover)", borderRadius: "10px", padding: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 500 }}>Storage Usage</span>
+          <span style={{ fontSize: "12px", color: "var(--t3)" }}>
+            {formatSize(usedBytes)} / {formatSize(limitBytes)}
+          </span>
+        </div>
+        <div style={{ height: "8px", borderRadius: "999px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+          <div style={{
+            height: "100%",
+            width: `${percentUsed}%`,
+            borderRadius: "999px",
+            background: percentUsed >= 90 ? "linear-gradient(90deg,#ef4444,#f97316)"
+                      : percentUsed >= 70 ? "linear-gradient(90deg,#f97316,#fbbf24)"
+                      : "linear-gradient(90deg,#7c3aed,#3b82f6)",
+            transition: "width 0.6s ease",
+          }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--t3)", marginTop: "6px" }}>
+          <span style={{ display: "flex", gap: "12px" }}>
+            <span>Drive: {formatSize(plan.drive_bytes ?? 0)}</span>
+            <span>Media: {formatSize(plan.media_bytes ?? 0)}</span>
+          </span>
+          <span style={{ color: percentUsed >= 90 ? "#f87171" : percentUsed >= 70 ? "#fbbf24" : "var(--t3)", fontWeight: percentUsed >= 70 ? 600 : 400 }}>
+            {percentUsed}% used
+          </span>
+        </div>
+        {percentUsed >= 90 && (
+          <div style={{ marginTop: "10px", fontSize: "12px", color: "#f87171", background: "rgba(239,68,68,0.08)", padding: "8px 12px", borderRadius: "8px" }}>
+            ⚠ Your storage is almost full. Upgrade to continue uploading.
+          </div>
+        )}
+      </div>
     </Section>
   );
 }

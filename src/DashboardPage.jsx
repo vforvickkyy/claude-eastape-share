@@ -6,6 +6,7 @@ import {
   LinkSimple, Users, ArrowRight, ChartBar,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
+import { usePlan } from "./context/PlanContext";
 import DashboardLayout from "./DashboardLayout";
 import { userApiFetch, formatSize, totalShareSize } from "./lib/userApi";
 
@@ -16,6 +17,7 @@ const CARD_VARIANTS = {
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
+  const plan = usePlan();
   const navigate = useNavigate();
 
   const [shares,   setShares]   = useState([]);
@@ -36,8 +38,13 @@ export default function DashboardPage() {
   }, [user]);
 
   const totalFiles   = shares.reduce((s, sh) => s + (sh.files?.length || 0), 0);
-  const totalStorage = shares.reduce((s, sh) => s + totalShareSize(sh), 0);
   const activeLinks  = shares.filter(sh => new Date(sh.expires_at) > new Date()).length;
+
+  // Use real storage from PlanContext (Drive + Media combined)
+  const usedBytes   = plan.used_bytes   ?? 0;
+  const limitBytes  = plan.limit_bytes  ?? (2 * 1024 * 1024 * 1024);
+  const percentUsed = plan.percent_used ?? 0;
+  const planName    = plan.display_name ?? "Starter";
 
   const displayName = user?.user_metadata?.full_name?.split(" ")[0] || "there";
 
@@ -59,10 +66,10 @@ export default function DashboardPage() {
       {/* Stats row */}
       <div className="stats-bar">
         {[
-          { icon: <Files size={22} weight="duotone" />,     value: totalFiles,               label: "Drive Files"    },
-          { icon: <ChartBar size={22} weight="duotone" />,  value: formatSize(totalStorage), label: "Storage Used"   },
-          { icon: <LinkSimple size={22} weight="duotone" />, value: activeLinks,              label: "Active Links"   },
-          { icon: <VideoCamera size={22} weight="duotone" />, value: projects.length,         label: "Media Projects" },
+          { icon: <Files size={22} weight="duotone" />,      value: totalFiles,           label: "Drive Files"    },
+          { icon: <ChartBar size={22} weight="duotone" />,  value: formatSize(usedBytes), label: "Storage Used"   },
+          { icon: <LinkSimple size={22} weight="duotone" />, value: activeLinks,           label: "Active Links"   },
+          { icon: <VideoCamera size={22} weight="duotone" />, value: projects.length,      label: "Media Projects" },
         ].map((stat, i) => (
           <motion.div key={stat.label} className="stat-card" custom={i} variants={CARD_VARIANTS} initial="hidden" animate="visible">
             <span className="stat-icon">{stat.icon}</span>
@@ -144,21 +151,41 @@ export default function DashboardPage() {
           <div className="dash-widget-head">
             <HardDrive size={18} weight="duotone" className="dash-widget-icon drive" />
             <span className="dash-widget-title">Storage</span>
+            <span style={{
+              fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "999px",
+              background: planName === "Starter" ? "rgba(148,163,184,0.15)" : planName === "Creator" ? "rgba(124,58,237,0.15)" : "rgba(59,130,246,0.15)",
+              color: planName === "Starter" ? "var(--t3)" : planName === "Creator" ? "#a78bfa" : "#60a5fa",
+              letterSpacing: "0.06em", textTransform: "uppercase",
+            }}>{planName}</span>
           </div>
           <div className="storage-bar-wrap">
             <div className="storage-bar-track">
               <div
                 className="storage-bar-fill"
-                style={{ width: `${Math.min(100, (totalStorage / (5 * 1024 * 1024 * 1024)) * 100).toFixed(1)}%` }}
+                style={{
+                  width: `${percentUsed}%`,
+                  background: percentUsed >= 90 ? "linear-gradient(90deg,#ef4444,#f97316)" : percentUsed >= 70 ? "linear-gradient(90deg,#f97316,#fbbf24)" : undefined,
+                }}
               />
             </div>
             <div className="storage-bar-labels">
-              <span>{formatSize(totalStorage)} used</span>
-              <span>5 GB total</span>
+              <span>{formatSize(usedBytes)} used</span>
+              <span>{formatSize(limitBytes)} total</span>
             </div>
+            {plan.drive_bytes > 0 || plan.media_bytes > 0 ? (
+              <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "var(--t3)", marginTop: "4px" }}>
+                <span>Drive: {formatSize(plan.drive_bytes ?? 0)}</span>
+                <span>Media: {formatSize(plan.media_bytes ?? 0)}</span>
+              </div>
+            ) : null}
           </div>
+          {percentUsed >= 80 && (
+            <div style={{ fontSize: "11px", color: percentUsed >= 90 ? "#f87171" : "#fbbf24", marginTop: "6px" }}>
+              {percentUsed >= 90 ? "⚠ Storage almost full!" : "Storage usage is high."}
+            </div>
+          )}
           <button className="btn-ghost" style={{ marginTop: 10, fontSize: 12 }} onClick={() => navigate("/plans")}>
-            Upgrade plan
+            {planName === "Professional" ? "View plan details" : "Upgrade plan →"}
           </button>
         </motion.div>
 

@@ -109,6 +109,28 @@ Deno.serve(async (req) => {
     if (!files || !Array.isArray(files) || files.length === 0) return json({ error: 'No files provided' }, 400)
     if (files.length > 20) return json({ error: 'Max 20 files per share' }, 400)
 
+    // ── Storage quota check ───────────────────────────────────────────────────
+    const [driveRes, mediaRes, planRes] = await Promise.all([
+      supabase.from('shares').select('file_size').eq('user_id', user.id).eq('is_trashed', false).eq('storage_deleted', false),
+      supabase.from('media_assets').select('file_size').eq('user_id', user.id),
+      supabase.from('user_plans').select('plans(storage_limit_gb, display_name)').eq('user_id', user.id).eq('is_active', true).single(),
+    ])
+    const driveBytes = (driveRes.data || []).reduce((s: number, r: any) => s + (r.file_size || 0), 0)
+    const mediaBytes = (mediaRes.data || []).reduce((s: number, r: any) => s + (r.file_size || 0), 0)
+    const usedBytes  = driveBytes + mediaBytes
+    const limitGb    = (planRes.data as any)?.plans?.storage_limit_gb ?? 2
+    const limitBytes = limitGb * 1024 * 1024 * 1024
+    const newBytes   = files.reduce((s: number, f: any) => s + (f.size || 0), 0)
+    if (usedBytes + newBytes > limitBytes) {
+      const planName = (planRes.data as any)?.plans?.display_name ?? 'Free'
+      return json({
+        error: `Storage quota exceeded. Your ${planName} plan includes ${limitGb} GB. Used: ${(usedBytes / 1024 / 1024 / 1024).toFixed(2)} GB.`,
+        code: 'STORAGE_QUOTA_EXCEEDED',
+        used_bytes: usedBytes,
+        limit_bytes: limitBytes,
+      }, 402)
+    }
+
     const tokenBytes = new Uint8Array(16)
     crypto.getRandomValues(tokenBytes)
     const token    = hex(tokenBytes.buffer)

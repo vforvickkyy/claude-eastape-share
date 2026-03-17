@@ -35,6 +35,27 @@ Deno.serve(async (req) => {
     const { projectId, folderId, name, size, mimeType, type = 'video' } = await req.json()
     if (!projectId || !name || !size) return json({ error: 'projectId, name, and size are required' }, 400)
 
+    // ── Storage quota check ───────────────────────────────────────────────────
+    const [driveRes, mediaRes, planRes] = await Promise.all([
+      supabase.from('shares').select('file_size').eq('user_id', user.id).eq('is_trashed', false).eq('storage_deleted', false),
+      supabase.from('media_assets').select('file_size').eq('user_id', user.id),
+      supabase.from('user_plans').select('plans(storage_limit_gb, display_name)').eq('user_id', user.id).eq('is_active', true).single(),
+    ])
+    const driveBytes = (driveRes.data || []).reduce((s: number, r: any) => s + (r.file_size || 0), 0)
+    const mediaBytes = (mediaRes.data || []).reduce((s: number, r: any) => s + (r.file_size || 0), 0)
+    const usedBytes  = driveBytes + mediaBytes
+    const limitGb    = (planRes.data as any)?.plans?.storage_limit_gb ?? 2
+    const limitBytes = limitGb * 1024 * 1024 * 1024
+    if (usedBytes + size > limitBytes) {
+      const planName = (planRes.data as any)?.plans?.display_name ?? 'Free'
+      return json({
+        error: `Storage quota exceeded. Your ${planName} plan includes ${limitGb} GB. Used: ${(usedBytes / 1024 / 1024 / 1024).toFixed(2)} GB.`,
+        code: 'STORAGE_QUOTA_EXCEEDED',
+        used_bytes: usedBytes,
+        limit_bytes: limitBytes,
+      }, 402)
+    }
+
     let uploadUrl: string | null = null
     let tusHeaders: Record<string, string> | null = null
     let guid: string | null = null
