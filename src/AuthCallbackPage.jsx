@@ -12,17 +12,52 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     async function handleCallback() {
       try {
-        // Exchange the OAuth code for a session (PKCE flow)
-        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-        if (error) throw error;
-        if (data?.session) {
-          localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
+        const url   = new URL(window.location.href);
+        const code  = url.searchParams.get("code");
+        const hash  = window.location.hash.slice(1); // strip leading '#'
+
+        if (code) {
+          // ── PKCE flow: ?code=xxx ──────────────────────────────
+          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (error) throw error;
+          if (data?.session) {
+            localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
+            navigate("/", { replace: true });
+            return;
+          }
         }
-        navigate("/", { replace: true });
+
+        if (hash) {
+          // ── Implicit flow: #access_token=xxx&refresh_token=xxx ─
+          const params        = new URLSearchParams(hash);
+          const access_token  = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+
+          if (access_token) {
+            const { data, error } = await supabase.auth.setSession({ access_token, refresh_token: refresh_token ?? "" });
+            if (error) throw error;
+            if (data?.session) {
+              localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
+              navigate("/", { replace: true });
+              return;
+            }
+          }
+        }
+
+        // ── Fallback: let Supabase detect session from URL ──────
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+          navigate("/", { replace: true });
+          return;
+        }
+
+        throw new Error("No session returned from Google. Please try again.");
       } catch (err) {
-        setError(err.message || "Authentication failed. Please try again.");
+        setError(err.message || "Authentication failed.");
       }
     }
+
     handleCallback();
   }, []);
 
