@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense, useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import UploadPage          from "./UploadPage.jsx";
@@ -20,8 +20,44 @@ import MediaSharePage      from "./MediaSharePage.jsx";
 import AuthCallbackPage    from "./AuthCallbackPage.jsx";
 import MediaRecentPage     from "./MediaRecentPage.jsx";
 import MediaSharedPage     from "./MediaSharedPage.jsx";
+import MaintenancePage     from "./MaintenancePage.jsx";
+
+const AdminApp = lazy(() => import("./adminpanel/AdminApp.jsx"));
 
 export default function App() {
+  const [maintenanceMode, setMaintenanceMode] = useState(false)
+  const [maintenanceMessage, setMaintenanceMessage] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const session = JSON.parse(localStorage.getItem('ets_auth') || '{}')
+
+    Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/platform_settings?key=eq.maintenance_mode&select=value`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token || ''}` }
+      }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/platform_settings?key=eq.maintenance_message&select=value`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token || ''}` }
+      }).then(r => r.json()),
+      session.user?.id ? fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${session.user.id}&select=is_admin`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` }
+      }).then(r => r.json()) : Promise.resolve([])
+    ]).then(([modeData, msgData, profileData]) => {
+      const mode = modeData?.[0]?.value === 'true'
+      const msg = msgData?.[0]?.value || ''
+      const adminFlag = profileData?.[0]?.is_admin === true
+      setMaintenanceMode(mode)
+      setMaintenanceMessage(msg)
+      setIsAdmin(adminFlag)
+    }).catch(() => {})
+  }, [])
+
+  if (maintenanceMode && !isAdmin) {
+    return <MaintenancePage message={maintenanceMessage} />
+  }
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -62,6 +98,16 @@ export default function App() {
           <Route path="/pricing"                  element={<PricingPage />} />
           <Route path="/plans"                    element={<PricingPage inDashboard />} />
           <Route path="/auth/callback"            element={<AuthCallbackPage />} />
+
+          {/* ── Admin Panel ── */}
+          <Route
+            path="/adminpanel/*"
+            element={
+              <Suspense fallback={null}>
+                <AdminApp />
+              </Suspense>
+            }
+          />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
