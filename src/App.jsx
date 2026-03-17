@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { PlanProvider } from "./context/PlanContext";
 import UploadPage          from "./UploadPage.jsx";
 import SharePage           from "./SharePage.jsx";
 import LoginPage           from "./LoginPage.jsx";
@@ -61,6 +62,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+      <PlanProvider>
         <Routes>
           {/* ── Root = Master Dashboard ── */}
           <Route path="/"                         element={<DashboardPage />} />
@@ -109,6 +111,7 @@ export default function App() {
             }
           />
         </Routes>
+      </PlanProvider>
       </AuthProvider>
     </BrowserRouter>
   );

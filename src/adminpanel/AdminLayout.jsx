@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, Link, Outlet } from "react-router-dom";
 import {
   House,
@@ -11,6 +11,8 @@ import {
   ClipboardText,
   Gear,
   ShieldCheck,
+  List,
+  X,
 } from "@phosphor-icons/react";
 
 /* ── Navigation structure ───────────────────────────────────── */
@@ -106,11 +108,58 @@ function Avatar({ name, avatarUrl, size = 32 }) {
 export default function AdminLayout({ user }) {
   const displayName = user?.full_name || user?.email || "Admin";
   const avatarUrl   = user?.avatar_url;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  /* Close sidebar on route change on mobile */
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth >= 768) setSidebarOpen(false);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
-    <div className="admin-layout">
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        overflow: "hidden",
+        background: "var(--bg)",
+      }}
+    >
+      {/* ── Mobile backdrop ──────────────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 99,
+            display: "none",
+          }}
+          className="admin-mobile-backdrop"
+        />
+      )}
+
       {/* ── Sidebar ─────────────────────────────────────────── */}
-      <aside className="admin-sidebar">
+      <aside
+        className={`admin-sidebar${sidebarOpen ? " open" : ""}`}
+        style={{
+          width: "260px",
+          height: "100vh",
+          overflowY: "auto",
+          flexShrink: 0,
+          position: "sticky",
+          top: 0,
+          background: "var(--card)",
+          borderRight: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          zIndex: 100,
+        }}
+      >
         {/* Logo */}
         <div className="admin-sidebar-logo">
           <Link to="/" style={{ textDecoration: "none" }}>
@@ -132,6 +181,7 @@ export default function AdminLayout({ user }) {
                   className={({ isActive }) =>
                     `admin-nav-link${isActive ? " active" : ""}`
                   }
+                  onClick={() => setSidebarOpen(false)}
                 >
                   {item.icon}
                   <span>{item.label}</span>
@@ -173,9 +223,45 @@ export default function AdminLayout({ user }) {
       </aside>
 
       {/* ── Main area ───────────────────────────────────────── */}
-      <div className="admin-main">
+      <div
+        style={{
+          flex: 1,
+          height: "100vh",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
         {/* Topbar */}
-        <header className="admin-topbar">
+        <header
+          className="admin-topbar"
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
+          }}
+        >
+          {/* Mobile hamburger button */}
+          <button
+            className="admin-hamburger"
+            onClick={() => setSidebarOpen((v) => !v)}
+            aria-label="Toggle sidebar"
+            style={{
+              display: "none",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--t2)",
+              padding: "4px",
+              borderRadius: "6px",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {sidebarOpen ? <X size={20} /> : <List size={20} />}
+          </button>
+
           {/* ADMIN badge */}
           <span
             style={{
@@ -239,7 +325,7 @@ export default function AdminLayout({ user }) {
         </header>
 
         {/* Page content */}
-        <main className="admin-content">
+        <main style={{ flex: 1, padding: "24px" }}>
           <Outlet />
         </main>
       </div>

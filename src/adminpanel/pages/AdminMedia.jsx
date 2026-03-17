@@ -6,7 +6,6 @@ import {
   Warning,
   Trash,
   MagnifyingGlass,
-  X,
   Folder,
   Clock,
   CheckCircle,
@@ -17,41 +16,34 @@ import AdminModal from "../components/AdminModal.jsx";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
 function getAuth() {
-  const session = JSON.parse(localStorage.getItem("ets_auth") || "{}");
-  return {
-    token: session.access_token,
-    userId: session.user?.id,
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      "Content-Type": "application/json",
-    },
-  };
+  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+  return { token: s.access_token, userId: s.user?.id };
 }
-const BASE = import.meta.env.VITE_SUPABASE_URL;
 
-async function auditLog(action, targetType, targetId, metadata = {}) {
-  const { userId, headers } = getAuth();
-  await fetch(`${BASE}/rest/v1/admin_audit_logs`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      admin_id: userId,
-      action,
-      target_type: targetType,
-      target_id: String(targetId),
-      metadata,
-    }),
-  });
+async function apiFetch(path, opts = {}) {
+  const { token } = getAuth();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`,
+    {
+      ...opts,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
-function fmtDuration(seconds) {
-  if (!seconds && seconds !== 0) return "—";
-  const s = Math.floor(Number(seconds));
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, "0")}`;
+function formatDuration(s) {
+  if (!s) return "—";
+  const m = Math.floor(s / 60),
+    sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 function fmtDate(iso) {
@@ -64,12 +56,22 @@ function fmtDate(iso) {
 }
 
 const STATUS_STYLES = {
-  ready:      { bg: "rgba(74,222,128,0.12)",  color: "#4ade80",  label: "Ready"      },
-  processing: { bg: "rgba(251,191,36,0.12)",  color: "#fbbf24",  label: "Processing" },
-  error:      { bg: "rgba(248,113,113,0.12)", color: "#f87171",  label: "Error"      },
+  ready: { bg: "rgba(74,222,128,0.12)", color: "#4ade80", label: "Ready" },
+  processing: {
+    bg: "rgba(251,191,36,0.12)",
+    color: "#fbbf24",
+    label: "Processing",
+  },
+  failed: { bg: "rgba(248,113,113,0.12)", color: "#f87171", label: "Failed" },
+  error: { bg: "rgba(248,113,113,0.12)", color: "#f87171", label: "Error" },
 };
+
 function StatusBadge({ status }) {
-  const s = STATUS_STYLES[status] || { bg: "rgba(255,255,255,0.06)", color: "var(--t3)", label: status || "Unknown" };
+  const s = STATUS_STYLES[status] || {
+    bg: "rgba(255,255,255,0.06)",
+    color: "var(--t3)",
+    label: status || "Unknown",
+  };
   return (
     <span
       style={{
@@ -100,18 +102,22 @@ function StatusBadge({ status }) {
   );
 }
 
-/* ── Filter tab component ────────────────────────────────── */
+/* ── Filter tabs ─────────────────────────────────────────── */
 const FILTER_TABS = [
-  { key: "all",        label: "All"        },
-  { key: "ready",      label: "Ready"      },
+  { key: "all", label: "All" },
+  { key: "ready", label: "Ready" },
   { key: "processing", label: "Processing" },
-  { key: "error",      label: "Error"      },
+  { key: "failed", label: "Failed" },
 ];
 
 /* ── Video Player Modal ──────────────────────────────────── */
 function VideoPlayerModal({ asset, onClose }) {
   return (
-    <AdminModal title={asset.name || "Video Preview"} onClose={onClose} maxWidth="760px">
+    <AdminModal
+      title={asset.name || "Video Preview"}
+      onClose={onClose}
+      maxWidth="760px"
+    >
       <div>
         {asset.bunny_playback_url ? (
           <iframe
@@ -140,17 +146,42 @@ function VideoPlayerModal({ asset, onClose }) {
             No playback URL available
           </div>
         )}
-        <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "6px" }}>
+        <div
+          style={{
+            marginTop: "14px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+          }}
+        >
           {[
-            ["Project",  asset.media_projects?.name  || "—"],
-            ["Owner",    asset.profiles?.email        || "—"],
-            ["Duration", fmtDuration(asset.duration)        ],
-            ["Status",   asset.bunny_video_status     || "—"],
-            ["GUID",     asset.bunny_video_guid       || "—"],
+            ["Project", asset.media_projects?.name || "—"],
+            ["Owner", asset.profiles?.email || "—"],
+            ["Duration", formatDuration(asset.duration)],
+            ["Status", asset.bunny_video_status || "—"],
+            ["GUID", asset.bunny_video_guid || "—"],
           ].map(([k, v]) => (
-            <div key={k} style={{ display: "flex", gap: "12px", fontSize: "12px" }}>
-              <span style={{ color: "var(--t3)", width: "70px", flexShrink: 0 }}>{k}</span>
-              <span style={{ color: "var(--t2)", fontFamily: k === "GUID" ? "monospace" : "inherit" }}>{v}</span>
+            <div
+              key={k}
+              style={{ display: "flex", gap: "12px", fontSize: "12px" }}
+            >
+              <span
+                style={{
+                  color: "var(--t3)",
+                  width: "70px",
+                  flexShrink: 0,
+                }}
+              >
+                {k}
+              </span>
+              <span
+                style={{
+                  color: "var(--t2)",
+                  fontFamily: k === "GUID" ? "monospace" : "inherit",
+                }}
+              >
+                {v}
+              </span>
             </div>
           ))}
         </div>
@@ -174,7 +205,9 @@ function Thumb({ asset }) {
           display: "block",
           background: "#000",
         }}
-        onError={(e) => { e.target.style.display = "none"; }}
+        onError={(e) => {
+          e.target.style.display = "none";
+        }}
       />
     );
   }
@@ -201,148 +234,71 @@ const PAGE_SIZE = 20;
 
 export default function AdminMedia() {
   /* Stats */
-  const [counts,       setCounts]       = useState({ total: 0, ready: 0, processing: 0, error: 0 });
+  const [overview, setOverview] = useState({
+    total: 0,
+    ready: 0,
+    processing: 0,
+    failed: 0,
+    total_size: 0,
+    total_seconds: 0,
+  });
   const [statsLoading, setStatsLoading] = useState(true);
 
   /* Videos table */
-  const [videos,       setVideos]       = useState([]);
+  const [videos, setVideos] = useState([]);
   const [videoLoading, setVideoLoading] = useState(true);
-  const [page,         setPage]         = useState(1);
-  const [totalCount,   setTotalCount]   = useState(0);
-  const [filter,       setFilter]       = useState("all");
-  const [search,       setSearch]       = useState("");
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
   /* Failed uploads */
-  const [failedVideos, setFailedVideos] = useState([]);
-
-  /* Projects */
-  const [projects,        setProjects]        = useState([]);
-  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [failedUploads, setFailedUploads] = useState([]);
 
   /* Modals */
-  const [previewAsset,  setPreviewAsset]  = useState(null);
+  const [previewAsset, setPreviewAsset] = useState(null);
   const [deletingAsset, setDeletingAsset] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  /* ── Load stats ─────────────────────────────────────────── */
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    const { headers } = getAuth();
-    try {
-      const [totalRes, readyRes, processingRes, errorRes] = await Promise.all([
-        fetch(`${BASE}/rest/v1/media_assets?select=count`, {
-          headers: { ...headers, Prefer: "count=exact" },
-        }),
-        fetch(`${BASE}/rest/v1/media_assets?bunny_video_status=eq.ready&select=count`, {
-          headers: { ...headers, Prefer: "count=exact" },
-        }),
-        fetch(`${BASE}/rest/v1/media_assets?bunny_video_status=eq.processing&select=count`, {
-          headers: { ...headers, Prefer: "count=exact" },
-        }),
-        fetch(`${BASE}/rest/v1/media_assets?bunny_video_status=eq.error&select=count`, {
-          headers: { ...headers, Prefer: "count=exact" },
-        }),
-      ]);
-      function getCount(res) {
-        const cr = res.headers.get("content-range");
-        return cr ? parseInt(cr.split("/")[1]) || 0 : 0;
-      }
-      setCounts({
-        total:      getCount(totalRes),
-        ready:      getCount(readyRes),
-        processing: getCount(processingRes),
-        error:      getCount(errorRes),
-      });
-    } catch {
-      // ignore
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
-  /* ── Load videos ─────────────────────────────────────────── */
-  const loadVideos = useCallback(async (f = "all", q = "", pg = 1) => {
+  /* ── Load data ───────────────────────────────────────────── */
+  const loadData = useCallback(async (f = "all", q = "", pg = 1) => {
     setVideoLoading(true);
-    const { headers } = getAuth();
-    const offset = (pg - 1) * PAGE_SIZE;
-    let url =
-      `${BASE}/rest/v1/media_assets?select=id,name,bunny_video_status,bunny_video_guid,bunny_thumbnail_url,bunny_playback_url,duration,created_at,user_id,project_id,profiles(full_name,email),media_projects(name)` +
-      `&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
-    if (f !== "all") url += `&bunny_video_status=eq.${f}`;
-    if (q)           url += `&name=ilike.*${encodeURIComponent(q)}*`;
+    if (pg === 1) setStatsLoading(true);
     try {
-      const res = await fetch(url, {
-        headers: {
-          ...headers,
-          Prefer: "count=exact",
-          Range: `${offset}-${offset + PAGE_SIZE - 1}`,
-        },
-      });
-      const data = await res.json();
-      const cr = res.headers.get("content-range");
-      const total = cr ? parseInt(cr.split("/")[1]) || 0 : 0;
-      setVideos(Array.isArray(data) ? data : []);
-      setTotalCount(total);
+      const data = await apiFetch(
+        `/admin-media-stats?page=${pg}&limit=${PAGE_SIZE}&status=${f}&search=${encodeURIComponent(q)}`
+      );
+      if (data.overview) {
+        setOverview(data.overview);
+        setStatsLoading(false);
+      }
+      setVideos(Array.isArray(data.videos) ? data.videos : []);
+      setTotalCount(data.videos_total || 0);
+      if (Array.isArray(data.failed_uploads)) {
+        setFailedUploads(data.failed_uploads);
+      }
     } catch {
       setVideos([]);
+      setStatsLoading(false);
     } finally {
       setVideoLoading(false);
     }
   }, []);
 
-  /* ── Load failed uploads ─────────────────────────────────── */
-  const loadFailed = useCallback(async () => {
-    const { headers } = getAuth();
-    try {
-      const res = await fetch(
-        `${BASE}/rest/v1/media_assets?select=id,name,created_at,user_id,profiles(full_name,email)&bunny_video_status=eq.error&order=created_at.desc&limit=20`,
-        { headers }
-      );
-      const data = await res.json();
-      setFailedVideos(Array.isArray(data) ? data : []);
-    } catch {
-      setFailedVideos([]);
-    }
-  }, []);
-
-  /* ── Load projects ───────────────────────────────────────── */
-  const loadProjects = useCallback(async () => {
-    setProjectsLoading(true);
-    const { headers } = getAuth();
-    try {
-      const res = await fetch(
-        `${BASE}/rest/v1/media_projects?select=id,name,user_id,created_at,profiles(full_name,email)&order=created_at.desc&limit=10`,
-        { headers }
-      );
-      const data = await res.json();
-      setProjects(Array.isArray(data) ? data : []);
-    } catch {
-      setProjects([]);
-    } finally {
-      setProjectsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadStats();
-    loadFailed();
-    loadProjects();
-  }, [loadStats, loadFailed, loadProjects]);
-
-  useEffect(() => {
-    loadVideos(filter, search, page);
-  }, [filter, page]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadData(statusFilter, search, page);
+  }, [statusFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1);
-      loadVideos(filter, search, 1);
+      loadData(statusFilter, search, 1);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFilterChange(newFilter) {
-    setFilter(newFilter);
+    setStatusFilter(newFilter);
     setPage(1);
   }
 
@@ -350,18 +306,13 @@ export default function AdminMedia() {
   async function handleDeleteVideo() {
     if (!deletingAsset) return;
     setDeleteLoading(true);
-    const { headers } = getAuth();
     try {
-      await fetch(`${BASE}/functions/v1/admin-delete-video`, {
+      await apiFetch("/admin-delete-video", {
         method: "POST",
-        headers,
         body: JSON.stringify({ assetId: deletingAsset.id }),
       });
-      await auditLog("video.deleted", "media_asset", deletingAsset.id, { name: deletingAsset.name });
       setDeletingAsset(null);
-      loadVideos(filter, search, page);
-      loadStats();
-      loadFailed();
+      loadData(statusFilter, search, page);
     } catch {
       // ignore
     } finally {
@@ -374,35 +325,37 @@ export default function AdminMedia() {
   return (
     <div>
       <div className="admin-page-title">Media</div>
-      <div className="admin-page-sub">Manage media projects and video assets.</div>
+      <div className="admin-page-sub">
+        Manage media projects and video assets.
+      </div>
 
       {/* Overview stats */}
       <div className="admin-stats-grid">
         <AdminStatsCard
           icon={<VideoCamera size={18} />}
           label="Total Videos"
-          value={counts.total.toLocaleString()}
+          value={overview.total.toLocaleString()}
           loading={statsLoading}
           color="#f97316"
         />
         <AdminStatsCard
           icon={<CheckCircle size={18} />}
           label="Ready"
-          value={counts.ready.toLocaleString()}
+          value={overview.ready.toLocaleString()}
           loading={statsLoading}
           color="#4ade80"
         />
         <AdminStatsCard
           icon={<Clock size={18} />}
           label="Processing"
-          value={counts.processing.toLocaleString()}
+          value={overview.processing.toLocaleString()}
           loading={statsLoading}
           color="#fbbf24"
         />
         <AdminStatsCard
           icon={<Warning size={18} />}
-          label="Error"
-          value={counts.error.toLocaleString()}
+          label="Failed"
+          value={overview.failed.toLocaleString()}
           loading={statsLoading}
           color="#f87171"
         />
@@ -415,7 +368,9 @@ export default function AdminMedia() {
             <VideoCamera size={16} />
             Videos
           </span>
-          <span style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}>
+          <span
+            style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}
+          >
             {totalCount.toLocaleString()} total
           </span>
         </div>
@@ -431,7 +386,6 @@ export default function AdminMedia() {
             flexWrap: "wrap",
           }}
         >
-          {/* Tabs */}
           <div style={{ display: "flex", gap: "4px" }}>
             {FILTER_TABS.map((tab) => (
               <button
@@ -441,10 +395,18 @@ export default function AdminMedia() {
                   padding: "5px 12px",
                   borderRadius: "6px",
                   fontSize: "12px",
-                  fontWeight: filter === tab.key ? 600 : 400,
-                  border: `1px solid ${filter === tab.key ? "var(--admin-accent)" : "var(--border)"}`,
-                  background: filter === tab.key ? "rgba(249,115,22,0.1)" : "var(--card)",
-                  color: filter === tab.key ? "#f97316" : "var(--t2)",
+                  fontWeight: statusFilter === tab.key ? 600 : 400,
+                  border: `1px solid ${
+                    statusFilter === tab.key
+                      ? "var(--admin-accent)"
+                      : "var(--border)"
+                  }`,
+                  background:
+                    statusFilter === tab.key
+                      ? "rgba(249,115,22,0.1)"
+                      : "var(--card)",
+                  color:
+                    statusFilter === tab.key ? "#f97316" : "var(--t2)",
                   cursor: "pointer",
                   transition: "all 0.15s",
                 }}
@@ -454,8 +416,9 @@ export default function AdminMedia() {
             ))}
           </div>
 
-          {/* Search */}
-          <div style={{ position: "relative", flex: 1, maxWidth: "280px" }}>
+          <div
+            style={{ position: "relative", flex: 1, maxWidth: "280px" }}
+          >
             <MagnifyingGlass
               size={14}
               style={{
@@ -496,7 +459,10 @@ export default function AdminMedia() {
                   <tr key={i} className="admin-table-skeleton">
                     {[0, 1, 2, 3, 4, 5, 6].map((j) => (
                       <td key={j}>
-                        <span className="admin-table-skeleton-row" style={{ width: "70%" }} />
+                        <span
+                          className="admin-table-skeleton-row"
+                          style={{ width: "70%" }}
+                        />
                       </td>
                     ))}
                   </tr>
@@ -507,8 +473,8 @@ export default function AdminMedia() {
                     <div className="admin-empty">
                       {search
                         ? `No videos matching "${search}".`
-                        : filter !== "all"
-                        ? `No ${filter} videos.`
+                        : statusFilter !== "all"
+                        ? `No ${statusFilter} videos.`
                         : "No videos found."}
                     </div>
                   </td>
@@ -534,23 +500,45 @@ export default function AdminMedia() {
                           {v.name || "Untitled"}
                         </div>
                         {v.media_projects?.name && (
-                          <div style={{ fontSize: "11px", color: "var(--t3)", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--t3)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
                             <Folder size={11} />
                             {v.media_projects.name}
                           </div>
                         )}
                       </div>
                     </td>
-                    <td style={{ color: "var(--t3)", fontSize: "12px" }}>
+                    <td
+                      style={{ color: "var(--t3)", fontSize: "12px" }}
+                    >
                       {v.profiles?.email || "—"}
                     </td>
                     <td>
                       <StatusBadge status={v.bunny_video_status} />
                     </td>
-                    <td style={{ color: "var(--t2)", fontSize: "12px", whiteSpace: "nowrap" }}>
-                      {fmtDuration(v.duration)}
+                    <td
+                      style={{
+                        color: "var(--t2)",
+                        fontSize: "12px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {formatDuration(v.duration)}
                     </td>
-                    <td style={{ color: "var(--t3)", fontSize: "12px", whiteSpace: "nowrap" }}>
+                    <td
+                      style={{
+                        color: "var(--t3)",
+                        fontSize: "12px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {fmtDate(v.created_at)}
                     </td>
                     <td>
@@ -592,19 +580,22 @@ export default function AdminMedia() {
               >
                 ‹
               </button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                const p = page <= 4 ? i + 1 : page - 3 + i;
-                if (p < 1 || p > totalPages) return null;
-                return (
-                  <button
-                    key={p}
-                    className={`admin-page-btn${p === page ? " active" : ""}`}
-                    onClick={() => setPage(p)}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
+              {Array.from(
+                { length: Math.min(totalPages, 7) },
+                (_, i) => {
+                  const p = page <= 4 ? i + 1 : page - 3 + i;
+                  if (p < 1 || p > totalPages) return null;
+                  return (
+                    <button
+                      key={p}
+                      className={`admin-page-btn${p === page ? " active" : ""}`}
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </button>
+                  );
+                }
+              )}
               <button
                 className="admin-page-btn"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
@@ -618,16 +609,24 @@ export default function AdminMedia() {
       </div>
 
       {/* Failed uploads section */}
-      {failedVideos.length > 0 && (
+      {failedUploads.length > 0 && (
         <div className="admin-section" style={{ marginBottom: "20px" }}>
-          <div className="admin-section-title" style={{ color: "#f87171" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div
+            className="admin-section-title"
+            style={{ color: "#f87171" }}
+          >
+            <span
+              style={{ display: "flex", alignItems: "center", gap: "8px" }}
+            >
               <Warning size={16} weight="fill" style={{ color: "#f87171" }} />
-              Failed Uploads ({failedVideos.length})
+              Failed Uploads ({failedUploads.length})
             </span>
           </div>
-          <div className="admin-section-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {failedVideos.map((v) => (
+          <div
+            className="admin-section-body"
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
+            {failedUploads.map((v) => (
               <div
                 key={v.id}
                 style={{
@@ -640,7 +639,11 @@ export default function AdminMedia() {
                   border: "1px solid rgba(248,113,113,0.2)",
                 }}
               >
-                <Warning size={16} weight="fill" style={{ color: "#f87171", flexShrink: 0 }} />
+                <Warning
+                  size={16}
+                  weight="fill"
+                  style={{ color: "#f87171", flexShrink: 0 }}
+                />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
@@ -654,7 +657,8 @@ export default function AdminMedia() {
                     {v.name || "Untitled"}
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--t3)" }}>
-                    {v.profiles?.full_name || v.profiles?.email || "Unknown"} · {fmtDate(v.created_at)}
+                    {v.profiles?.full_name || v.profiles?.email || "Unknown"} ·{" "}
+                    {fmtDate(v.created_at)}
                   </div>
                 </div>
                 <button
@@ -669,64 +673,6 @@ export default function AdminMedia() {
         </div>
       )}
 
-      {/* Projects overview */}
-      <div className="admin-section">
-        <div className="admin-section-title">
-          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Folder size={16} />
-            Recent Media Projects
-          </span>
-          <span style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}>
-            Latest 10
-          </span>
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Project Name</th>
-                <th>Owner</th>
-                <th>Email</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projectsLoading ? (
-                [0, 1, 2, 3].map((i) => (
-                  <tr key={i} className="admin-table-skeleton">
-                    {[0, 1, 2, 3].map((j) => (
-                      <td key={j}>
-                        <span className="admin-table-skeleton-row" style={{ width: "70%" }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : projects.length === 0 ? (
-                <tr>
-                  <td colSpan={4}>
-                    <div className="admin-empty">No media projects found.</div>
-                  </td>
-                </tr>
-              ) : (
-                projects.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ fontWeight: 500 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <Folder size={14} style={{ color: "var(--t3)" }} />
-                        {p.name || "Untitled"}
-                      </span>
-                    </td>
-                    <td>{p.profiles?.full_name || "—"}</td>
-                    <td style={{ color: "var(--t3)", fontSize: "12px" }}>{p.profiles?.email || "—"}</td>
-                    <td style={{ color: "var(--t3)", fontSize: "12px" }}>{fmtDate(p.created_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Modals */}
       <AnimatePresence>
         {previewAsset && (
@@ -740,7 +686,9 @@ export default function AdminMedia() {
           <ConfirmModal
             key="delete-video"
             title="Delete Video"
-            message={`Delete "${deletingAsset.name || "this video"}"? This will permanently remove it from Bunny Stream and cannot be undone.`}
+            message={`Delete "${
+              deletingAsset.name || "this video"
+            }"? This will permanently remove it from Bunny Stream and cannot be undone.`}
             confirmLabel="Delete Video"
             onConfirm={handleDeleteVideo}
             onClose={() => setDeletingAsset(null)}

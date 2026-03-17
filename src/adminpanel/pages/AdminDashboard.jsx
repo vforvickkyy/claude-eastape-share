@@ -22,30 +22,42 @@ import AdminStatsCard from "../components/AdminStatsCard";
 import { StatusBadge } from "../components/AdminBadge";
 import AdminModal from "../components/AdminModal";
 
-/* ── Auth helper ─────────────────────────────────────────────── */
+/* ── Auth helpers ─────────────────────────────────────────── */
 function getAuth() {
-  const session = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+  return { token: s.access_token, userId: s.user?.id };
+}
+
+async function apiFetch(path, opts = {}) {
+  const { token } = getAuth();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`,
+    {
+      ...opts,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+/* Fallback REST helpers for maintenance toggle / export */
+function getRestHeaders() {
+  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
   return {
-    token: session.access_token,
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      "Content-Type": "application/json",
-    },
+    Authorization: `Bearer ${s.access_token}`,
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    "Content-Type": "application/json",
   };
 }
 const BASE = import.meta.env.VITE_SUPABASE_URL;
 
-/* ── Count fetch helper ──────────────────────────────────────── */
-async function fetchCount(path, headers) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { ...headers, Prefer: "count=exact", Range: "0-0" },
-  });
-  const range = res.headers.get("content-range");
-  return parseInt(range?.split("/")[1] || "0");
-}
-
-/* ── Time-ago helper ─────────────────────────────────────────── */
+/* ── Time-ago helper ─────────────────────────────────────── */
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -57,7 +69,7 @@ function timeAgo(dateStr) {
   return `${days}d ago`;
 }
 
-/* ── Format date ─────────────────────────────────────────────── */
+/* ── Format date ─────────────────────────────────────────── */
 function formatDate(dateStr) {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -67,7 +79,7 @@ function formatDate(dateStr) {
   });
 }
 
-/* ── Avatar initials ─────────────────────────────────────────── */
+/* ── Avatar initials ─────────────────────────────────────── */
 function Avatar({ name, avatarUrl, size = 32 }) {
   const initial = (name || "?").charAt(0).toUpperCase();
   if (avatarUrl) {
@@ -106,7 +118,7 @@ function Avatar({ name, avatarUrl, size = 32 }) {
   );
 }
 
-/* ── Toast ───────────────────────────────────────────────────── */
+/* ── Toast ───────────────────────────────────────────────── */
 function Toast({ message, type = "success", onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 3000);
@@ -122,8 +134,15 @@ function Toast({ message, type = "success", onDone }) {
         position: "fixed",
         bottom: "24px",
         right: "24px",
-        background: type === "error" ? "rgba(248,113,113,0.15)" : "rgba(74,222,128,0.12)",
-        border: `1px solid ${type === "error" ? "rgba(248,113,113,0.3)" : "rgba(74,222,128,0.25)"}`,
+        background:
+          type === "error"
+            ? "rgba(248,113,113,0.15)"
+            : "rgba(74,222,128,0.12)",
+        border: `1px solid ${
+          type === "error"
+            ? "rgba(248,113,113,0.3)"
+            : "rgba(74,222,128,0.25)"
+        }`,
         borderRadius: "10px",
         padding: "12px 16px",
         fontSize: "13px",
@@ -141,7 +160,7 @@ function Toast({ message, type = "success", onDone }) {
   );
 }
 
-/* ── Add User Modal ──────────────────────────────────────────── */
+/* ── Add User Modal ──────────────────────────────────────── */
 function AddUserModal({ onClose, onSuccess }) {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -153,10 +172,15 @@ function AddUserModal({ onClose, onSuccess }) {
     setLoading(true);
     setError("");
     try {
-      const { headers } = getAuth();
+      const headers = getRestHeaders();
       const res = await fetch(`${BASE}/auth/v1/admin/users`, {
         method: "POST",
-        headers: { ...headers, Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_KEY || getAuth().token}` },
+        headers: {
+          ...headers,
+          Authorization: `Bearer ${
+            import.meta.env.VITE_SUPABASE_SERVICE_KEY || getAuth().token
+          }`,
+        },
         body: JSON.stringify({ email: email.trim(), email_confirm: false }),
       });
       if (!res.ok) throw new Error("Failed to invite user");
@@ -171,9 +195,19 @@ function AddUserModal({ onClose, onSuccess }) {
 
   return (
     <AdminModal title="Add User" onClose={onClose} maxWidth="420px">
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <form
+        onSubmit={handleSubmit}
+        style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+      >
         <div>
-          <label style={{ fontSize: "12px", color: "var(--t3)", display: "block", marginBottom: "6px" }}>
+          <label
+            style={{
+              fontSize: "12px",
+              color: "var(--t3)",
+              display: "block",
+              marginBottom: "6px",
+            }}
+          >
             Email address
           </label>
           <input
@@ -192,22 +226,35 @@ function AddUserModal({ onClose, onSuccess }) {
               fontSize: "13px",
               outline: "none",
             }}
-            onFocus={(e) => (e.target.style.borderColor = "var(--admin-accent)")}
+            onFocus={(e) =>
+              (e.target.style.borderColor = "var(--admin-accent)")
+            }
             onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
           />
         </div>
         {error && (
           <p style={{ fontSize: "12px", color: "#f87171" }}>{error}</p>
         )}
-        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-          <button type="button" className="admin-action-btn" onClick={onClose} disabled={loading}>
+        <div
+          style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}
+        >
+          <button
+            type="button"
+            className="admin-action-btn"
+            onClick={onClose}
+            disabled={loading}
+          >
             Cancel
           </button>
           <button
             type="submit"
             className="admin-action-btn primary"
             disabled={loading}
-            style={{ opacity: loading ? 0.7 : 1, minWidth: "100px", justifyContent: "center" }}
+            style={{
+              opacity: loading ? 0.7 : 1,
+              minWidth: "100px",
+              justifyContent: "center",
+            }}
           >
             {loading ? "Sending…" : "Send Invite"}
           </button>
@@ -217,19 +264,19 @@ function AddUserModal({ onClose, onSuccess }) {
   );
 }
 
-/* ── Main component ──────────────────────────────────────────── */
+/* ── Main component ──────────────────────────────────────── */
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [stats, setStats] = useState({
-    users: 0,
-    newToday: 0,
-    activePlans: 0,
-    totalFiles: 0,
-    totalVideos: 0,
-    totalProjects: 0,
-    storageGB: "0.00",
-    totalComments: 0,
+    total_users: 0,
+    new_today: 0,
+    active_plans: 0,
+    total_files: 0,
+    total_videos: 0,
+    total_projects: 0,
+    total_comments: 0,
+    storage_bytes: 0,
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -245,133 +292,77 @@ export default function AdminDashboard() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [toast, setToast] = useState(null);
 
-  /* ── Fetch stats ─────────────────────────────────────────── */
+  /* ── Fetch all dashboard data ─────────────────────────── */
   useEffect(() => {
-    async function loadStats() {
+    async function loadDashboard() {
       setStatsLoading(true);
-      try {
-        const { headers } = getAuth();
-        const today = new Date().toISOString().split("T")[0];
-
-        const [
-          users,
-          newToday,
-          activePlans,
-          totalFiles,
-          totalVideos,
-          totalProjects,
-          totalComments,
-          filesForStorage,
-        ] = await Promise.all([
-          fetchCount("/rest/v1/profiles?select=id", headers),
-          fetchCount(`/rest/v1/profiles?select=id&created_at=gte.${today}`, headers),
-          fetchCount("/rest/v1/user_plans?select=id&is_active=eq.true", headers),
-          fetchCount("/rest/v1/shares?select=id", headers),
-          fetchCount("/rest/v1/media_assets?select=id", headers),
-          fetchCount("/rest/v1/media_projects?select=id", headers),
-          fetchCount("/rest/v1/media_comments?select=id", headers),
-          fetch(`${BASE}/rest/v1/shares?select=file_size`, { headers }).then((r) => r.json()),
-        ]);
-
-        const totalBytes = (Array.isArray(filesForStorage) ? filesForStorage : []).reduce(
-          (sum, row) => sum + (row.file_size || 0),
-          0
-        );
-        const storageGB = (totalBytes / 1024 ** 3).toFixed(2);
-
-        setStats({ users, newToday, activePlans, totalFiles, totalVideos, totalProjects, storageGB, totalComments });
-      } catch (err) {
-        console.error("Stats fetch error:", err);
-      } finally {
-        setStatsLoading(false);
-      }
-    }
-    loadStats();
-  }, []);
-
-  /* ── Fetch recent users ──────────────────────────────────── */
-  useEffect(() => {
-    async function loadRecentUsers() {
       setUsersLoading(true);
-      try {
-        const { headers } = getAuth();
-        const res = await fetch(
-          `${BASE}/rest/v1/profiles?select=id,full_name,email,avatar_url,created_at,is_suspended&order=created_at.desc&limit=10`,
-          { headers }
-        );
-        const data = await res.json();
-        setRecentUsers(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("Recent users fetch error:", err);
-      } finally {
-        setUsersLoading(false);
-      }
-    }
-    loadRecentUsers();
-  }, []);
-
-  /* ── Fetch recent activity ───────────────────────────────── */
-  useEffect(() => {
-    async function loadActivity() {
       setActivityLoading(true);
       try {
-        const { headers } = getAuth();
-        const res = await fetch(
-          `${BASE}/rest/v1/admin_audit_logs?select=*,profiles(full_name)&order=created_at.desc&limit=20`,
-          { headers }
-        );
-        const data = await res.json();
-        setRecentActivity(Array.isArray(data) ? data : []);
+        const data = await apiFetch("/admin-dashboard-stats");
+
+        if (data.stats) setStats(data.stats);
+        if (Array.isArray(data.recent_users)) {
+          setRecentUsers(data.recent_users);
+        }
+        if (Array.isArray(data.recent_activity)) {
+          setRecentActivity(data.recent_activity);
+        }
       } catch (err) {
-        console.error("Activity fetch error:", err);
+        console.error("Dashboard stats error:", err);
       } finally {
+        setStatsLoading(false);
+        setUsersLoading(false);
         setActivityLoading(false);
       }
     }
-    loadActivity();
+    loadDashboard();
   }, []);
 
-  /* ── Fetch maintenance mode ──────────────────────────────── */
+  /* ── Fetch maintenance mode ──────────────────────────── */
   useEffect(() => {
     async function loadMaintenanceMode() {
       try {
-        const { headers } = getAuth();
+        const headers = getRestHeaders();
         const res = await fetch(
           `${BASE}/rest/v1/platform_settings?key=eq.maintenance_mode&select=value`,
           { headers }
         );
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          setMaintenanceMode(data[0]?.value === true || data[0]?.value === "true");
+          setMaintenanceMode(
+            data[0]?.value === true || data[0]?.value === "true"
+          );
         }
-      } catch (err) {
-        console.error("Maintenance mode fetch error:", err);
-      }
+      } catch {}
     }
     loadMaintenanceMode();
   }, []);
 
-  /* ── Toggle maintenance mode ─────────────────────────────── */
+  /* ── Toggle maintenance mode ─────────────────────────── */
   async function toggleMaintenanceMode() {
     setMaintenanceLoading(true);
     try {
-      const { headers } = getAuth();
+      const headers = getRestHeaders();
       const newValue = !maintenanceMode;
-      await fetch(`${BASE}/rest/v1/platform_settings?key=eq.maintenance_mode`, {
-        method: "PATCH",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({ value: newValue }),
-      });
+      await fetch(
+        `${BASE}/rest/v1/platform_settings?key=eq.maintenance_mode`,
+        {
+          method: "PATCH",
+          headers: { ...headers, Prefer: "return=minimal" },
+          body: JSON.stringify({ value: newValue }),
+        }
+      );
       setMaintenanceMode(newValue);
       showToast(`Maintenance mode ${newValue ? "enabled" : "disabled"}`);
-    } catch (err) {
+    } catch {
       showToast("Failed to update maintenance mode", "error");
     } finally {
       setMaintenanceLoading(false);
     }
   }
 
-  /* ── Export users ────────────────────────────────────────── */
+  /* ── Export users ────────────────────────────────────── */
   async function handleExportUsers() {
     try {
       const { token } = getAuth();
@@ -383,11 +374,13 @@ export default function AdminDashboard() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `eastape-users-${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = `eastape-users-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
       a.click();
       URL.revokeObjectURL(url);
       showToast("Export downloaded");
-    } catch (err) {
+    } catch {
       showToast("Export failed", "error");
     }
   }
@@ -396,19 +389,59 @@ export default function AdminDashboard() {
     setToast({ message, type, id: Date.now() });
   }
 
-  /* ── Stats card definitions ──────────────────────────────── */
+  /* ── Storage display ─────────────────────────────────── */
+  const GB = 1024 * 1024 * 1024;
+  const storageBytes = stats.storage_bytes || 0;
+  const storageDisplay =
+    storageBytes >= GB
+      ? (storageBytes / GB).toFixed(2) + " GB"
+      : (storageBytes / 1024 / 1024).toFixed(1) + " MB";
+
+  /* ── Stats card definitions ──────────────────────────── */
   const statCards = [
-    { label: "Total Users",     value: stats.users.toLocaleString(),           icon: <Users size={18} weight="duotone" /> },
-    { label: "New Today",       value: stats.newToday.toLocaleString(),         icon: <UserPlus size={18} weight="duotone" /> },
-    { label: "Active Plans",    value: stats.activePlans.toLocaleString(),      icon: <CreditCard size={18} weight="duotone" /> },
-    { label: "Total Files",     value: stats.totalFiles.toLocaleString(),       icon: <File size={18} weight="duotone" /> },
-    { label: "Total Videos",    value: stats.totalVideos.toLocaleString(),      icon: <VideoCamera size={18} weight="duotone" /> },
-    { label: "Total Projects",  value: stats.totalProjects.toLocaleString(),    icon: <FolderOpen size={18} weight="duotone" /> },
-    { label: "Storage Used",    value: `${stats.storageGB} GB`,                 icon: <HardDrive size={18} weight="duotone" /> },
-    { label: "Total Comments",  value: stats.totalComments.toLocaleString(),    icon: <ChatCircle size={18} weight="duotone" /> },
+    {
+      label: "Total Users",
+      value: (stats.total_users || 0).toLocaleString(),
+      icon: <Users size={18} weight="duotone" />,
+    },
+    {
+      label: "New Today",
+      value: (stats.new_today || 0).toLocaleString(),
+      icon: <UserPlus size={18} weight="duotone" />,
+    },
+    {
+      label: "Active Plans",
+      value: (stats.active_plans || 0).toLocaleString(),
+      icon: <CreditCard size={18} weight="duotone" />,
+    },
+    {
+      label: "Total Files",
+      value: (stats.total_files || 0).toLocaleString(),
+      icon: <File size={18} weight="duotone" />,
+    },
+    {
+      label: "Total Videos",
+      value: (stats.total_videos || 0).toLocaleString(),
+      icon: <VideoCamera size={18} weight="duotone" />,
+    },
+    {
+      label: "Total Projects",
+      value: (stats.total_projects || 0).toLocaleString(),
+      icon: <FolderOpen size={18} weight="duotone" />,
+    },
+    {
+      label: "Storage Used",
+      value: storageDisplay,
+      icon: <HardDrive size={18} weight="duotone" />,
+    },
+    {
+      label: "Total Comments",
+      value: (stats.total_comments || 0).toLocaleString(),
+      icon: <ChatCircle size={18} weight="duotone" />,
+    },
   ];
 
-  /* ── Quick actions ───────────────────────────────────────── */
+  /* ── Quick actions ───────────────────────────────────── */
   const quickActions = [
     {
       label: "Add User",
@@ -418,7 +451,9 @@ export default function AdminDashboard() {
     },
     {
       label: maintenanceMode ? "Disable Maintenance" : "Maintenance Mode",
-      desc: maintenanceMode ? "Platform is in maintenance" : "Take platform offline",
+      desc: maintenanceMode
+        ? "Platform is in maintenance"
+        : "Take platform offline",
       icon: <Wrench size={20} weight="duotone" />,
       onClick: toggleMaintenanceMode,
       loading: maintenanceLoading,
@@ -440,11 +475,13 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      {/* ── Page header ────────────────────────────────────── */}
+      {/* ── Page header ────────────────────────────────── */}
       <div className="admin-page-title">Dashboard</div>
-      <div className="admin-page-sub">Overview of platform activity and health.</div>
+      <div className="admin-page-sub">
+        Overview of platform activity and health.
+      </div>
 
-      {/* ── Stats grid (8 cards, 4 columns) ────────────────── */}
+      {/* ── Stats grid (8 cards, 4 columns) ────────────── */}
       <div
         style={{
           display: "grid",
@@ -462,7 +499,11 @@ export default function AdminDashboard() {
                 key={card.label}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                transition={{
+                  duration: 0.3,
+                  delay: i * 0.05,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
               >
                 <AdminStatsCard
                   icon={card.icon}
@@ -474,7 +515,7 @@ export default function AdminDashboard() {
             ))}
       </div>
 
-      {/* ── Two-column layout ──────────────────────────────── */}
+      {/* ── Two-column layout ──────────────────────────── */}
       <div
         style={{
           display: "grid",
@@ -488,7 +529,15 @@ export default function AdminDashboard() {
         <div className="admin-section">
           <div className="admin-section-title">
             <span>Recent Signups</span>
-            <span style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}>Last 10 users</span>
+            <span
+              style={{
+                fontSize: "12px",
+                color: "var(--t3)",
+                fontWeight: 400,
+              }}
+            >
+              Last 10 users
+            </span>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="admin-table">
@@ -505,7 +554,10 @@ export default function AdminDashboard() {
                       <tr key={i} className="admin-table-skeleton">
                         {[1, 2, 3].map((c) => (
                           <td key={c}>
-                            <span className="admin-table-skeleton-row" style={{ width: `${60 + Math.random() * 30}%` }} />
+                            <span
+                              className="admin-table-skeleton-row"
+                              style={{ width: `${60 + Math.random() * 30}%` }}
+                            />
                           </td>
                         ))}
                       </tr>
@@ -519,26 +571,58 @@ export default function AdminDashboard() {
                     </tr>
                   )
                   : recentUsers.map((user) => (
-                    <tr key={user.id}>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <Avatar name={user.full_name || user.email} avatarUrl={user.avatar_url} size={28} />
-                          <div>
-                            <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--t1)" }}>
-                              {user.full_name || "—"}
+                      <tr key={user.id}>
+                        <td>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <Avatar
+                              name={user.full_name || user.email}
+                              avatarUrl={user.avatar_url}
+                              size={28}
+                            />
+                            <div>
+                              <div
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  color: "var(--t1)",
+                                }}
+                              >
+                                {user.full_name || "—"}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "11px",
+                                  color: "var(--t3)",
+                                }}
+                              >
+                                {user.email}
+                              </div>
                             </div>
-                            <div style={{ fontSize: "11px", color: "var(--t3)" }}>{user.email}</div>
                           </div>
-                        </div>
-                      </td>
-                      <td style={{ fontSize: "12px", color: "var(--t2)" }}>
-                        {formatDate(user.created_at)}
-                      </td>
-                      <td>
-                        <StatusBadge status={user.is_suspended ? "suspended" : "active"} />
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--t2)",
+                          }}
+                        >
+                          {formatDate(user.created_at)}
+                        </td>
+                        <td>
+                          <StatusBadge
+                            status={
+                              user.is_suspended ? "suspended" : "active"
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ))}
               </tbody>
             </table>
           </div>
@@ -564,7 +648,11 @@ export default function AdminDashboard() {
                   background: action.active
                     ? "rgba(249,115,22,0.12)"
                     : "var(--bg)",
-                  border: `1px solid ${action.active ? "rgba(249,115,22,0.3)" : "var(--border)"}`,
+                  border: `1px solid ${
+                    action.active
+                      ? "rgba(249,115,22,0.3)"
+                      : "var(--border)"
+                  }`,
                   borderRadius: "10px",
                   padding: "14px 12px",
                   cursor: action.loading ? "wait" : "pointer",
@@ -579,15 +667,26 @@ export default function AdminDashboard() {
                 onMouseEnter={(e) => {
                   if (!action.loading) {
                     e.currentTarget.style.borderColor = "var(--admin-accent)";
-                    e.currentTarget.style.background = "rgba(249,115,22,0.08)";
+                    e.currentTarget.style.background =
+                      "rgba(249,115,22,0.08)";
                   }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = action.active ? "rgba(249,115,22,0.3)" : "var(--border)";
-                  e.currentTarget.style.background = action.active ? "rgba(249,115,22,0.12)" : "var(--bg)";
+                  e.currentTarget.style.borderColor = action.active
+                    ? "rgba(249,115,22,0.3)"
+                    : "var(--border)";
+                  e.currentTarget.style.background = action.active
+                    ? "rgba(249,115,22,0.12)"
+                    : "var(--bg)";
                 }}
               >
-                <span style={{ color: action.active ? "var(--admin-accent)" : "var(--t2)" }}>
+                <span
+                  style={{
+                    color: action.active
+                      ? "var(--admin-accent)"
+                      : "var(--t2)",
+                  }}
+                >
                   {action.icon}
                 </span>
                 <div>
@@ -595,13 +694,17 @@ export default function AdminDashboard() {
                     style={{
                       fontSize: "12px",
                       fontWeight: 600,
-                      color: action.active ? "var(--admin-accent)" : "var(--t1)",
+                      color: action.active
+                        ? "var(--admin-accent)"
+                        : "var(--t1)",
                       marginBottom: "2px",
                     }}
                   >
                     {action.loading ? "Loading…" : action.label}
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--t3)" }}>{action.desc}</div>
+                  <div style={{ fontSize: "11px", color: "var(--t3)" }}>
+                    {action.desc}
+                  </div>
                 </div>
               </button>
             ))}
@@ -609,15 +712,25 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ── Recent Activity ────────────────────────────────── */}
+      {/* ── Recent Activity ────────────────────────────── */}
       <div className="admin-section">
         <div className="admin-section-title">
           <span>Recent Activity</span>
-          <span style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}>Last 20 actions</span>
+          <span
+            style={{
+              fontSize: "12px",
+              color: "var(--t3)",
+              fontWeight: 400,
+            }}
+          >
+            Last 20 actions
+          </span>
         </div>
         <div className="admin-section-body">
           {activityLoading ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+            >
               {Array.from({ length: 5 }).map((_, i) => (
                 <div
                   key={i}
@@ -634,7 +747,9 @@ export default function AdminDashboard() {
           ) : recentActivity.length === 0 ? (
             <div className="admin-empty">No activity yet.</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "0" }}
+            >
               {recentActivity.map((entry, i) => (
                 <div
                   key={entry.id ?? i}
@@ -643,7 +758,10 @@ export default function AdminDashboard() {
                     alignItems: "flex-start",
                     gap: "12px",
                     padding: "10px 0",
-                    borderBottom: i < recentActivity.length - 1 ? "1px solid var(--border)" : "none",
+                    borderBottom:
+                      i < recentActivity.length - 1
+                        ? "1px solid var(--border)"
+                        : "none",
                   }}
                 >
                   <div
@@ -661,25 +779,49 @@ export default function AdminDashboard() {
                       fontWeight: 700,
                     }}
                   >
-                    {((entry.profiles?.full_name || entry.action || "A").charAt(0)).toUpperCase()}
+                    {(
+                      entry.profiles?.full_name ||
+                      entry.action ||
+                      "A"
+                    )
+                      .charAt(0)
+                      .toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: "13px", color: "var(--t1)" }}>
                       <span style={{ fontWeight: 500 }}>
                         {entry.profiles?.full_name || "Admin"}
                       </span>{" "}
-                      <span style={{ color: "var(--t2)" }}>{entry.action}</span>
+                      <span style={{ color: "var(--t2)" }}>
+                        {entry.action}
+                      </span>
                       {entry.target_type && (
-                        <span style={{ color: "var(--t3)" }}> on {entry.target_type}</span>
+                        <span style={{ color: "var(--t3)" }}>
+                          {" "}
+                          on {entry.target_type}
+                        </span>
                       )}
                     </div>
-                    {entry.metadata && Object.keys(entry.metadata).length > 0 && (
-                      <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "2px" }}>
-                        {JSON.stringify(entry.metadata).slice(0, 80)}
-                      </div>
-                    )}
+                    {entry.metadata &&
+                      Object.keys(entry.metadata).length > 0 && (
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "var(--t3)",
+                            marginTop: "2px",
+                          }}
+                        >
+                          {JSON.stringify(entry.metadata).slice(0, 80)}
+                        </div>
+                      )}
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--t3)", flexShrink: 0 }}>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--t3)",
+                      flexShrink: 0,
+                    }}
+                  >
                     {timeAgo(entry.created_at)}
                   </div>
                 </div>
@@ -689,7 +831,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ── Add User Modal ─────────────────────────────────── */}
+      {/* ── Add User Modal ─────────────────────────────── */}
       <AnimatePresence>
         {showAddUser && (
           <AddUserModal
@@ -699,7 +841,7 @@ export default function AdminDashboard() {
         )}
       </AnimatePresence>
 
-      {/* ── Toast ──────────────────────────────────────────── */}
+      {/* ── Toast ──────────────────────────────────────── */}
       <AnimatePresence>
         {toast && (
           <Toast

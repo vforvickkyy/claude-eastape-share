@@ -15,250 +15,137 @@ import ConfirmModal from "../components/ConfirmModal.jsx";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
 function getAuth() {
-  const session = JSON.parse(localStorage.getItem("ets_auth") || "{}");
-  return {
-    token: session.access_token,
-    userId: session.user?.id,
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      "Content-Type": "application/json",
-    },
-  };
+  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+  return { token: s.access_token, userId: s.user?.id };
 }
-const BASE = import.meta.env.VITE_SUPABASE_URL;
 
-async function auditLog(action, targetType, targetId, metadata = {}) {
-  const { userId, headers } = getAuth();
-  await fetch(`${BASE}/rest/v1/admin_audit_logs`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      admin_id: userId,
-      action,
-      target_type: targetType,
-      target_id: String(targetId),
-      metadata,
-    }),
-  });
+async function apiFetch(path, opts = {}) {
+  const { token } = getAuth();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`,
+    {
+      ...opts,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
 }
 
 /* ── Format helpers ──────────────────────────────────────── */
-function fmtBytes(bytes) {
+function formatBytes(bytes) {
   if (!bytes || bytes === 0) return "0 B";
-  const gb = bytes / (1024 * 1024 * 1024);
-  const mb = bytes / (1024 * 1024);
-  const kb = bytes / 1024;
-  if (gb >= 1) return `${gb.toFixed(2)} GB`;
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  if (kb >= 1) return `${kb.toFixed(1)} KB`;
-  return `${bytes} B`;
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  if (bytes < 1024 * 1024 * 1024)
+    return (bytes / 1024 / 1024).toFixed(1) + " MB";
+  return (bytes / 1024 / 1024 / 1024).toFixed(2) + " GB";
 }
 
-function fmtGB(bytes) {
-  if (!bytes || bytes === 0) return "0.00 GB";
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-/* Quota in bytes by plan name */
-const PLAN_QUOTAS = {
-  free:     5   * 1024 * 1024 * 1024,
-  pro:      50  * 1024 * 1024 * 1024,
-  business: 200 * 1024 * 1024 * 1024,
-};
-function quotaForPlan(planName) {
-  return PLAN_QUOTAS[(planName || "").toLowerCase()] ?? PLAN_QUOTAS.free;
-}
-
-/* ── Usage bar ───────────────────────────────────────────── */
-function UsageBar({ used, quota }) {
-  const pct = quota > 0 ? Math.min((used / quota) * 100, 100) : 0;
-  const color = pct > 90 ? "#f87171" : pct > 70 ? "#fbbf24" : "#4ade80";
+/* ── Avatar initials ─────────────────────────────────────── */
+function Avatar({ name, size = 28 }) {
+  const initial = (name || "?").charAt(0).toUpperCase();
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-      <div
-        style={{
-          flex: 1,
-          height: "6px",
-          borderRadius: "999px",
-          background: "rgba(255,255,255,0.06)",
-          overflow: "hidden",
-          minWidth: "80px",
-        }}
-      >
-        <div
-          style={{
-            width: `${pct}%`,
-            height: "100%",
-            background: color,
-            borderRadius: "999px",
-            transition: "width 0.4s ease",
-          }}
-        />
-      </div>
-      <span style={{ fontSize: "11px", color: "var(--t3)", whiteSpace: "nowrap" }}>
-        {pct.toFixed(1)}%
-      </span>
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #7c3aed, #3b82f6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: size * 0.4,
+        fontWeight: 600,
+        color: "#fff",
+        flexShrink: 0,
+      }}
+    >
+      {initial}
     </div>
   );
 }
 
 /* ── Main page ───────────────────────────────────────────── */
 export default function AdminStorage() {
-  /* Stats state */
-  const [totalStorage, setTotalStorage] = useState(0);
-  const [totalFiles,   setTotalFiles]   = useState(0);
-  const [totalUsers,   setTotalUsers]   = useState(0);
-  const [largestFile,  setLargestFile]  = useState(0);
-  const [statsLoading, setStatsLoading] = useState(true);
+  /* Overview */
+  const [overview, setOverview] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
 
   /* Per-user storage */
-  const [userRows,    setUserRows]    = useState([]);
+  const [userRows, setUserRows] = useState([]);
   const [userLoading, setUserLoading] = useState(true);
 
   /* File browser */
-  const [files,         setFiles]         = useState([]);
-  const [fileLoading,   setFileLoading]   = useState(true);
-  const [search,        setSearch]        = useState("");
-  const [filePage,      setFilePage]      = useState(1);
-  const [fileTotalCount, setFileTotalCount] = useState(0);
-  const FILE_PAGE_SIZE = 50;
+  const [search, setSearch] = useState("");
+  const [fileSearch, setFileSearch] = useState("");
+  const [fileResults, setFileResults] = useState([]);
+  const [fileLoading, setFileLoading] = useState(false);
 
   /* Delete modal */
-  const [deletingFile,  setDeletingFile]  = useState(null);
+  const [deletingFile, setDeletingFile] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  /* ── Load stats ─────────────────────────────────────────── */
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    const { headers } = getAuth();
-    try {
-      const [sharesRes, profilesRes] = await Promise.all([
-        fetch(`${BASE}/rest/v1/shares?select=file_size`, { headers }),
-        fetch(`${BASE}/rest/v1/profiles?select=id&limit=1`, {
-          headers: { ...headers, Prefer: "count=exact" },
-        }),
-      ]);
-      const sharesData = await sharesRes.json();
-      const countHeader = profilesRes.headers.get("content-range");
-      const usersCount = countHeader ? parseInt(countHeader.split("/")[1]) || 0 : 0;
-
-      const sizes = Array.isArray(sharesData) ? sharesData.map((s) => Number(s.file_size) || 0) : [];
-      const total   = sizes.reduce((acc, v) => acc + v, 0);
-      const largest = sizes.length > 0 ? Math.max(...sizes) : 0;
-
-      setTotalStorage(total);
-      setTotalFiles(sizes.length);
-      setTotalUsers(usersCount);
-      setLargestFile(largest);
-    } catch {
-      // ignore
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
-  /* ── Load per-user storage ──────────────────────────────── */
-  const loadUserStorage = useCallback(async () => {
+  /* ── Load overview + user rows ──────────────────────────── */
+  const loadData = useCallback(async () => {
+    setOverviewLoading(true);
     setUserLoading(true);
-    const { headers } = getAuth();
     try {
-      const [profilesRes, sharesRes, userPlansRes] = await Promise.all([
-        fetch(`${BASE}/rest/v1/profiles?select=id,full_name,email&limit=100`, { headers }),
-        fetch(`${BASE}/rest/v1/shares?select=user_id,file_size`, { headers }),
-        fetch(`${BASE}/rest/v1/user_plans?select=user_id,plans(name)&is_active=eq.true`, { headers }),
-      ]);
-      const [profiles, allShares, userPlans] = await Promise.all([
-        profilesRes.json(),
-        sharesRes.json(),
-        userPlansRes.json(),
-      ]);
-
-      /* Build plan name map */
-      const planMap = {};
-      if (Array.isArray(userPlans)) {
-        userPlans.forEach((up) => { planMap[up.user_id] = up.plans?.name || "free"; });
-      }
-
-      /* Group shares by user_id */
-      const grouped = {};
-      if (Array.isArray(allShares)) {
-        allShares.forEach((s) => {
-          if (!grouped[s.user_id]) grouped[s.user_id] = { count: 0, total: 0 };
-          grouped[s.user_id].count += 1;
-          grouped[s.user_id].total += Number(s.file_size) || 0;
-        });
-      }
-
-      /* Merge with profiles */
-      const rows = (Array.isArray(profiles) ? profiles : []).map((p) => ({
-        ...p,
-        files:        grouped[p.id]?.count   || 0,
-        storage_used: grouped[p.id]?.total   || 0,
-        plan_name:    planMap[p.id] || "free",
-      }));
-      rows.sort((a, b) => b.storage_used - a.storage_used);
-      setUserRows(rows);
+      const data = await apiFetch("/admin-storage-stats?page=1&limit=50");
+      setOverview(data.overview || {});
+      setUserRows(Array.isArray(data.users) ? data.users : []);
     } catch {
-      // ignore
+      setOverview({});
+      setUserRows([]);
     } finally {
+      setOverviewLoading(false);
       setUserLoading(false);
     }
   }, []);
 
-  /* ── Load file browser ──────────────────────────────────── */
-  const loadFiles = useCallback(async (searchQ = "", page = 1) => {
-    setFileLoading(true);
-    const { headers } = getAuth();
-    const offset = (page - 1) * FILE_PAGE_SIZE;
-    let url = `${BASE}/rest/v1/shares?select=id,filename,file_size,content_type,created_at,user_id,profiles(full_name,email)&order=created_at.desc&limit=${FILE_PAGE_SIZE}&offset=${offset}`;
-    if (searchQ) url += `&filename=ilike.*${encodeURIComponent(searchQ)}*`;
-    try {
-      const res = await fetch(url, {
-        headers: { ...headers, Prefer: "count=exact" },
-      });
-      const data = await res.json();
-      const cr = res.headers.get("content-range");
-      const total = cr ? parseInt(cr.split("/")[1]) || 0 : 0;
-      setFiles(Array.isArray(data) ? data : []);
-      setFileTotalCount(total);
-    } catch {
-      setFiles([]);
-    } finally {
-      setFileLoading(false);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  /* ── Debounced file search ──────────────────────────────── */
+  useEffect(() => {
+    if (!fileSearch.trim()) {
+      setFileResults([]);
+      return;
     }
-  }, []);
-
-  useEffect(() => {
-    loadStats();
-    loadUserStorage();
-    loadFiles("", 1);
-  }, [loadStats, loadUserStorage, loadFiles]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setFilePage(1);
-      loadFiles(search, 1);
+    setFileLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await apiFetch(
+          `/admin-storage-stats?search=${encodeURIComponent(fileSearch)}`
+        );
+        setFileResults(Array.isArray(data.files) ? data.files : []);
+      } catch {
+        setFileResults([]);
+      } finally {
+        setFileLoading(false);
+      }
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fileSearch]);
 
   /* ── Delete file ─────────────────────────────────────────── */
   async function handleDeleteFile() {
     if (!deletingFile) return;
     setDeleteLoading(true);
-    const { headers } = getAuth();
     try {
-      await fetch(`${BASE}/functions/v1/admin-delete-file`, {
+      await apiFetch("/admin-delete-file", {
         method: "POST",
-        headers,
         body: JSON.stringify({ fileId: deletingFile.id }),
       });
-      await auditLog("file.deleted", "share", deletingFile.id, { filename: deletingFile.filename });
       setDeletingFile(null);
-      loadFiles(search, filePage);
-      loadStats();
-      loadUserStorage();
+      loadData();
+      setFileResults((prev) => prev.filter((f) => f.id !== deletingFile.id));
     } catch {
       // ignore
     } finally {
@@ -266,45 +153,54 @@ export default function AdminStorage() {
     }
   }
 
-  /* ── Over-quota warnings ─────────────────────────────────── */
-  const overQuotaUsers = userRows.filter((u) => u.storage_used > quotaForPlan(u.plan_name));
+  /* ── Derived values ─────────────────────────────────────── */
+  const totalBytes = overview?.total_bytes || 0;
+  const totalFiles = overview?.total_files || 0;
+  const userCount = overview?.user_count || 0;
+  const largestBytes = overview?.largest_file_bytes || 0;
+  const largestName = overview?.largest_file_name || "";
+  const avgBytes = userCount > 0 ? totalBytes / userCount : 0;
 
-  const fileTotalPages = Math.max(1, Math.ceil(fileTotalCount / FILE_PAGE_SIZE));
-  const avgPerUser = totalUsers > 0 ? totalStorage / totalUsers : 0;
+  const overQuotaUsers = userRows.filter((u) => {
+    const quota = (u.storage_limit_gb || 5) * 1024 * 1024 * 1024;
+    return (u.total_bytes || 0) > quota;
+  });
 
   return (
     <div>
       <div className="admin-page-title">Storage</div>
-      <div className="admin-page-sub">Monitor and manage file storage across all users.</div>
+      <div className="admin-page-sub">
+        Monitor and manage file storage across all users.
+      </div>
 
       {/* Overview stats */}
       <div className="admin-stats-grid">
         <AdminStatsCard
           icon={<HardDrive size={18} />}
           label="Total Storage"
-          value={fmtGB(totalStorage)}
-          loading={statsLoading}
+          value={formatBytes(totalBytes)}
+          loading={overviewLoading}
           color="#f97316"
         />
         <AdminStatsCard
           icon={<Files size={18} />}
           label="Total Files"
           value={totalFiles.toLocaleString()}
-          loading={statsLoading}
+          loading={overviewLoading}
           color="#3b82f6"
         />
         <AdminStatsCard
           icon={<User size={18} />}
-          label="Avg per User"
-          value={fmtGB(avgPerUser)}
-          loading={statsLoading}
+          label="Avg Per User"
+          value={formatBytes(avgBytes)}
+          loading={overviewLoading}
           color="#a78bfa"
         />
         <AdminStatsCard
           icon={<ArrowDown size={18} />}
           label="Largest File"
-          value={fmtBytes(largestFile)}
-          loading={statsLoading}
+          value={`${formatBytes(largestBytes)}${largestName ? " · " + largestName : ""}`}
+          loading={overviewLoading}
           color="#fbbf24"
         />
       </div>
@@ -316,7 +212,9 @@ export default function AdminStorage() {
             <Database size={16} />
             Storage by User
           </span>
-          <span style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}>
+          <span
+            style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}
+          >
             {userRows.length} users · sorted by usage
           </span>
         </div>
@@ -325,11 +223,11 @@ export default function AdminStorage() {
             <thead>
               <tr>
                 <th>User</th>
-                <th>Email</th>
                 <th>Plan</th>
                 <th>Files</th>
                 <th>Storage Used</th>
-                <th style={{ minWidth: "160px" }}>Usage</th>
+                <th>Quota</th>
+                <th style={{ minWidth: "180px" }}>Usage Bar</th>
               </tr>
             </thead>
             <tbody>
@@ -338,7 +236,10 @@ export default function AdminStorage() {
                   <tr key={i} className="admin-table-skeleton">
                     {[0, 1, 2, 3, 4, 5].map((j) => (
                       <td key={j}>
-                        <span className="admin-table-skeleton-row" style={{ width: "70%" }} />
+                        <span
+                          className="admin-table-skeleton-row"
+                          style={{ width: "70%" }}
+                        />
                       </td>
                     ))}
                   </tr>
@@ -351,20 +252,67 @@ export default function AdminStorage() {
                 </tr>
               ) : (
                 userRows.map((u) => {
-                  const quota = quotaForPlan(u.plan_name);
-                  const isOver = u.storage_used > quota;
+                  const quota =
+                    (u.storage_limit_gb || 5) * 1024 * 1024 * 1024;
+                  const pct = Math.min(
+                    100,
+                    ((u.total_bytes || 0) / quota) * 100
+                  );
+                  const barColor =
+                    pct > 90
+                      ? "#ef4444"
+                      : pct > 70
+                      ? "#f59e0b"
+                      : "#4ade80";
+                  const isOver =
+                    (u.total_bytes || 0) > quota;
                   return (
                     <tr key={u.id}>
-                      <td style={{ fontWeight: 500 }}>
-                        {isOver && (
-                          <Warning
-                            size={13}
-                            style={{ color: "#f87171", marginRight: "5px", verticalAlign: "middle" }}
-                          />
-                        )}
-                        {u.full_name || "—"}
+                      <td>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <Avatar name={u.full_name || u.email} />
+                          <div>
+                            <div
+                              style={{
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "var(--t1)",
+                              }}
+                            >
+                              {u.full_name || "—"}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "var(--t3)",
+                              }}
+                            >
+                              {u.email || "—"}
+                            </div>
+                          </div>
+                          {isOver && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 700,
+                                background: "rgba(239,68,68,0.15)",
+                                color: "#ef4444",
+                                padding: "2px 6px",
+                                borderRadius: "999px",
+                                marginLeft: "4px",
+                              }}
+                            >
+                              Over Quota
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td style={{ color: "var(--t3)" }}>{u.email || "—"}</td>
                       <td>
                         <span
                           style={{
@@ -373,18 +321,50 @@ export default function AdminStorage() {
                             borderRadius: "999px",
                             background: "rgba(255,255,255,0.05)",
                             color: "var(--t2)",
-                            textTransform: "capitalize",
                           }}
                         >
-                          {u.plan_name}
+                          {u.plan_name || "Free"}
                         </span>
                       </td>
-                      <td>{u.files.toLocaleString()}</td>
-                      <td style={{ color: isOver ? "#f87171" : "var(--t1)" }}>
-                        {fmtBytes(u.storage_used)}
+                      <td>{(u.file_count || 0).toLocaleString()}</td>
+                      <td
+                        style={{
+                          color: isOver ? "#ef4444" : "var(--t1)",
+                          fontWeight: isOver ? 600 : 400,
+                        }}
+                      >
+                        {formatBytes(u.total_bytes || 0)}
+                      </td>
+                      <td style={{ color: "var(--t3)", fontSize: "12px" }}>
+                        {u.storage_limit_gb || 5} GB
                       </td>
                       <td>
-                        <UsageBar used={u.storage_used} quota={quota} />
+                        <div
+                          style={{
+                            width: "100%",
+                            background: "var(--border)",
+                            borderRadius: 4,
+                            height: 6,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              background: barColor,
+                              borderRadius: 4,
+                              height: 6,
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: pct > 90 ? "#ef4444" : "var(--t3)",
+                          }}
+                        >
+                          {formatBytes(u.total_bytes || 0)} /{" "}
+                          {u.storage_limit_gb || 5} GB
+                        </span>
                       </td>
                     </tr>
                   );
@@ -395,20 +375,24 @@ export default function AdminStorage() {
         </div>
       </div>
 
-      {/* File browser */}
+      {/* File browser section */}
       <div className="admin-section" style={{ marginBottom: "20px" }}>
         <div className="admin-section-title">
           <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <Files size={16} />
             File Browser
           </span>
-          <span style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}>
-            {fileTotalCount.toLocaleString()} files total
+          <span
+            style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}
+          >
+            Search files across all users
           </span>
         </div>
 
         {/* Search */}
-        <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}>
+        <div
+          style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}
+        >
           <div style={{ position: "relative", maxWidth: "320px" }}>
             <MagnifyingGlass
               size={14}
@@ -425,146 +409,165 @@ export default function AdminStorage() {
               className="admin-table-search"
               style={{ paddingLeft: "30px", width: "100%" }}
               placeholder="Search filename…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={fileSearch}
+              onChange={(e) => setFileSearch(e.target.value)}
             />
           </div>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Filename</th>
-                <th>Owner</th>
-                <th>Size</th>
-                <th>Type</th>
-                <th>Uploaded</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fileLoading ? (
-                [0, 1, 2, 3, 4, 5].map((i) => (
-                  <tr key={i} className="admin-table-skeleton">
-                    {[0, 1, 2, 3, 4, 5].map((j) => (
-                      <td key={j}>
-                        <span className="admin-table-skeleton-row" style={{ width: "70%" }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : files.length === 0 ? (
+        {fileSearch.trim() && (
+          <div style={{ overflowX: "auto" }}>
+            <table className="admin-table">
+              <thead>
                 <tr>
-                  <td colSpan={6}>
-                    <div className="admin-empty">
-                      {search ? `No files matching "${search}".` : "No files found."}
-                    </div>
-                  </td>
+                  <th>Filename</th>
+                  <th>Owner</th>
+                  <th>Size</th>
+                  <th>Type</th>
+                  <th>Uploaded</th>
+                  <th>Actions</th>
                 </tr>
-              ) : (
-                files.map((f) => (
-                  <tr key={f.id}>
-                    <td>
-                      <span
-                        style={{
-                          fontWeight: 500,
-                          maxWidth: "220px",
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={f.filename}
-                      >
-                        {f.filename || "—"}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ lineHeight: 1.4 }}>
-                        <div style={{ fontSize: "13px" }}>{f.profiles?.full_name || "—"}</div>
-                        <div style={{ fontSize: "11px", color: "var(--t3)" }}>{f.profiles?.email || "—"}</div>
+              </thead>
+              <tbody>
+                {fileLoading ? (
+                  [0, 1, 2, 3].map((i) => (
+                    <tr key={i} className="admin-table-skeleton">
+                      {[0, 1, 2, 3, 4, 5].map((j) => (
+                        <td key={j}>
+                          <span
+                            className="admin-table-skeleton-row"
+                            style={{ width: "70%" }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : fileResults.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="admin-empty">
+                        No files matching &ldquo;{fileSearch}&rdquo;.
                       </div>
                     </td>
-                    <td style={{ whiteSpace: "nowrap" }}>{fmtBytes(f.file_size)}</td>
-                    <td>
-                      <span style={{ fontSize: "11px", color: "var(--t3)", fontFamily: "monospace" }}>
-                        {f.content_type || "—"}
-                      </span>
-                    </td>
-                    <td style={{ whiteSpace: "nowrap", color: "var(--t3)", fontSize: "12px" }}>
-                      {f.created_at
-                        ? new Date(f.created_at).toLocaleDateString("en-GB", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "—"}
-                    </td>
-                    <td>
-                      <button className="admin-action-btn danger" onClick={() => setDeletingFile(f)}>
-                        <Trash size={13} /> Delete
-                      </button>
-                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  fileResults.map((f) => (
+                    <tr key={f.id}>
+                      <td>
+                        <span
+                          style={{
+                            fontWeight: 500,
+                            maxWidth: "220px",
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={f.filename}
+                        >
+                          {f.filename || "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ lineHeight: 1.4 }}>
+                          <div style={{ fontSize: "13px" }}>
+                            {f.profiles?.full_name || f.full_name || "—"}
+                          </div>
+                          <div
+                            style={{ fontSize: "11px", color: "var(--t3)" }}
+                          >
+                            {f.profiles?.email || f.email || "—"}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {formatBytes(f.file_size)}
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "var(--t3)",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {f.content_type || "—"}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          whiteSpace: "nowrap",
+                          color: "var(--t3)",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {f.created_at
+                          ? new Date(f.created_at).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </td>
+                      <td>
+                        <button
+                          className="admin-action-btn danger"
+                          onClick={() => setDeletingFile(f)}
+                        >
+                          <Trash size={13} /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {/* Pagination */}
-        {fileTotalPages > 1 && (
-          <div className="admin-pagination">
-            <span style={{ fontSize: "12px", color: "var(--t3)" }}>
-              Page {filePage} of {fileTotalPages} · {fileTotalCount.toLocaleString()} files
-            </span>
-            <div style={{ display: "flex", gap: "4px" }}>
-              <button
-                className="admin-page-btn"
-                onClick={() => setFilePage((p) => Math.max(1, p - 1))}
-                disabled={filePage <= 1}
-              >
-                ‹
-              </button>
-              {Array.from({ length: Math.min(fileTotalPages, 7) }, (_, i) => {
-                const p = filePage <= 4 ? i + 1 : filePage - 3 + i;
-                if (p < 1 || p > fileTotalPages) return null;
-                return (
-                  <button
-                    key={p}
-                    className={`admin-page-btn${p === filePage ? " active" : ""}`}
-                    onClick={() => setFilePage(p)}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
-              <button
-                className="admin-page-btn"
-                onClick={() => setFilePage((p) => Math.min(fileTotalPages, p + 1))}
-                disabled={filePage >= fileTotalPages}
-              >
-                ›
-              </button>
-            </div>
+        {!fileSearch.trim() && (
+          <div
+            style={{
+              padding: "32px 20px",
+              textAlign: "center",
+              color: "var(--t3)",
+              fontSize: "13px",
+            }}
+          >
+            Type a filename above to search files across all users.
           </div>
         )}
       </div>
 
-      {/* Storage health */}
+      {/* Over-quota warning */}
       {overQuotaUsers.length > 0 && (
-        <div className="admin-section">
-          <div className="admin-section-title" style={{ color: "#f87171" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Warning size={16} weight="fill" style={{ color: "#f87171" }} />
-              Storage Health — Over Quota ({overQuotaUsers.length})
+        <div
+          className="admin-section"
+          style={{
+            border: "1px solid rgba(239,68,68,0.35)",
+            marginBottom: "20px",
+          }}
+        >
+          <div
+            className="admin-section-title"
+            style={{ color: "#ef4444" }}
+          >
+            <span
+              style={{ display: "flex", alignItems: "center", gap: "8px" }}
+            >
+              <Warning size={16} weight="fill" style={{ color: "#ef4444" }} />
+              Over Quota — {overQuotaUsers.length} user
+              {overQuotaUsers.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <div className="admin-section-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div
+            className="admin-section-body"
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
             {overQuotaUsers.map((u) => {
-              const quota = quotaForPlan(u.plan_name);
-              const pct = Math.round((u.storage_used / quota) * 100);
+              const quota =
+                (u.storage_limit_gb || 5) * 1024 * 1024 * 1024;
+              const pct = Math.round(((u.total_bytes || 0) / quota) * 100);
               return (
                 <div
                   key={u.id}
@@ -574,21 +577,36 @@ export default function AdminStorage() {
                     gap: "16px",
                     padding: "12px 16px",
                     borderRadius: "8px",
-                    background: "rgba(248,113,113,0.06)",
-                    border: "1px solid rgba(248,113,113,0.2)",
+                    background: "rgba(239,68,68,0.06)",
+                    border: "1px solid rgba(239,68,68,0.2)",
                   }}
                 >
-                  <Warning size={16} weight="fill" style={{ color: "#f87171", flexShrink: 0 }} />
+                  <Warning
+                    size={16}
+                    weight="fill"
+                    style={{ color: "#ef4444", flexShrink: 0 }}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: "13px" }}>{u.full_name || u.email || "Unknown"}</div>
-                    <div style={{ fontSize: "12px", color: "var(--t3)" }}>{u.email}</div>
+                    <div style={{ fontWeight: 500, fontSize: "13px" }}>
+                      {u.full_name || u.email || "Unknown"}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--t3)" }}>
+                      {u.email}
+                    </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontSize: "13px", color: "#f87171", fontWeight: 600 }}>
-                      {fmtBytes(u.storage_used)} / {fmtBytes(quota)}
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "#ef4444",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {formatBytes(u.total_bytes || 0)} /{" "}
+                      {u.storage_limit_gb || 5} GB
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--t3)" }}>
-                      {pct}% used · {u.plan_name}
+                      {pct}% used · {u.plan_name || "Free"}
                     </div>
                   </div>
                 </div>

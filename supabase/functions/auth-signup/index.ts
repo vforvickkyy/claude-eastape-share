@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const { email, password, fullName } = await req.json()
     if (!email || !password) return new Response(JSON.stringify({ error: 'Email and password are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
-    const { error: createError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       user_metadata: { full_name: fullName || '' },
@@ -36,6 +36,25 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'An account with this email already exists. Please sign in instead.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // Auto-assign Free plan to new user
+    if (created?.user?.id) {
+      const { data: freePlan } = await supabaseAdmin
+        .from('plans')
+        .select('id')
+        .ilike('name', 'free')
+        .eq('is_active', true)
+        .single()
+
+      if (freePlan?.id) {
+        await supabaseAdmin.from('user_plans').upsert({
+          user_id: created.user.id,
+          plan_id: freePlan.id,
+          is_active: true,
+          started_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' })
+      }
     }
 
     const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })

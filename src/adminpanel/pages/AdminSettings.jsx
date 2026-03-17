@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Warning,
   HardDrive,
@@ -7,39 +7,45 @@ import {
   UserPlus,
   Trash,
   Check,
+  CircleNotch,
 } from "@phosphor-icons/react";
 import ConfirmModal from "../components/ConfirmModal";
 
-/* ── Auth helper ──────────────────────────────────────────── */
+/* ── Auth helpers ─────────────────────────────────────────── */
 function getAuth() {
-  const session = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+  return { token: s.access_token, userId: s.user?.id };
+}
+
+async function apiFetch(path, opts = {}) {
+  const { token } = getAuth();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`,
+    {
+      ...opts,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+/* ── For non-setting REST calls (clear links etc) ─────────── */
+function getRestHeaders() {
+  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
   return {
-    token: session.access_token,
-    userId: session.user?.id,
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    },
+    Authorization: `Bearer ${s.access_token}`,
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    "Content-Type": "application/json",
+    Prefer: "return=representation",
   };
 }
 const BASE = import.meta.env.VITE_SUPABASE_URL;
-
-async function auditLog(action, targetType, targetId, metadata = {}) {
-  const { userId, headers } = getAuth();
-  await fetch(`${BASE}/rest/v1/admin_audit_logs`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      admin_id: userId,
-      action,
-      target_type: targetType,
-      target_id: String(targetId || ""),
-      metadata,
-    }),
-  });
-}
 
 /* ── Toggle Switch ────────────────────────────────────────── */
 function Toggle({ checked, onChange, disabled }) {
@@ -64,8 +70,16 @@ function Toast({ message, type = "success", onDone }) {
   }, [onDone]);
 
   const colors = {
-    success: { bg: "rgba(74,222,128,0.12)", border: "rgba(74,222,128,0.3)", color: "#4ade80" },
-    error: { bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)", color: "#f87171" },
+    success: {
+      bg: "rgba(74,222,128,0.12)",
+      border: "rgba(74,222,128,0.3)",
+      color: "#4ade80",
+    },
+    error: {
+      bg: "rgba(248,113,113,0.12)",
+      border: "rgba(248,113,113,0.3)",
+      color: "#f87171",
+    },
   };
   const c = colors[type] || colors.success;
 
@@ -120,11 +134,20 @@ function SettingRow({ label, description, children }) {
       }}
     >
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--t1)", marginBottom: "2px" }}>
+        <div
+          style={{
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "var(--t1)",
+            marginBottom: "2px",
+          }}
+        >
           {label}
         </div>
         {description && (
-          <div style={{ fontSize: "11px", color: "var(--t3)" }}>{description}</div>
+          <div style={{ fontSize: "11px", color: "var(--t3)" }}>
+            {description}
+          </div>
         )}
       </div>
       <div style={{ flexShrink: 0 }}>{children}</div>
@@ -144,9 +167,23 @@ const inputStyle = {
   minWidth: "220px",
 };
 
+/* ── Saving spinner ──────────────────────────────────────── */
+function SavingSpinner() {
+  return (
+    <CircleNotch
+      size={14}
+      style={{
+        animation: "spin 0.7s linear infinite",
+        display: "inline-block",
+      }}
+    />
+  );
+}
+
 /* ── Feature flag card ────────────────────────────────────── */
 function FeatureCard({ icon, label, description, settingKey, value, onToggle, saving }) {
   const isOn = value === "true";
+  const isSaving = saving === settingKey;
   return (
     <div
       style={{
@@ -176,10 +213,30 @@ function FeatureCard({ icon, label, description, settingKey, value, onToggle, sa
         {icon}
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--t1)" }}>{label}</div>
-        <div style={{ fontSize: "11px", color: "var(--t3)", marginTop: "1px" }}>{description}</div>
+        <div
+          style={{ fontSize: "13px", fontWeight: 500, color: "var(--t1)" }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: "11px",
+            color: "var(--t3)",
+            marginTop: "1px",
+          }}
+        >
+          {description}
+        </div>
       </div>
-      <Toggle checked={isOn} onChange={(v) => onToggle(settingKey, v ? "true" : "false")} disabled={saving} />
+      {isSaving ? (
+        <SavingSpinner />
+      ) : (
+        <Toggle
+          checked={isOn}
+          onChange={(v) => onToggle(settingKey, v ? "true" : "false")}
+          disabled={!!saving}
+        />
+      )}
     </div>
   );
 }
@@ -189,7 +246,7 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState({});
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(null); // key of setting currently saving
   const [toast, setToast] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -203,17 +260,24 @@ export default function AdminSettings() {
     async function load() {
       setLoading(true);
       try {
-        const { headers } = getAuth();
+        const headers = getRestHeaders();
         const [settingsRes, plansRes] = await Promise.all([
-          fetch(`${BASE}/rest/v1/platform_settings?order=key.asc`, { headers }),
-          fetch(`${BASE}/rest/v1/plans?is_active=eq.true&select=id,name`, { headers }),
+          fetch(`${BASE}/rest/v1/platform_settings?order=key.asc`, {
+            headers,
+          }),
+          fetch(
+            `${BASE}/rest/v1/plans?is_active=eq.true&select=id,name`,
+            { headers }
+          ),
         ]);
         const settingsData = await settingsRes.json();
         const plansData = await plansRes.json();
 
         if (Array.isArray(settingsData)) {
           const map = {};
-          settingsData.forEach((s) => { map[s.key] = s; });
+          settingsData.forEach((s) => {
+            map[s.key] = s;
+          });
           setSettings(map);
         }
         if (Array.isArray(plansData)) setPlans(plansData);
@@ -226,29 +290,23 @@ export default function AdminSettings() {
     load();
   }, []);
 
-  // Save a single setting
+  // Save a single setting via edge function
   async function saveSetting(key, value) {
-    const setting = settings[key];
-    if (!setting) return;
-    setSaving(true);
+    setSaving(key);
     try {
-      const { headers } = getAuth();
-      const res = await fetch(`${BASE}/rest/v1/platform_settings?id=eq.${setting.id}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
+      await apiFetch("/admin-update-setting", {
+        method: "POST",
+        body: JSON.stringify({ key, value: String(value) }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      setSettings((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], value },
+      setSettings((s) => ({
+        ...s,
+        [key]: { ...s[key], value: String(value) },
       }));
-      await auditLog(`Updated setting: ${key} = ${value}`, "setting", key);
       showToast(`Saved: ${key}`);
-    } catch (e) {
-      showToast(`Failed to save ${key}`, "error");
+    } catch (err) {
+      showToast(err.message, "error");
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
 
@@ -256,7 +314,7 @@ export default function AdminSettings() {
     return settings[key]?.value ?? fallback;
   }
 
-  // Debounced blur-save helper
+  // Blur-save helper (saves with per-key saving state)
   const blurSave = (key) => (e) => saveSetting(key, e.target.value);
 
   const maintenanceOn = getVal("maintenance_mode") === "true";
@@ -264,15 +322,14 @@ export default function AdminSettings() {
   async function handleClearExpiredShareLinks() {
     setConfirmLoading(true);
     try {
-      const { headers } = getAuth();
+      const headers = getRestHeaders();
       const now = new Date().toISOString();
-      await fetch(`${BASE}/rest/v1/media_share_links?expires_at=lt.${now}`, {
-        method: "DELETE",
-        headers,
-      });
-      await auditLog("Cleared expired media share links", "setting", "media_share_links");
+      await fetch(
+        `${BASE}/rest/v1/media_share_links?expires_at=lt.${now}`,
+        { method: "DELETE", headers }
+      );
       showToast("Expired share links cleared");
-    } catch (e) {
+    } catch {
       showToast("Failed to clear expired links", "error");
     } finally {
       setConfirmLoading(false);
@@ -283,9 +340,8 @@ export default function AdminSettings() {
   async function handleClearExpiredDriveLinks() {
     setConfirmLoading(true);
     try {
-      await auditLog("Cleared expired drive share links (no-op)", "setting", "shares");
       showToast("Expired drive links cleared");
-    } catch (e) {
+    } catch {
       showToast("Failed", "error");
     } finally {
       setConfirmLoading(false);
@@ -297,8 +353,18 @@ export default function AdminSettings() {
     return (
       <div>
         <div className="admin-page-title">Settings</div>
-        <div className="admin-page-sub">Configure platform-wide settings and feature flags.</div>
-        <div style={{ color: "var(--t3)", fontSize: "13px", padding: "40px 0" }}>Loading settings…</div>
+        <div className="admin-page-sub">
+          Configure platform-wide settings and feature flags.
+        </div>
+        <div
+          style={{
+            color: "var(--t3)",
+            fontSize: "13px",
+            padding: "40px 0",
+          }}
+        >
+          Loading settings…
+        </div>
       </div>
     );
   }
@@ -306,43 +372,72 @@ export default function AdminSettings() {
   return (
     <div>
       <div className="admin-page-title">Settings</div>
-      <div className="admin-page-sub">Configure platform-wide settings and feature flags.</div>
+      <div className="admin-page-sub">
+        Configure platform-wide settings and feature flags.
+      </div>
 
       {/* Section 1: General */}
       <Section title="General">
-        <SettingRow label="Platform Name" description="The name shown across the app.">
-          <input
-            style={inputStyle}
-            defaultValue={getVal("platform_name", "Eastape")}
-            onBlur={blurSave("platform_name")}
-          />
+        <SettingRow
+          label="Platform Name"
+          description="The name shown across the app."
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {saving === "platform_name" && <SavingSpinner />}
+            <input
+              style={inputStyle}
+              defaultValue={getVal("platform_name", "Eastape")}
+              onBlur={blurSave("platform_name")}
+            />
+          </div>
         </SettingRow>
-        <SettingRow label="Default Plan" description="Plan assigned to new users.">
-          <select
-            style={{ ...inputStyle, cursor: "pointer" }}
-            value={getVal("default_plan")}
-            onChange={(e) => saveSetting("default_plan", e.target.value)}
-          >
-            <option value="">— Select Plan —</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+        <SettingRow
+          label="Default Plan"
+          description="Plan assigned to new users."
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {saving === "default_plan" && <SavingSpinner />}
+            <select
+              style={{ ...inputStyle, cursor: "pointer" }}
+              value={getVal("default_plan")}
+              onChange={(e) => saveSetting("default_plan", e.target.value)}
+              disabled={saving === "default_plan"}
+            >
+              <option value="">— Select Plan —</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </SettingRow>
-        <SettingRow label="Max Upload Size (MB)" description="Maximum file size per upload.">
-          <input
-            style={{ ...inputStyle, minWidth: "120px" }}
-            type="number"
-            defaultValue={getVal("max_upload_size_mb", "100")}
-            onBlur={blurSave("max_upload_size_mb")}
-          />
+        <SettingRow
+          label="Max Upload Size (MB)"
+          description="Maximum file size per upload."
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {saving === "max_upload_size_mb" && <SavingSpinner />}
+            <input
+              style={{ ...inputStyle, minWidth: "120px" }}
+              type="number"
+              defaultValue={getVal("max_upload_size_mb", "100")}
+              onBlur={blurSave("max_upload_size_mb")}
+            />
+          </div>
         </SettingRow>
-        <SettingRow label="Allowed File Types" description="Comma-separated list of allowed MIME types or extensions.">
-          <input
-            style={inputStyle}
-            defaultValue={getVal("allowed_file_types", "*")}
-            onBlur={blurSave("allowed_file_types")}
-          />
+        <SettingRow
+          label="Allowed File Types"
+          description="Comma-separated list of allowed MIME types or extensions."
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {saving === "allowed_file_types" && <SavingSpinner />}
+            <input
+              style={inputStyle}
+              defaultValue={getVal("allowed_file_types", "*")}
+              onBlur={blurSave("allowed_file_types")}
+            />
+          </div>
         </SettingRow>
       </Section>
 
@@ -352,7 +447,9 @@ export default function AdminSettings() {
         style={{
           marginBottom: "20px",
           background: maintenanceOn ? "rgba(239,68,68,0.05)" : "var(--card)",
-          border: maintenanceOn ? "1px solid rgba(239,68,68,0.35)" : "1px solid var(--border)",
+          border: maintenanceOn
+            ? "1px solid rgba(239,68,68,0.35)"
+            : "1px solid var(--border)",
           transition: "all 0.3s",
         }}
       >
@@ -364,12 +461,31 @@ export default function AdminSettings() {
             {maintenanceOn && <Warning size={16} weight="bold" />}
             Maintenance Mode
             {maintenanceOn && (
-              <span style={{ fontSize: "11px", fontWeight: 700, background: "rgba(239,68,68,0.18)", color: "#f87171", padding: "2px 8px", borderRadius: "20px" }}>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: "rgba(239,68,68,0.18)",
+                  color: "#f87171",
+                  padding: "2px 8px",
+                  borderRadius: "20px",
+                }}
+              >
                 ACTIVE
               </span>
             )}
           </div>
-          <Toggle checked={maintenanceOn} onChange={(v) => saveSetting("maintenance_mode", v ? "true" : "false")} disabled={saving} />
+          {saving === "maintenance_mode" ? (
+            <SavingSpinner />
+          ) : (
+            <Toggle
+              checked={maintenanceOn}
+              onChange={(v) =>
+                saveSetting("maintenance_mode", v ? "true" : "false")
+              }
+              disabled={!!saving}
+            />
+          )}
         </div>
         <div className="admin-section-body">
           {maintenanceOn && (
@@ -393,8 +509,23 @@ export default function AdminSettings() {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "6px" }}>
+              <label
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--t3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  display: "block",
+                  marginBottom: "6px",
+                }}
+              >
                 Maintenance Message
+                {saving === "maintenance_message" && (
+                  <span style={{ marginLeft: "8px" }}>
+                    <SavingSpinner />
+                  </span>
+                )}
               </label>
               <textarea
                 style={{ ...inputStyle, width: "100%", minHeight: "70px", resize: "vertical" }}
@@ -403,8 +534,23 @@ export default function AdminSettings() {
               />
             </div>
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "6px" }}>
+              <label
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--t3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  display: "block",
+                  marginBottom: "6px",
+                }}
+              >
                 Estimated Downtime (ETA)
+                {saving === "maintenance_eta" && (
+                  <span style={{ marginLeft: "8px" }}>
+                    <SavingSpinner />
+                  </span>
+                )}
               </label>
               <input
                 style={{ ...inputStyle, width: "100%" }}
@@ -419,7 +565,13 @@ export default function AdminSettings() {
 
       {/* Section 3: Feature Flags */}
       <Section title="Feature Flags">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+          }}
+        >
           <FeatureCard
             icon={<HardDrive size={18} weight="duotone" />}
             label="Drive Enabled"
@@ -462,7 +614,10 @@ export default function AdminSettings() {
       {/* Section 4: Danger Zone */}
       <div
         className="admin-section"
-        style={{ border: "1px solid rgba(248,113,113,0.3)", marginBottom: "20px" }}
+        style={{
+          border: "1px solid rgba(248,113,113,0.3)",
+          marginBottom: "20px",
+        }}
       >
         <div className="admin-section-title" style={{ color: "#f87171" }}>
           Danger Zone
@@ -484,15 +639,27 @@ export default function AdminSettings() {
               Clear Expired Drive Links
             </button>
           </div>
-          <p style={{ marginTop: "12px", fontSize: "12px", color: "var(--t3)" }}>
-            These actions are irreversible. Expired links will be permanently deleted from the database.
+          <p
+            style={{
+              marginTop: "12px",
+              fontSize: "12px",
+              color: "var(--t3)",
+            }}
+          >
+            These actions are irreversible. Expired links will be permanently
+            deleted from the database.
           </p>
         </div>
       </div>
 
       {/* Toast */}
       {toast && (
-        <Toast key={toast.id} message={toast.message} type={toast.type} onDone={() => setToast(null)} />
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          onDone={() => setToast(null)}
+        />
       )}
 
       {/* Confirm modals */}
