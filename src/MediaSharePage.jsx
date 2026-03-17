@@ -135,7 +135,7 @@ export default function MediaSharePage() {
           ) : (
             <div className="media-asset-grid">
               {folderAssets.map(a => (
-                <SharedAssetTile key={a.id} asset={a} allowDownload={dlOk} />
+                <SharedAssetTile key={a.id} asset={a} allowDownload={dlOk} parentToken={token} />
               ))}
             </div>
           )}
@@ -163,13 +163,12 @@ export default function MediaSharePage() {
               {asset?.file_size && (
                 <span style={{ color: "var(--t3)", fontSize: 12 }}>{formatSize(asset.file_size)}</span>
               )}
-              {allowDownload && asset?.bunny_playback_url && (
+              {allowDownload && asset?.bunny_video_guid && (
                 <a
-                  href={asset.bunny_playback_url}
+                  href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-download?token=${token}`}
                   className="btn-ghost"
                   style={{ fontSize: 13 }}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  download
                 >
                   <DownloadSimple size={14} /> Download
                 </a>
@@ -260,7 +259,7 @@ export default function MediaSharePage() {
   );
 }
 
-function SharedAssetTile({ asset, allowDownload }) {
+function SharedAssetTile({ asset, allowDownload, parentToken }) {
   const hasVideo = asset.bunny_video_status === "ready" && asset.bunny_playback_url;
   return (
     <div className="media-asset-card" style={{ cursor: "default" }}>
@@ -278,12 +277,11 @@ function SharedAssetTile({ asset, allowDownload }) {
         <span className="media-asset-name">{asset.name}</span>
         {allowDownload && hasVideo && (
           <a
-            href={asset.bunny_playback_url}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-download?token=${parentToken}&assetId=${asset.id}`}
             className="btn-ghost"
             style={{ fontSize: 11, padding: "2px 8px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4 }}
             onClick={e => e.stopPropagation()}
+            download
           >
             <DownloadSimple size={12} /> Download
           </a>
