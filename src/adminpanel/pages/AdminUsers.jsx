@@ -673,7 +673,7 @@ function ChangePlanModal({ user, currentPlanId, plans, onClose, onSuccess }) {
     setError("");
     try {
       const { token } = getAuth();
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_plans`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_plans?on_conflict=user_id`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
