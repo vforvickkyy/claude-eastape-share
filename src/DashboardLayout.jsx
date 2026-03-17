@@ -3,38 +3,39 @@ import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   SquaresFour, HardDrive, Clock, Trash, CaretDown, SignOut, List, X,
   UserCircle, CurrencyInr, VideoCamera, FolderOpen, ShareNetwork,
-  CloudArrowUp, CaretRight,
+  CloudArrowUp, CaretRight, Gear, Question, Scales,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 
-const NAV_MAIN = [
-  { to: "/",       icon: <SquaresFour size={18} weight="duotone" />, label: "Dashboard", exact: true },
-  { to: "/drive",  icon: <HardDrive   size={18} weight="duotone" />, label: "Drive"     },
-  { to: "/recent", icon: <Clock       size={18} weight="duotone" />, label: "Recent"    },
-  { to: "/trash",  icon: <Trash       size={18} weight="duotone" />, label: "Trash"     },
-  { to: "/plans",  icon: <CurrencyInr size={18} weight="duotone" />, label: "Plans"     },
+const NAV_MEDIA = [
+  { to: "/media",        icon: <FolderOpen   size={18} weight="duotone" />, label: "Projects" },
+  { to: "/media/recent", icon: <Clock        size={16} weight="duotone" />, label: "Recent",  sub: true },
+  { to: "/media/shared", icon: <ShareNetwork size={16} weight="duotone" />, label: "Shared",  sub: true },
 ];
 
-const NAV_MEDIA = [
-  { to: "/media",              icon: <VideoCamera  size={18} weight="duotone" />, label: "Projects" },
-  { to: "/media/recent",       icon: <Clock        size={16} weight="duotone" />, label: "Recent",  sub: true },
-  { to: "/media/shared",       icon: <ShareNetwork size={16} weight="duotone" />, label: "Shared",  sub: true },
+const NAV_BOTTOM = [
+  { to: "/drive",  icon: <HardDrive size={18} weight="duotone" />, label: "Drive"  },
+  { to: "/trash",  icon: <Trash     size={18} weight="duotone" />, label: "Trash"  },
+  { to: "/recent", icon: <Clock     size={18} weight="duotone" />, label: "Recent" },
 ];
 
 export default function DashboardLayout({ children, title }) {
   const { user, logout, loading } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
-  const [dropOpen, setDropOpen]   = useState(false);
-  const [sideOpen, setSideOpen]   = useState(false);
+  const [dropOpen,  setDropOpen]  = useState(false);
+  const [sideOpen,  setSideOpen]  = useState(false);
   const [mediaOpen, setMediaOpen] = useState(true);
+  const [settOpen,  setSettOpen]  = useState(false);
   const menuRef = useRef(null);
+  const settRef = useRef(null);
 
   const isMediaRoute = location.pathname.startsWith("/media");
 
   useEffect(() => {
     function outside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) setDropOpen(false);
+      if (settRef.current && !settRef.current.contains(e.target)) setSettOpen(false);
     }
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
@@ -42,6 +43,7 @@ export default function DashboardLayout({ children, title }) {
 
   async function handleLogout() {
     setDropOpen(false);
+    setSettOpen(false);
     await logout();
     navigate("/");
   }
@@ -67,19 +69,16 @@ export default function DashboardLayout({ children, title }) {
         </Link>
 
         <nav className="db-nav">
-          {/* Main nav */}
-          {NAV_MAIN.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.exact}
-              className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
-              onClick={() => setSideOpen(false)}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          {/* Dashboard */}
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
+            onClick={() => setSideOpen(false)}
+          >
+            <SquaresFour size={18} weight="duotone" />
+            <span>Dashboard</span>
+          </NavLink>
 
           {/* Media section */}
           <div className="db-nav-section">
@@ -114,17 +113,82 @@ export default function DashboardLayout({ children, title }) {
               </div>
             )}
           </div>
+
+          {/* Drive / Trash / Recent */}
+          {NAV_BOTTOM.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
+              onClick={() => setSideOpen(false)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
         </nav>
 
-        <div className="db-sidebar-footer">
-          <NavLink
-            to="/profile"
-            className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
-            onClick={() => setSideOpen(false)}
+        {/* ── Sidebar footer: settings button ── */}
+        <div className="db-sidebar-footer" ref={settRef}>
+          {settOpen && (
+            <div className="db-settings-menu">
+              <button
+                className="db-settings-item"
+                onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/plans"); }}
+              >
+                <CurrencyInr size={14} weight="duotone" />
+                Manage Plan
+              </button>
+              <button
+                className="db-settings-item"
+                onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/profile"); }}
+              >
+                <UserCircle size={14} weight="duotone" />
+                Profile Settings
+              </button>
+              <div className="db-settings-divider" />
+              <button
+                className="db-settings-item"
+                onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/privacy"); }}
+              >
+                <Scales size={14} weight="duotone" />
+                Privacy Policy
+              </button>
+              <button
+                className="db-settings-item"
+                onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/terms"); }}
+              >
+                <Scales size={14} weight="duotone" />
+                Terms of Service
+              </button>
+              <div className="db-settings-divider" />
+              <button
+                className="db-settings-item"
+                onClick={() => { setSettOpen(false); window.open("mailto:support@eastape.com", "_blank"); }}
+              >
+                <Question size={14} weight="duotone" />
+                Help
+              </button>
+              <div className="db-settings-divider" />
+              <button className="db-settings-item db-settings-logout" onClick={handleLogout}>
+                <SignOut size={14} weight="duotone" />
+                Log out
+              </button>
+            </div>
+          )}
+          <button
+            className="db-settings-trigger"
+            onClick={() => setSettOpen(o => !o)}
+            title="Settings"
           >
-            <UserCircle size={18} weight="duotone" />
-            <span>Profile Settings</span>
-          </NavLink>
+            <div className="db-settings-avatar">
+              {avatarUrl
+                ? <img src={avatarUrl} alt={initial} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                : <span>{initial}</span>}
+            </div>
+            <span className="db-settings-name">{displayName}</span>
+            <Gear size={15} weight="duotone" style={{ marginLeft: "auto", opacity: 0.5 }} />
+          </button>
         </div>
       </aside>
 
@@ -160,6 +224,14 @@ export default function DashboardLayout({ children, title }) {
                   </div>
                   <button
                     className="dropdown-item"
+                    onClick={() => { setDropOpen(false); navigate("/plans"); }}
+                    type="button"
+                  >
+                    <CurrencyInr size={13} weight="bold" />
+                    Manage Plan
+                  </button>
+                  <button
+                    className="dropdown-item"
                     onClick={() => { setDropOpen(false); navigate("/profile"); }}
                     type="button"
                   >
@@ -168,7 +240,7 @@ export default function DashboardLayout({ children, title }) {
                   </button>
                   <button className="dropdown-item logout-item" onClick={handleLogout} type="button">
                     <SignOut size={13} weight="bold" />
-                    Logout
+                    Log out
                   </button>
                 </div>
               )}
