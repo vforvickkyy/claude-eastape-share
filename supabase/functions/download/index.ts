@@ -1,6 +1,4 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { S3Client, GetObjectCommand, DeleteObjectsCommand } from 'https://esm.sh/@aws-sdk/client-s3'
-import { getSignedUrl } from 'https://esm.sh/@aws-sdk/s3-request-presigner'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +9,115 @@ const corsHeaders = {
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
+
+// ── Native AWS Signature V4 ───────────────────────────────────────────────────
+const enc = new TextEncoder()
+
+function hex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer> {
+  const raw = typeof key === 'string' ? enc.encode(key) : new Uint8Array(key)
+  const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return crypto.subtle.sign('HMAC', k, enc.encode(msg))
+}
+
+async function presignGet(
+  endpoint: string,
+  bucket: string,
+  key: string,
+  fileName: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string,
+  expiresIn = 120,
+): Promise<string> {
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const service = 's3'
+  const credentialScope = `${date}/${region}/${service}/aws4_request`
+
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
+  qp.set('X-Amz-Date', datetime)
+  qp.set('X-Amz-Expires', String(expiresIn))
+  qp.set('X-Amz-SignedHeaders', 'host')
+  qp.set('response-cache-control', 'no-store')
+  qp.set('response-content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+
+  const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+
+  const canonicalHeaders = `host:${host}\n`
+  const signedHeaders = 'host'
+
+  const canonicalRequest = [
+    'GET',
+    `/${bucket}/${encodedKey}`,
+    canonicalQs,
+    canonicalHeaders,
+    signedHeaders,
+    'UNSIGNED-PAYLOAD',
+  ].join('\n')
+
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+
+  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion  = await hmac(kDate, region)
+  const kService = await hmac(kRegion, service)
+  const kSign    = await hmac(kService, 'aws4_request')
+  const sig      = hex(await hmac(kSign, stringToSign))
+
+  return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
+}
+
+async function s3Delete(
+  endpoint: string,
+  bucket: string,
+  key: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string,
+): Promise<void> {
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const service = 's3'
+  const credentialScope = `${date}/${region}/${service}/aws4_request`
+  const emptyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+
+  const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${emptyHash}\nx-amz-date:${datetime}\n`
+  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
+
+  const canonicalRequest = ['DELETE', `/${bucket}/${encodedKey}`, '', canonicalHeaders, signedHeaders, emptyHash].join('\n')
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+
+  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion  = await hmac(kDate, region)
+  const kService = await hmac(kRegion, service)
+  const kSign    = await hmac(kService, 'aws4_request')
+  const sig      = hex(await hmac(kSign, stringToSign))
+
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`
+
+  await fetch(`${endpoint}/${bucket}/${encodedKey}`, {
+    method: 'DELETE',
+    headers: { Host: host, 'x-amz-date': datetime, 'x-amz-content-sha256': emptyHash, Authorization: authorization },
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -24,17 +131,11 @@ Deno.serve(async (req) => {
     const fileId = url.searchParams.get('fileId')
     if (!token || !fileId) return json({ error: 'token and fileId are required' }, 400)
 
-    const s3 = new S3Client({
-      region: Deno.env.get('WASABI_REGION') ?? 'us-east-1',
-      endpoint: Deno.env.get('WASABI_ENDPOINT'),
-      credentials: {
-        accessKeyId: Deno.env.get('WASABI_ACCESS_KEY_ID')!,
-        secretAccessKey: Deno.env.get('WASABI_SECRET_ACCESS_KEY')!,
-      },
-      forcePathStyle: true,
-    })
-
-    const BUCKET = Deno.env.get('WASABI_BUCKET')!
+    const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
+    const BUCKET   = (Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? '')
+    const ACCESS   = (Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? '')
+    const SECRET   = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
+    const REGION   = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
 
     const { data, error } = await supabase
       .from('shares')
@@ -44,17 +145,14 @@ Deno.serve(async (req) => {
       .single()
 
     if (error || !data) return json({ error: 'File not found' }, 404)
-
     if (data.storage_deleted) return json({ error: 'This file has already been downloaded and permanently deleted from our servers.', reason: 'downloaded' }, 410)
     if (data.expires_at && new Date(data.expires_at) < new Date()) return json({ error: 'This share link has expired' }, 410)
 
-    const command = new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: data.file_url,
-      ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(data.file_name)}`,
-      ResponseCacheControl: 'no-store',
-    })
-    const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 120 })
+    if (!ENDPOINT || !BUCKET || !ACCESS || !SECRET) {
+      return json({ error: 'Storage not configured' }, 500)
+    }
+
+    const presignedUrl = await presignGet(ENDPOINT, BUCKET, data.file_url, data.file_name, ACCESS, SECRET, REGION)
 
     const { data: batchFiles } = await supabase.from('shares').select('id, file_url').eq('token', data.token)
 
@@ -63,9 +161,10 @@ Deno.serve(async (req) => {
       .eq('token', data.token)
 
     // Background delete (fire and forget)
-    if (batchFiles?.length) {
-      const keys = batchFiles.map((f: { file_url: string }) => ({ Key: f.file_url }))
-      s3.send(new DeleteObjectsCommand({ Bucket: BUCKET, Delete: { Objects: keys, Quiet: true } })).catch(() => {})
+    if (batchFiles?.length && ENDPOINT && BUCKET && ACCESS && SECRET) {
+      Promise.allSettled(
+        batchFiles.map((f: { file_url: string }) => s3Delete(ENDPOINT, BUCKET, f.file_url, ACCESS, SECRET, REGION))
+      ).catch(() => {})
     }
 
     return json({ url: presignedUrl, fileName: data.file_name })
