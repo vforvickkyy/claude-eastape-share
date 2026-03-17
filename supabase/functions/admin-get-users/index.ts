@@ -20,11 +20,6 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
     const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     if (!profile?.is_admin) return json({ error: 'Forbidden' }, 403)
-    const adminId = user.id
-
-    async function auditLog(action: string, targetType: string, targetId: string, metadata: Record<string, unknown> = {}) {
-      await supabase.from('admin_audit_logs').insert({ admin_id: adminId, action, target_type: targetType, target_id: targetId, metadata })
-    }
 
     const url = new URL(req.url)
     const page = parseInt(url.searchParams.get('page') || '1')
@@ -34,8 +29,10 @@ Deno.serve(async (req) => {
     const sort = url.searchParams.get('sort') || 'newest'
     const offset = (page - 1) * limit
 
-    let q = supabase.from('profiles')
-      .select('id, email, full_name, avatar_url, is_admin, is_suspended, created_at, user_plans(is_active, started_at, plans(id, name, storage_limit_gb))', { count: 'exact' })
+    // ── 1. Query profiles (no nested join to avoid FK ambiguity) ──────────────
+    let q = supabase
+      .from('profiles')
+      .select('id, email, full_name, avatar_url, is_admin, is_suspended, created_at', { count: 'exact' })
 
     if (search) q = q.or(`email.ilike.%${search}%,full_name.ilike.%${search}%`)
     if (filter === 'suspended') q = q.eq('is_suspended', true)
@@ -46,18 +43,39 @@ Deno.serve(async (req) => {
     const { data: profiles, count, error } = await q
     if (error) return json({ error: error.message }, 500)
 
-    const { data: { users: authUsers } } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
-    const authMap = Object.fromEntries((authUsers || []).map(u => [u.id, u]))
+    const profileList = profiles || []
+    const userIds = profileList.map((p: any) => p.id)
 
-    const users = (profiles || []).map((p: any) => ({
+    // ── 2. Fetch active plans for these users separately ─────────────────────
+    let planMap: Record<string, any> = {}
+    if (userIds.length > 0) {
+      const { data: userPlans } = await supabase
+        .from('user_plans')
+        .select('user_id, plans(id, name, storage_limit_gb)')
+        .in('user_id', userIds)
+        .eq('is_active', true)
+      for (const up of (userPlans || [])) {
+        planMap[(up as any).user_id] = (up as any).plans
+      }
+    }
+
+    // ── 3. Fetch auth metadata (last_sign_in_at, email_confirmed_at) ─────────
+    let authMap: Record<string, any> = {}
+    try {
+      const { data: { users: authUsers } } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+      authMap = Object.fromEntries((authUsers || []).map((u: any) => [u.id, u]))
+    } catch (_) { /* non-fatal */ }
+
+    // ── 4. Merge ──────────────────────────────────────────────────────────────
+    const users = profileList.map((p: any) => ({
       ...p,
       last_sign_in_at: authMap[p.id]?.last_sign_in_at || null,
       email_confirmed_at: authMap[p.id]?.email_confirmed_at || null,
-      plan: p.user_plans?.find((up: any) => up.is_active)?.plans || null,
+      plan: planMap[p.id] || null,
     }))
 
     return json({ users, total: count || 0, page, limit })
   } catch (err) {
-    return json({ error: err.message }, 500)
+    return json({ error: (err as Error).message }, 500)
   }
 })
