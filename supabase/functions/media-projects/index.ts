@@ -24,13 +24,41 @@ Deno.serve(async (req) => {
     const id = url.searchParams.get('id')
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('media_projects')
-        .select('*, media_assets(count), media_team_members(count)')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-      if (error) return json({ error: error.message }, 500)
-      return json({ projects: data })
+      // Single project — owner or team member
+      if (id) {
+        const { data: owned } = await supabase
+          .from('media_projects')
+          .select('*, media_assets(count), media_team_members(count)')
+          .eq('id', id).eq('user_id', user.id).single()
+        if (owned) return json({ project: { ...owned, member_role: 'owner', is_shared: false } })
+
+        const { data: mem } = await supabase
+          .from('media_team_members')
+          .select('role, media_projects(*, media_assets(count), media_team_members(count))')
+          .eq('project_id', id).eq('user_id', user.id).single()
+        if (mem?.media_projects) {
+          return json({ project: { ...(mem.media_projects as Record<string, unknown>), member_role: mem.role, is_shared: true } })
+        }
+        return json({ error: 'Not found' }, 404)
+      }
+
+      // List — owned projects + projects user is invited to
+      const [{ data: ownProjects }, { data: memberRows }] = await Promise.all([
+        supabase.from('media_projects')
+          .select('*, media_assets(count), media_team_members(count)')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false }),
+        supabase.from('media_team_members')
+          .select('role, media_projects(*, media_assets(count), media_team_members(count))')
+          .eq('user_id', user.id),
+      ])
+
+      const owned = (ownProjects || []).map(p => ({ ...p, member_role: 'owner', is_shared: false }))
+      const shared = (memberRows || [])
+        .filter(r => r.media_projects)
+        .map(r => ({ ...(r.media_projects as Record<string, unknown>), member_role: r.role, is_shared: true }))
+
+      return json({ projects: [...owned, ...shared] })
     }
 
     if (req.method === 'POST') {
@@ -40,8 +68,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from('media_projects')
         .insert({ name, description, color: color || '#7c3aed', user_id: user.id })
-        .select()
-        .single()
+        .select().single()
       if (error) return json({ error: error.message }, 500)
       return json({ project: data }, 201)
     }
@@ -55,12 +82,7 @@ Deno.serve(async (req) => {
       if (color) updates.color = color
 
       const { data, error } = await supabase
-        .from('media_projects')
-        .update(updates)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .select()
-        .single()
+        .from('media_projects').update(updates).eq('id', id).eq('user_id', user.id).select().single()
       if (error) return json({ error: error.message }, 500)
       return json({ project: data })
     }

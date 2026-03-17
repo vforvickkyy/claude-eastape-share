@@ -286,6 +286,9 @@ export default function MediaProjectView() {
 
   const filteredAssets = filtered();
   const hasBulk = selected.size > 0;
+  const memberRole = project?.member_role ?? "owner";
+  const isOwner  = memberRole === "owner";
+  const canEdit  = isOwner || memberRole === "editor";
 
   return (
     <DashboardLayout title={project?.name || "Project"}>
@@ -305,11 +308,18 @@ export default function MediaProjectView() {
               <span className="breadcrumb-item active">{currentFolder?.name || "Folder"}</span>
             </>
           )}
+          {project?.is_shared && (
+            <span className="shared-project-role" style={{ marginLeft: 8 }}>
+              {memberRole}
+            </span>
+          )}
         </div>
-        <ProjectMenu
-          onRename={() => { setRenameProjectVal(project?.name || ""); setShowRenameProject(true); }}
-          onDelete={handleDeleteProject}
-        />
+        {isOwner && (
+          <ProjectMenu
+            onRename={() => { setRenameProjectVal(project?.name || ""); setShowRenameProject(true); }}
+            onDelete={handleDeleteProject}
+          />
+        )}
       </div>
 
       {/* Toolbar */}
@@ -320,19 +330,23 @@ export default function MediaProjectView() {
             <span style={{ fontSize: 13, color: "var(--t2)", fontWeight: 500 }}>
               {selected.size} selected
             </span>
-            <select
-              className="media-filter-select"
-              value=""
-              onChange={e => { if (e.target.value) bulkSetStatus(e.target.value); }}
-            >
-              <option value="">Set status…</option>
-              <option value="in_review">In Review</option>
-              <option value="approved">Approved</option>
-              <option value="revision">Revision</option>
-            </select>
-            <button className="btn-ghost danger" onClick={bulkDelete}>
-              <Trash size={14} /> Delete ({selected.size})
-            </button>
+            {canEdit && (
+              <>
+                <select
+                  className="media-filter-select"
+                  value=""
+                  onChange={e => { if (e.target.value) bulkSetStatus(e.target.value); }}
+                >
+                  <option value="">Set status…</option>
+                  <option value="in_review">In Review</option>
+                  <option value="approved">Approved</option>
+                  <option value="revision">Revision</option>
+                </select>
+                <button className="btn-ghost danger" onClick={bulkDelete}>
+                  <Trash size={14} /> Delete ({selected.size})
+                </button>
+              </>
+            )}
             <button className="btn-ghost" onClick={() => setSelected(new Set())}>
               <X size={14} /> Deselect all
             </button>
@@ -340,15 +354,21 @@ export default function MediaProjectView() {
         ) : (
           /* ── Normal toolbar ── */
           <>
-            <button className="btn-primary-sm" onClick={() => setShowUpload(true)}>
-              <CloudArrowUp size={14} /> Upload
-            </button>
-            <button className="btn-ghost" onClick={() => { setShowNewFolder(true); setNewFolderName(""); }}>
-              <FolderSimplePlus size={14} /> New Folder
-            </button>
-            <button className="btn-ghost" onClick={() => setShowTeam(true)}>
-              <Users size={14} /> Team
-            </button>
+            {canEdit && (
+              <>
+                <button className="btn-primary-sm" onClick={() => setShowUpload(true)}>
+                  <CloudArrowUp size={14} /> Upload
+                </button>
+                <button className="btn-ghost" onClick={() => { setShowNewFolder(true); setNewFolderName(""); }}>
+                  <FolderSimplePlus size={14} /> New Folder
+                </button>
+              </>
+            )}
+            {isOwner && (
+              <button className="btn-ghost" onClick={() => setShowTeam(true)}>
+                <Users size={14} /> Team
+              </button>
+            )}
           </>
         )}
 
@@ -486,14 +506,14 @@ export default function MediaProjectView() {
                       selected={selected.has(asset.id)}
                       onSelect={() => toggleSelect(asset.id)}
                       onOpen={() => navigate(`/media/asset/${asset.id}`)}
-                      onDelete={() => handleDeleteAsset(asset.id)}
-                      onStatusChange={s => handleStatusChange(asset.id, s)}
+                      onDelete={canEdit ? () => handleDeleteAsset(asset.id) : null}
+                      onStatusChange={canEdit ? s => handleStatusChange(asset.id, s) : null}
                       onCopyLink={() => copyShareLink(asset)}
                       copied={copied === asset.id}
-                      onShare={() => setShareAsset(asset)}
-                      onRename={() => { setRenameAsset(asset); setRenameVal(asset.name); }}
+                      onShare={isOwner ? () => setShareAsset(asset) : null}
+                      onRename={canEdit ? () => { setRenameAsset(asset); setRenameVal(asset.name); } : null}
                       onDownload={() => handleDownload(asset)}
-                      onMove={() => openMoveModal(asset)}
+                      onMove={canEdit ? () => openMoveModal(asset) : null}
                     />
                   ))}
                 </AnimatePresence>
@@ -831,39 +851,53 @@ function AssetContextMenu({ asset, pos, copied, onClose, onOpen, onRename, onCop
       <button className="card-menu-item" onClick={() => act(onOpen)}>
         <ArrowsOut size={13} /> Open
       </button>
-      <button className="card-menu-item" onClick={() => act(onRename)}>
-        <PencilSimple size={13} /> Rename
-      </button>
+      {onRename && (
+        <button className="card-menu-item" onClick={() => act(onRename)}>
+          <PencilSimple size={13} /> Rename
+        </button>
+      )}
       <button className="card-menu-item" onClick={() => act(onCopyLink)}>
         {copied ? <CheckCircle size={13} /> : <Copy size={13} />}
         {copied ? "Copied!" : "Copy link"}
       </button>
-      <button className="card-menu-item" onClick={() => act(onShare)}>
-        <Link size={13} /> Share settings
-      </button>
+      {onShare && (
+        <button className="card-menu-item" onClick={() => act(onShare)}>
+          <Link size={13} /> Share settings
+        </button>
+      )}
       {(asset.bunny_playback_url || asset.bunny_thumbnail_url) && (
         <button className="card-menu-item" onClick={() => act(onDownload)}>
           <DownloadSimple size={13} /> Download
         </button>
       )}
-      <button className="card-menu-item" onClick={() => act(onMove)}>
-        <FolderSimplePlus size={13} /> Move to folder
-      </button>
-      <div className="card-menu-divider" />
-      {["in_review", "approved", "revision"].map(s => (
-        <button
-          key={s}
-          className={`card-menu-item ${asset.status === s ? "active" : ""}`}
-          onClick={() => act(() => onStatusChange(s))}
-        >
-          <span className={`status-dot ${s}`} />
-          {STATUS_COLORS[s].label}
+      {onMove && (
+        <button className="card-menu-item" onClick={() => act(onMove)}>
+          <FolderSimplePlus size={13} /> Move to folder
         </button>
-      ))}
-      <div className="card-menu-divider" />
-      <button className="card-menu-item danger" onClick={() => act(onDelete)}>
-        <Trash size={13} /> Delete
-      </button>
+      )}
+      {onStatusChange && (
+        <>
+          <div className="card-menu-divider" />
+          {["in_review", "approved", "revision"].map(s => (
+            <button
+              key={s}
+              className={`card-menu-item ${asset.status === s ? "active" : ""}`}
+              onClick={() => act(() => onStatusChange(s))}
+            >
+              <span className={`status-dot ${s}`} />
+              {STATUS_COLORS[s].label}
+            </button>
+          ))}
+        </>
+      )}
+      {onDelete && (
+        <>
+          <div className="card-menu-divider" />
+          <button className="card-menu-item danger" onClick={() => act(onDelete)}>
+            <Trash size={13} /> Delete
+          </button>
+        </>
+      )}
     </div>
   );
 }

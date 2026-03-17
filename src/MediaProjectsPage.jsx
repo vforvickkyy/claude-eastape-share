@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   VideoCamera, Plus, FolderOpen, DotsThree, PencilSimple,
-  Trash, Users, ArrowRight, MagnifyingGlass, X,
+  Trash, Users, ArrowRight, MagnifyingGlass, X, ShareNetwork,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./DashboardLayout";
@@ -113,21 +113,32 @@ export default function MediaProjectsPage() {
                 <div className="media-project-header">
                   <span className="media-project-dot" style={{ background: p.color || "#7c3aed" }} />
                   <span className="media-project-name">{p.name}</span>
-                  <button
-                    className="card-menu-btn"
-                    onClick={e => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}
-                  >
-                    <DotsThree size={16} weight="bold" />
-                  </button>
+                  {!p.is_shared && (
+                    <button
+                      className="card-menu-btn"
+                      onClick={e => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}
+                    >
+                      <DotsThree size={16} weight="bold" />
+                    </button>
+                  )}
                   {menuId === p.id && (
                     <ProjectMenu
                       project={p}
-                      onEdit={() => { setMenuId(null); /* TODO: edit modal */ }}
+                      onEdit={() => { setMenuId(null); }}
                       onDelete={() => { setMenuId(null); deleteProject(p.id); }}
                       onClose={() => setMenuId(null)}
                     />
                   )}
                 </div>
+
+                {p.is_shared && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                    <span className="shared-project-badge">
+                      <ShareNetwork size={10} weight="bold" /> Shared
+                    </span>
+                    <span className="shared-project-role">{p.member_role}</span>
+                  </div>
+                )}
 
                 {p.description && (
                   <p className="media-project-desc">{p.description}</p>
