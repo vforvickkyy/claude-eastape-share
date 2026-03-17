@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 // Auth is handled via Supabase Edge Functions.
 // Sessions are stored in localStorage so they survive page reloads.
@@ -90,13 +91,24 @@ export function AuthProvider({ children }) {
     return session;
   }
 
+  async function loginWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: { access_type: "offline", prompt: "consent" },
+      },
+    });
+    if (error) throw error;
+  }
+
   function logout() {
     saveSession(null);
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, loginWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );

@@ -17,6 +17,7 @@ import MediaProjectsPage   from "./MediaProjectsPage.jsx";
 import MediaProjectView    from "./MediaProjectView.jsx";
 import MediaAssetPage      from "./MediaAssetPage.jsx";
 import MediaSharePage      from "./MediaSharePage.jsx";
+import AuthCallbackPage    from "./AuthCallbackPage.jsx";
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/profile"                  element={<ProfilePage />} />
           <Route path="/pricing"                  element={<PricingPage />} />
           <Route path="/plans"                    element={<PricingPage inDashboard />} />
+          <Route path="/auth/callback"            element={<AuthCallbackPage />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

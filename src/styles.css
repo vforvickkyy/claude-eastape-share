@@ -585,6 +585,149 @@ input  { font-family: var(--font-body); }
 }
 
 /* ═══════════════════════════════════════════════
+   AUTH PAGE V2 (Google OAuth enhanced)
+═══════════════════════════════════════════════ */
+
+.auth-page {
+  position: relative;
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px 80px;
+  overflow: hidden;
+}
+
+/* Animated orb backgrounds */
+.auth-page-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  animation: blobDrift 20s ease-in-out infinite alternate;
+}
+.auth-page-orb-1 {
+  width: 480px; height: 480px;
+  top: -120px; left: -100px;
+  background: radial-gradient(circle, #7c3aed 0%, transparent 70%);
+  animation-delay: 0s;
+}
+.auth-page-orb-2 {
+  width: 380px; height: 380px;
+  bottom: -80px; right: -80px;
+  background: radial-gradient(circle, #3b82f6 0%, transparent 70%);
+  animation-delay: -10s;
+  animation-direction: alternate-reverse;
+}
+
+/* Logo link above card */
+.auth-page-logo {
+  position: relative; z-index: 5;
+  margin-bottom: 28px;
+}
+.auth-logo-img {
+  height: 36px;
+  width: auto;
+  filter: brightness(1.05);
+}
+
+/* Main card */
+.auth-card-v2 {
+  position: relative; z-index: 5;
+  width: 100%; max-width: 420px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-top-color: rgba(255,255,255,0.16);
+  border-radius: var(--r-xl);
+  padding: 36px 32px 32px;
+  display: flex; flex-direction: column; gap: 20px;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.3),
+    0 24px 64px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.auth-card-heading { display: flex; flex-direction: column; gap: 5px; }
+.auth-card-title {
+  font-family: var(--font-display);
+  font-size: 32px; font-weight: 800;
+  letter-spacing: 0.01em; line-height: 1;
+  color: var(--t1);
+}
+.auth-card-sub {
+  font-size: 13px; color: var(--t3); line-height: 1.4;
+}
+
+/* Google button */
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 11px 16px;
+  background: #ffffff;
+  border: none; border-radius: var(--r-md);
+  font-size: 14px; font-weight: 600; color: #1f1f1f;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.18s, box-shadow 0.18s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.google-btn:hover:not(:disabled) {
+  background: #f5f5f5;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.google-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Spinner dark variant (for light backgrounds like Google btn) */
+.spinner-dark {
+  border-color: rgba(0,0,0,0.15) !important;
+  border-top-color: #1f1f1f !important;
+  width: 16px !important; height: 16px !important;
+}
+
+/* Or divider */
+.auth-divider {
+  display: flex; align-items: center; gap: 12px;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1;
+  height: 1px; background: var(--border);
+}
+.auth-divider span {
+  font-size: 11px; color: var(--t3);
+  white-space: nowrap; letter-spacing: 0.04em;
+}
+
+/* Password show/hide toggle */
+.pw-toggle {
+  position: absolute; right: 10px;
+  color: var(--t3); transition: color 0.18s;
+  display: flex; align-items: center;
+}
+.pw-toggle:hover { color: var(--t2); }
+
+/* Terms text below form */
+.auth-terms {
+  font-size: 11px; color: var(--t3); text-align: center; line-height: 1.5;
+}
+.auth-terms a { color: var(--t3); text-decoration: underline; text-underline-offset: 2px; }
+.auth-terms a:hover { color: var(--t2); }
+
+/* Footer below card */
+.auth-page-footer {
+  position: relative; z-index: 5;
+  margin-top: 28px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11px; color: var(--t3);
+}
+.auth-page-footer a { color: var(--t3); transition: color 0.18s; }
+.auth-page-footer a:hover { color: var(--t2); }
+
+/* ═══════════════════════════════════════════════
    FOOTER
 ═══════════════════════════════════════════════ */
 
