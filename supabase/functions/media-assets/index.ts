@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
     const id = url.searchParams.get('id')
     const projectId = url.searchParams.get('projectId')
     const folderId = url.searchParams.get('folderId')
+    const limitParam = url.searchParams.get('limit')
 
     if (req.method === 'GET') {
       if (id) {
@@ -43,12 +44,15 @@ Deno.serve(async (req) => {
         return json({ asset: data })
       }
 
-      let q = supabase.from('media_assets').select('*').eq('user_id', user.id)
+      let q = supabase.from('media_assets').select('*, media_projects(name)').eq('user_id', user.id)
       if (projectId) q = q.eq('project_id', projectId)
       if (folderId === 'null' || folderId === 'root') q = q.is('folder_id', null)
       else if (folderId) q = q.eq('folder_id', folderId)
 
-      const { data, error } = await q.order('created_at', { ascending: false })
+      q = q.order('created_at', { ascending: false })
+      if (limitParam) q = q.limit(parseInt(limitParam))
+
+      const { data, error } = await q
       if (error) return json({ error: error.message }, 500)
       return json({ assets: data })
     }

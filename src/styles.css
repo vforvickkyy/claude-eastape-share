@@ -2871,3 +2871,136 @@ input  { font-family: var(--font-body); }
   display: flex; gap: 12px; font-size: 11px; color: var(--t3); padding: 0 2px;
 }
 .share-link-analytics span { display: flex; align-items: center; gap: 3px; }
+
+/* ═══════════════════════════════════════════════
+   MEDIA RECENT PAGE
+═══════════════════════════════════════════════ */
+.media-recent-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-width: 860px;
+}
+
+.media-recent-row {
+  display: grid;
+  grid-template-columns: 72px 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.media-recent-row:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: var(--border);
+}
+
+.media-recent-thumb {
+  position: relative;
+  width: 72px; height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.05);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.media-recent-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.media-recent-thumb .media-duration-badge { font-size: 9px; padding: 1px 4px; }
+
+.media-recent-info {
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 0;
+}
+.media-recent-name {
+  font-size: 13px; font-weight: 500; color: var(--t1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.media-recent-project {
+  font-size: 11px; color: var(--t3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.media-recent-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+  font-size: 11px; color: var(--t3); white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════
+   MEDIA SHARED PAGE
+═══════════════════════════════════════════════ */
+.shared-links-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-width: 900px;
+}
+
+.shared-link-row {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  transition: border-color 0.15s, background 0.15s;
+}
+.shared-link-row:hover { background: rgba(255,255,255,0.04); border-color: var(--border-hover); }
+.shared-link-row.expired { opacity: 0.5; }
+
+.shared-link-thumb {
+  width: 52px; height: 34px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.05);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.shared-link-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.shared-link-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.shared-link-title {
+  font-size: 13px; font-weight: 500; color: var(--t1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.shared-link-meta-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  font-size: 11px; color: var(--t3);
+}
+
+.shared-link-project {
+  color: var(--purple-l); cursor: pointer;
+}
+.shared-link-project:hover { text-decoration: underline; }
+
+.shared-link-created, .shared-link-views {
+  display: flex; align-items: center; gap: 3px;
+}
+
+.shared-link-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px; border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.06);
+  font-size: 10px; color: var(--t3);
+}
+.expired-badge { color: #f87171; background: rgba(239,68,68,0.1); }
+
+.shared-link-url {
+  font-size: 11px; color: var(--t3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: monospace; opacity: 0.6;
+}
+
+.shared-link-actions {
+  display: flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
+}
+
+.shared-link-btn {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; padding: 5px 10px;
+}
+.shared-link-btn.danger { color: #f87171; }
+.shared-link-btn.danger:hover { background: rgba(239,68,68,0.1); }

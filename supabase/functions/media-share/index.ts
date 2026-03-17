@@ -31,8 +31,18 @@ Deno.serve(async (req) => {
     const assetId = url.searchParams.get('assetId')
 
     if (req.method === 'GET') {
-      if (!assetId) return json({ error: 'assetId required' }, 400)
-      const { data, error } = await supabase.from('media_share_links').select('*').eq('asset_id', assetId).eq('created_by', user.id).order('created_at', { ascending: false })
+      if (assetId) {
+        const { data, error } = await supabase.from('media_share_links').select('*').eq('asset_id', assetId).eq('created_by', user.id).order('created_at', { ascending: false })
+        if (error) return json({ error: error.message }, 500)
+        return json({ links: data })
+      }
+      // No assetId → return all share links for this user with joined asset/project info
+      const { data, error } = await supabase
+        .from('media_share_links')
+        .select('*, media_assets(id, name, bunny_thumbnail_url, duration), media_projects(id, name)')
+        .eq('created_by', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100)
       if (error) return json({ error: error.message }, 500)
       return json({ links: data })
     }

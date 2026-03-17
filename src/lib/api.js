@@ -117,7 +117,7 @@ export const mediaApi = {
   deleteComment:  (id)      => del(`${BASE}/media-comments`, { id }, true),
 
   // Share links
-  getShareLinks:  (assetId) => get(`${BASE}/media-share`, { assetId }, true),
+  getShareLinks:  (assetId) => assetId ? get(`${BASE}/media-share`, { assetId }, true) : get(`${BASE}/media-share`, {}, true),
   createShareLink:(body)    => post(`${BASE}/media-share`, body, true),
   deleteShareLink:(id)      => del(`${BASE}/media-share`, { id }, true),
   resolveShare:   (token, password) => get(`${BASE}/media-share-resolve`, password ? { token, password } : { token }),

@@ -18,6 +18,8 @@ import MediaProjectView    from "./MediaProjectView.jsx";
 import MediaAssetPage      from "./MediaAssetPage.jsx";
 import MediaSharePage      from "./MediaSharePage.jsx";
 import AuthCallbackPage    from "./AuthCallbackPage.jsx";
+import MediaRecentPage     from "./MediaRecentPage.jsx";
+import MediaSharedPage     from "./MediaSharedPage.jsx";
 
 export default function App() {
   return (
@@ -45,6 +47,8 @@ export default function App() {
           <Route path="/media/project/:id/folder/:folderId" element={<MediaProjectView />} />
           <Route path="/media/asset/:id"          element={<MediaAssetPage />} />
           <Route path="/media/share/:token"       element={<MediaSharePage />} />
+          <Route path="/media/recent"             element={<MediaRecentPage />} />
+          <Route path="/media/shared"             element={<MediaSharedPage />} />
 
           {/* ── Other ── */}
           <Route path="/share/:token"             element={<SharePage />} />
