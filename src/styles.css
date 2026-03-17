@@ -1929,9 +1929,11 @@ input  { font-family: var(--font-body); }
   justify-content: center;
   flex-shrink: 0;
 }
-.pricing-icon--free   { background: rgba(148,163,184,0.12); color: var(--t2); }
-.pricing-icon--pro    { background: rgba(124,58,237,0.18);  color: var(--purple-l); }
-.pricing-icon--studio { background: rgba(59,130,246,0.15);  color: var(--blue-l); }
+.pricing-icon--free         { background: rgba(148,163,184,0.12); color: var(--t2); }
+.pricing-icon--pro          { background: rgba(124,58,237,0.18);  color: var(--purple-l); }
+.pricing-icon--studio       { background: rgba(59,130,246,0.15);  color: var(--blue-l); }
+.pricing-icon--creator      { background: rgba(124,58,237,0.18);  color: var(--purple-l); }
+.pricing-icon--professional { background: rgba(59,130,246,0.15);  color: var(--blue-l); }
 
 .pricing-tier {
   font-size: 10px;
