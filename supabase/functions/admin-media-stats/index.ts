@@ -20,11 +20,6 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
     const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     if (!profile?.is_admin) return json({ error: 'Forbidden' }, 403)
-    const adminId = user.id
-
-    async function auditLog(action: string, targetType: string, targetId: string, metadata: Record<string, unknown> = {}) {
-      await supabase.from('admin_audit_logs').insert({ admin_id: adminId, action, target_type: targetType, target_id: targetId, metadata })
-    }
 
     const url = new URL(req.url)
     const page = parseInt(url.searchParams.get('page') || '1')
@@ -51,9 +46,9 @@ Deno.serve(async (req) => {
     const totalSize = (sizeData || []).reduce((s: number, a: any) => s + (a.file_size || 0), 0)
     const totalSeconds = (sizeData || []).reduce((s: number, a: any) => s + (a.duration || 0), 0)
 
-    // Videos list with owner and project
+    // Videos list — no profiles join (media_assets.user_id → auth.users, can't join to profiles)
     let q = supabase.from('media_assets')
-      .select('id, name, bunny_video_status, bunny_video_guid, bunny_thumbnail_url, bunny_playback_url, duration, file_size, created_at, user_id, project_id, profiles(full_name, email), media_projects(name)', { count: 'exact' })
+      .select('id, name, bunny_video_status, bunny_video_guid, bunny_thumbnail_url, bunny_playback_url, duration, file_size, created_at, user_id, project_id, media_projects(name)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -62,21 +57,48 @@ Deno.serve(async (req) => {
 
     const { data: videos, count: videosCount } = await q
 
-    // Failed uploads
-    const { data: failedUploads } = await supabase
+    // Fetch profiles for video owners separately
+    const videoUserIds = [...new Set((videos || []).map((v: any) => v.user_id).filter(Boolean))]
+    const { data: videoProfiles } = videoUserIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name, email').in('id', videoUserIds)
+      : { data: [] }
+
+    const profileMap: Record<string, any> = {}
+    for (const p of (videoProfiles || [])) profileMap[p.id] = p
+
+    const enrichedVideos = (videos || []).map((v: any) => ({
+      ...v,
+      profiles: profileMap[v.user_id] || null,
+    }))
+
+    // Failed uploads — same separate-query pattern
+    const { data: failedRaw } = await supabase
       .from('media_assets')
-      .select('id, name, created_at, user_id, profiles(full_name, email)')
+      .select('id, name, created_at, user_id')
       .eq('bunny_video_status', 'error')
       .order('created_at', { ascending: false })
       .limit(20)
 
+    const failedUserIds = [...new Set((failedRaw || []).map((v: any) => v.user_id).filter(Boolean))]
+    const { data: failedProfiles } = failedUserIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name, email').in('id', failedUserIds)
+      : { data: [] }
+
+    const failedProfileMap: Record<string, any> = {}
+    for (const p of (failedProfiles || [])) failedProfileMap[p.id] = p
+
+    const failedUploads = (failedRaw || []).map((v: any) => ({
+      ...v,
+      profiles: failedProfileMap[v.user_id] || null,
+    }))
+
     return json({
       overview: { total, ready, processing, failed, total_size: totalSize, total_seconds: totalSeconds },
-      videos: videos || [],
+      videos: enrichedVideos,
       videos_total: videosCount || 0,
-      failed_uploads: failedUploads || [],
+      failed_uploads: failedUploads,
     })
-  } catch (err) {
+  } catch (err: any) {
     return json({ error: err.message }, 500)
   }
 })

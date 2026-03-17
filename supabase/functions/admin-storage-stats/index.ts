@@ -20,11 +20,6 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
     const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     if (!profile?.is_admin) return json({ error: 'Forbidden' }, 403)
-    const adminId = user.id
-
-    async function auditLog(action: string, targetType: string, targetId: string, metadata: Record<string, unknown> = {}) {
-      await supabase.from('admin_audit_logs').insert({ admin_id: adminId, action, target_type: targetType, target_id: targetId, metadata })
-    }
 
     const url = new URL(req.url)
     const page = parseInt(url.searchParams.get('page') || '1')
@@ -32,7 +27,7 @@ Deno.serve(async (req) => {
     const search = url.searchParams.get('search') || ''
     const offset = (page - 1) * limit
 
-    // Overview: total bytes and files
+    // Overview: total bytes and files from shares
     const { data: shareStats } = await supabase
       .from('shares')
       .select('file_size')
@@ -41,19 +36,12 @@ Deno.serve(async (req) => {
     const totalBytes = (shareStats || []).reduce((sum: number, s: any) => sum + (s.file_size || 0), 0)
     const totalFiles = (shareStats || []).length
 
-    // Per-user breakdown
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, email, full_name, avatar_url, user_plans(is_active, plan_id, plans(id, name, storage_limit_gb))')
-      .order('email')
-
-    // Get all shares grouped by user
+    // All shares grouped by user
     const { data: allShares } = await supabase
       .from('shares')
       .select('user_id, file_size')
       .eq('is_trashed', false)
 
-    // Group shares by user_id
     const sharesByUser: Record<string, { count: number, bytes: number }> = {}
     for (const s of (allShares || [])) {
       if (!s.user_id) continue
@@ -62,14 +50,36 @@ Deno.serve(async (req) => {
       sharesByUser[s.user_id].bytes += s.file_size || 0
     }
 
+    // Profiles (no join — avoids auth.users FK ambiguity)
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, avatar_url')
+      .order('email')
+
+    const profileIds = (profiles || []).map((p: any) => p.id)
+
+    // User plans as a separate query
+    const { data: userPlans } = profileIds.length > 0
+      ? await supabase
+          .from('user_plans')
+          .select('user_id, plans(id, name, storage_limit_gb)')
+          .in('user_id', profileIds)
+          .eq('is_active', true)
+      : { data: [] }
+
+    const planByUser: Record<string, any> = {}
+    for (const up of (userPlans || [])) {
+      planByUser[(up as any).user_id] = (up as any).plans
+    }
+
     let userStats = (profiles || []).map((p: any) => {
-      const activePlan = p.user_plans?.find((up: any) => up.is_active)?.plans
+      const activePlan = planByUser[p.id]
       const usage = sharesByUser[p.id] || { count: 0, bytes: 0 }
       return {
         id: p.id, email: p.email, full_name: p.full_name, avatar_url: p.avatar_url,
         file_count: usage.count,
         total_bytes: usage.bytes,
-        storage_limit_gb: activePlan?.storage_limit_gb || 5,
+        storage_limit_gb: activePlan?.storage_limit_gb ?? 2,
         plan_name: activePlan?.name || 'Free',
       }
     })
@@ -83,7 +93,6 @@ Deno.serve(async (req) => {
 
     userStats.sort((a: any, b: any) => b.total_bytes - a.total_bytes)
 
-    // Find largest file
     const { data: largestFile } = await supabase
       .from('shares')
       .select('file_size, filename')
@@ -103,7 +112,7 @@ Deno.serve(async (req) => {
       users: userStats.slice(offset, offset + limit),
       total: userStats.length,
     })
-  } catch (err) {
+  } catch (err: any) {
     return json({ error: err.message }, 500)
   }
 })
