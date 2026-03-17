@@ -93,14 +93,14 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-    const ENDPOINT  = (Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
-    const BUCKET    = Deno.env.get('WASABI_BUCKET')!
-    const ACCESS    = Deno.env.get('WASABI_ACCESS_KEY_ID')!
-    const SECRET    = Deno.env.get('WASABI_SECRET_ACCESS_KEY')!
-    const REGION    = Deno.env.get('WASABI_REGION') ?? 'us-east-1'
+    const ENDPOINT  = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
+    const BUCKET    = (Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? '')
+    const ACCESS    = (Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? '')
+    const SECRET    = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
+    const REGION    = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
 
     if (!ENDPOINT || !BUCKET || !ACCESS || !SECRET) {
-      return json({ error: 'Wasabi storage not configured' }, 500)
+      return json({ error: 'Storage not configured' }, 500)
     }
 
     const SHARE_TTL = 7 * 24 * 60 * 60
