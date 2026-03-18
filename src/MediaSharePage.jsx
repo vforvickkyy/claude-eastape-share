@@ -180,7 +180,7 @@ export default function MediaSharePage() {
         {/* Asset preview modal with VideoPlayer + prev/next */}
         {previewAsset && (
           <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}
             onClick={() => setPreviewIdx(null)}
           >
             <div
