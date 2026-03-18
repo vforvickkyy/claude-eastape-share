@@ -1,36 +1,29 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  DownloadSimple, Lock, Warning, VideoCamera, ChatCircle, PaperPlaneTilt,
+  DownloadSimple, Lock, Warning, MusicNote, File,
+  FileImage, FileVideo, ChatCircle, PaperPlaneTilt,
 } from "@phosphor-icons/react";
 import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
 import { mediaApi } from "./lib/api.js";
 
+const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+
 export default function MediaSharePage() {
   const { token } = useParams();
-  const [state,    setState]   = useState("loading"); // loading|pw|ready|expired|error
-  const [data,     setData]    = useState(null);
-  const [password, setPassword] = useState("");
-  const [pwError,  setPwError]  = useState("");
-  const [comments, setComments] = useState([]);
+  const [state,      setState]     = useState("loading");
+  const [data,       setData]      = useState(null);
+  const [password,   setPassword]  = useState("");
+  const [pwError,    setPwError]   = useState("");
+  const [comments,   setComments]  = useState([]);
   const [newComment, setNewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const iframeRef = useRef(null);
+  const videoRef = useRef(null);
 
   useEffect(() => { loadShare(); }, []);
-
-  useEffect(() => {
-    function onMsg(e) {
-      if (e.data?.event === "timeupdate" && typeof e.data.currentTime === "number") {
-        setCurrentTime(e.data.currentTime);
-      }
-    }
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
 
   async function loadShare(pw) {
     try {
@@ -47,10 +40,18 @@ export default function MediaSharePage() {
     }
   }
 
-  function handlePasswordSubmit(e) {
-    e.preventDefault();
-    setPwError("");
-    loadShare(password);
+  async function handleDownload() {
+    try {
+      const res = await fetch(`${BASE}/download?asset_id=${data.asset.id}&share_token=${token}&type=download`)
+      const { url } = await res.json()
+      if (!url) return
+      const a = document.createElement('a')
+      a.href = url
+      a.download = data.asset.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch {}
   }
 
   async function postComment(e) {
@@ -80,15 +81,8 @@ export default function MediaSharePage() {
           <Lock size={32} weight="duotone" style={{ color: "var(--purple-l)" }} />
           <h2 className="share-public-title">Password Required</h2>
           <p style={{ color: "var(--t2)", fontSize: 13, marginBottom: 16 }}>This content is protected.</p>
-          <form onSubmit={handlePasswordSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="Enter password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              autoFocus
-            />
+          <form onSubmit={e => { e.preventDefault(); setPwError(""); loadShare(password); }} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input type="password" className="form-input" placeholder="Enter password" value={password} onChange={e => setPassword(e.target.value)} autoFocus />
             {pwError && <p style={{ color: "#f87171", fontSize: 12 }}>{pwError}</p>}
             <button type="submit" className="btn-primary-sm">Unlock</button>
           </form>
@@ -146,7 +140,9 @@ export default function MediaSharePage() {
 
   /* ── Asset view ── */
   const { asset, allowDownload, allowComments } = data;
-  const bunnyGuid  = asset?.bunny_video_guid;
+  const isVideo = asset?.type === 'video' || asset?.mime_type?.startsWith('video/')
+  const isImage = asset?.type === 'image' || asset?.mime_type?.startsWith('image/')
+  const isAudio = asset?.type === 'audio' || asset?.mime_type?.startsWith('audio/')
 
   return (
     <PageShell>
@@ -163,36 +159,48 @@ export default function MediaSharePage() {
               {asset?.file_size && (
                 <span style={{ color: "var(--t3)", fontSize: 12 }}>{formatSize(asset.file_size)}</span>
               )}
-              {allowDownload && asset?.bunny_video_guid && (
-                <a
-                  href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-download?token=${token}`}
-                  className="btn-ghost"
-                  style={{ fontSize: 13 }}
-                  download
-                >
+              {allowDownload && asset?.wasabi_key && (
+                <button className="btn-ghost" style={{ fontSize: 13 }} onClick={handleDownload}>
                   <DownloadSimple size={14} /> Download
-                </a>
+                </button>
               )}
             </div>
           </div>
 
-          {bunnyGuid && asset?.bunny_playback_url ? (
-            <div className="asset-player share-player">
-              <iframe
-                ref={iframeRef}
-                src={`${asset.bunny_playback_url}?autoplay=false&preload=true`}
-                style={{ border: "none", width: "100%", height: "100%" }}
-                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
-                allowFullScreen
-                title={asset?.name}
-              />
-            </div>
-          ) : (
-            <div className="asset-player asset-player-processing">
-              <VideoCamera size={48} weight="thin" />
-              <p>No video available</p>
-            </div>
-          )}
+          <div className="asset-player share-player">
+            {asset?.wasabi_status === 'ready' && asset?.videoUrl ? (
+              isVideo ? (
+                <video
+                  ref={videoRef}
+                  src={asset.videoUrl}
+                  poster={asset.thumbnailUrl || undefined}
+                  controls
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                  onTimeUpdate={e => setCurrentTime(e.target.currentTime)}
+                />
+              ) : isImage ? (
+                <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              ) : isAudio ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100%' }}>
+                  <MusicNote size={48} weight="duotone" style={{ color: 'var(--purple-l)' }} />
+                  <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
+                  <audio controls src={asset.videoUrl} style={{ width: '100%', maxWidth: 400 }} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: '100%' }}>
+                  <File size={48} weight="duotone" style={{ color: 'var(--t3)' }} />
+                  <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
+                  {allowDownload && <button className="btn-primary-sm" onClick={handleDownload}><DownloadSimple size={14} /> Download</button>}
+                </div>
+              )
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' }}>
+                <FileVideo size={48} weight="thin" style={{ color: 'var(--t3)' }} />
+                <p style={{ color: 'var(--t3)' }}>No preview available</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Notes */}
@@ -220,7 +228,7 @@ export default function MediaSharePage() {
                       {c.timestamp_seconds != null && (
                         <button
                           className="share-comment-ts"
-                          onClick={() => iframeRef.current?.contentWindow?.postMessage({ event: "seek", seconds: c.timestamp_seconds }, "*")}
+                          onClick={() => { if (videoRef.current) videoRef.current.currentTime = c.timestamp_seconds }}
                         >
                           {formatDuration(c.timestamp_seconds)}
                         </button>
@@ -235,9 +243,7 @@ export default function MediaSharePage() {
 
             <form className="share-comment-form" onSubmit={postComment}>
               {currentTime > 0 && (
-                <span className="share-comment-time-hint">
-                  Comment at {formatDuration(currentTime)}
-                </span>
+                <span className="share-comment-time-hint">Comment at {formatDuration(currentTime)}</span>
               )}
               <div style={{ display: "flex", gap: 8 }}>
                 <input
@@ -260,14 +266,29 @@ export default function MediaSharePage() {
 }
 
 function SharedAssetTile({ asset, allowDownload, parentToken }) {
-  const hasVideo = asset.bunny_video_status === "ready" && asset.bunny_playback_url;
+  async function handleDownload(e) {
+    e.stopPropagation()
+    try {
+      const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+      const res = await fetch(`${BASE}/download?asset_id=${asset.id}&share_token=${parentToken}&type=download`)
+      const { url } = await res.json()
+      if (!url) return
+      const a = document.createElement('a')
+      a.href = url
+      a.download = asset.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch {}
+  }
+
   return (
     <div className="media-asset-card" style={{ cursor: "default" }}>
       <div className="media-asset-thumb">
-        {asset.bunny_thumbnail_url ? (
-          <img src={asset.bunny_thumbnail_url} alt={asset.name} />
+        {asset.thumbnailUrl ? (
+          <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = 'none' }} />
         ) : (
-          <VideoCamera size={36} weight="duotone" style={{ color: "#a78bfa" }} />
+          <FileVideo size={36} weight="duotone" style={{ color: "#a78bfa" }} />
         )}
         {asset.duration && (
           <span className="media-duration-badge">{formatDuration(asset.duration)}</span>
@@ -275,16 +296,14 @@ function SharedAssetTile({ asset, allowDownload, parentToken }) {
       </div>
       <div className="media-asset-info">
         <span className="media-asset-name">{asset.name}</span>
-        {allowDownload && hasVideo && (
-          <a
-            href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-download?token=${parentToken}&assetId=${asset.id}`}
+        {allowDownload && asset.wasabi_status === 'ready' && (
+          <button
             className="btn-ghost"
-            style={{ fontSize: 11, padding: "2px 8px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4 }}
-            onClick={e => e.stopPropagation()}
-            download
+            style={{ fontSize: 11, padding: "2px 8px", marginTop: 4 }}
+            onClick={handleDownload}
           >
             <DownloadSimple size={12} /> Download
-          </a>
+          </button>
         )}
       </div>
     </div>

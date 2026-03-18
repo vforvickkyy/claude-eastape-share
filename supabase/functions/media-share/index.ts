@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       // No assetId → return all share links for this user with joined asset/project info
       const { data, error } = await supabase
         .from('media_share_links')
-        .select('*, media_assets(id, name, bunny_thumbnail_url, duration), media_projects(id, name)')
+        .select('*, media_assets(id, name, wasabi_thumbnail_key, duration), media_projects(id, name)')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
         .limit(100)
