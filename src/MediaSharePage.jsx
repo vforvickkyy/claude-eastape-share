@@ -43,16 +43,15 @@ export default function MediaSharePage() {
   async function handleDownload() {
     try {
       const res = await fetch(`${BASE}/download?asset_id=${data.asset.id}&share_token=${token}&type=download`)
-      if (!res.ok) return
-      const blob = await res.blob()
-      const blobUrl = URL.createObjectURL(blob)
+      const { url } = await res.json()
+      if (!url) return
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = data.asset.name
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
     } catch {}
   }
 
@@ -273,16 +272,15 @@ function SharedAssetTile({ asset, allowDownload, parentToken }) {
     try {
       const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
       const res = await fetch(`${BASE}/download?asset_id=${asset.id}&share_token=${parentToken}&type=download`)
-      if (!res.ok) return
-      const blob = await res.blob()
-      const blobUrl = URL.createObjectURL(blob)
+      const { url } = await res.json()
+      if (!url) return
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = asset.name
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
     } catch {}
   }
 

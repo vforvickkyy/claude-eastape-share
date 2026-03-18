@@ -136,16 +136,15 @@ export default function MediaAssetPage() {
       const res = await fetch(`${BASE}/download?asset_id=${assetId}&type=download`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!res.ok) throw new Error('Download failed')
-      const blob = await res.blob()
-      const blobUrl = URL.createObjectURL(blob)
+      const { url } = await res.json()
+      if (!url) throw new Error('No URL returned')
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = asset.name
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
     } catch (err) {
       alert('Download failed: ' + err.message)
     }
