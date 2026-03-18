@@ -16,6 +16,59 @@ function randomHex(bytes: number): string {
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+// ── Presigned GET URL (thumbnail) ─────────────────────────────────────────
+const enc = new TextEncoder()
+
+async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer> {
+  const raw = typeof key === 'string' ? enc.encode(key) : new Uint8Array(key)
+  const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return crypto.subtle.sign('HMAC', k, enc.encode(msg))
+}
+
+function hex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function presignGet(
+  endpoint: string, bucket: string, key: string,
+  accessKeyId: string, secretAccessKey: string, region: string,
+  expiresIn = 3600,
+): Promise<string> {
+  const now = new Date()
+  const date     = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const service = 's3'
+  const credentialScope = `${date}/${region}/${service}/aws4_request`
+
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm',     'AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential',    `${accessKeyId}/${credentialScope}`)
+  qp.set('X-Amz-Date',          datetime)
+  qp.set('X-Amz-Expires',       String(expiresIn))
+  qp.set('X-Amz-SignedHeaders', 'host')
+  qp.set('response-cache-control', 'max-age=3600')
+
+  const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
+
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+
+  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion  = await hmac(kDate, region)
+  const kService = await hmac(kRegion, service)
+  const kSign    = await hmac(kService, 'aws4_request')
+  const sig      = hex(await hmac(kSign, stringToSign))
+
+  return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -26,10 +79,17 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
+    const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? '').replace(/\/$/, '')
+    const BUCKET   = Deno.env.get('AWS_BUCKET_NAME') ?? ''
+    const ACCESS   = Deno.env.get('AWS_ACCESS_KEY_ID') ?? ''
+    const SECRET   = Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? ''
+    const REGION   = Deno.env.get('AWS_REGION') ?? 'us-east-1'
+    const canSign  = !!(ENDPOINT && BUCKET && ACCESS && SECRET)
+
     const url = new URL(req.url)
-    const id        = url.searchParams.get('id')
-    const projectId = url.searchParams.get('projectId')
-    const folderId  = url.searchParams.get('folderId')
+    const id         = url.searchParams.get('id')
+    const projectId  = url.searchParams.get('projectId')
+    const folderId   = url.searchParams.get('folderId')
     const limitParam = url.searchParams.get('limit')
 
     async function getProjectRole(pId: string): Promise<string | null> {
@@ -40,20 +100,33 @@ Deno.serve(async (req) => {
       return mem?.role ?? null
     }
 
+    // Add presigned thumbnail URL to an asset (if it has a thumbnail key)
+    async function withThumbnail(asset: any): Promise<any> {
+      if (!canSign || !asset?.wasabi_thumbnail_key) return asset
+      try {
+        const thumbnailUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
+        return { ...asset, thumbnailUrl }
+      } catch {
+        return asset
+      }
+    }
+
     if (req.method === 'GET') {
+      // Single asset
       if (id) {
         const { data, error } = await supabase
           .from('media_assets')
-          .select('*, media_asset_versions(*), media_comments(count)')
+          .select('*, media_asset_versions(*)')
           .eq('id', id).single()
         if (error || !data) return json({ error: 'Not found' }, 404)
         if (data.user_id !== user.id) {
           const role = await getProjectRole(data.project_id)
           if (!role) return json({ error: 'Forbidden' }, 403)
         }
-        return json({ asset: data })
+        return json({ asset: await withThumbnail(data) })
       }
 
+      // List by project
       if (projectId) {
         const role = await getProjectRole(projectId)
         if (!role) return json({ error: 'Forbidden' }, 403)
@@ -65,15 +138,18 @@ Deno.serve(async (req) => {
         if (limitParam) q = q.limit(parseInt(limitParam))
         const { data, error } = await q
         if (error) return json({ error: error.message }, 500)
-        return json({ assets: data })
+        const assets = await Promise.all((data || []).map(withThumbnail))
+        return json({ assets })
       }
 
+      // All user's own assets
       let q = supabase.from('media_assets').select('*, media_projects(name)').eq('user_id', user.id)
       q = q.order('created_at', { ascending: false })
       if (limitParam) q = q.limit(parseInt(limitParam))
       const { data, error } = await q
       if (error) return json({ error: error.message }, 500)
-      return json({ assets: data })
+      const assets = await Promise.all((data || []).map(withThumbnail))
+      return json({ assets })
     }
 
     if (req.method === 'PUT') {
@@ -112,7 +188,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabase.from('media_assets').update(updates).eq('id', id).select().single()
       if (error) return json({ error: error.message }, 500)
-      return json({ asset: data })
+      return json({ asset: await withThumbnail(data) })
     }
 
     if (req.method === 'DELETE') {

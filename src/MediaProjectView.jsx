@@ -147,13 +147,23 @@ export default function MediaProjectView() {
     } catch (err) { alert("Failed to rename: " + err.message); }
   }
 
-  function handleDownload(asset) {
-    if (asset.bunny_playback_url) {
-      window.open(asset.bunny_playback_url, "_blank");
-    } else if (asset.bunny_thumbnail_url) {
-      // derive CDN from thumbnail URL: https://{cdn}/{guid}/thumbnail.jpg
-      const cdnBase = asset.bunny_thumbnail_url.split(`/${asset.bunny_video_guid}/`)[0];
-      window.open(`${cdnBase}/${asset.bunny_video_guid}/play`, "_blank");
+  async function handleDownload(asset) {
+    try {
+      const token = JSON.parse(localStorage.getItem('ets_auth'))?.access_token
+      const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+      const res = await fetch(`${BASE}/download?asset_id=${asset.id}&type=download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const { url } = await res.json()
+      if (!url) return
+      const a = document.createElement('a')
+      a.href = url
+      a.download = asset.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (err) {
+      alert('Download failed: ' + err.message)
     }
   }
 
@@ -865,7 +875,7 @@ function AssetContextMenu({ asset, pos, copied, onClose, onOpen, onRename, onCop
           <Link size={13} /> Share settings
         </button>
       )}
-      {(asset.bunny_playback_url || asset.bunny_thumbnail_url) && (
+      {asset.wasabi_key && (
         <button className="card-menu-item" onClick={() => act(onDownload)}>
           <DownloadSimple size={13} /> Download
         </button>
@@ -947,9 +957,9 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
 
         {/* Thumbnail */}
         <div className="media-asset-thumb">
-          {asset.bunny_video_status === "ready" && asset.bunny_thumbnail_url ? (
-            <img src={asset.bunny_thumbnail_url} alt={asset.name} />
-          ) : asset.bunny_video_status === "uploading" ? (
+          {asset.thumbnailUrl ? (
+            <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = 'none' }} />
+          ) : asset.wasabi_status === "uploading" ? (
             <div className="media-asset-thumb-processing">
               <span className="spinner" /><span>Processing…</span>
             </div>
@@ -1093,7 +1103,7 @@ function ListRowMenu({ asset, copied, onOpen, onRename, onCopyLink, onShare, onD
             {copied === asset.id ? "Copied!" : "Copy link"}
           </button>
           <button className="card-menu-item" onClick={() => { setOpen(false); onShare(); }}><Link size={13} /> Share settings</button>
-          {(asset.bunny_playback_url || asset.bunny_thumbnail_url) && (
+          {asset.wasabi_key && (
             <button className="card-menu-item" onClick={() => { setOpen(false); onDownload(); }}><DownloadSimple size={13} /> Download</button>
           )}
           <button className="card-menu-item" onClick={() => { setOpen(false); onMove(); }}><FolderSimplePlus size={13} /> Move to folder</button>
