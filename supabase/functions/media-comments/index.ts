@@ -17,8 +17,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
 
-    const { data: { user }, error: authErr } = await authClient.auth.getUser()
-    if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+    const { data: { user } } = await authClient.auth.getUser()
 
     const url = new URL(req.url)
     const id = url.searchParams.get('id')
@@ -26,6 +25,7 @@ Deno.serve(async (req) => {
 
     if (req.method === 'GET') {
       if (!assetId) return json({ error: 'assetId required' }, 400)
+      if (!user) return json({ error: 'Unauthorized' }, 401)
 
       const { data: asset } = await supabase.from('media_assets').select('id, user_id').eq('id', assetId).single()
       if (!asset) return json({ error: 'Asset not found' }, 404)
@@ -45,8 +45,27 @@ Deno.serve(async (req) => {
     }
 
     if (req.method === 'POST') {
-      const { assetId: aid, body, timestampSeconds, parentCommentId } = await req.json()
+      const { assetId: aid, body, timestampSeconds, parentCommentId, shareToken, guestName } = await req.json()
       if (!aid || !body) return json({ error: 'assetId and body required' }, 400)
+
+      // Guest comment via share token (no auth required)
+      if (shareToken) {
+        const { data: link } = await supabase.from('media_share_links').select('*').eq('token', shareToken).eq('asset_id', aid).single()
+        if (!link) return json({ error: 'Invalid share token' }, 403)
+        if (!link.allow_comments) return json({ error: 'Comments not allowed on this link' }, 403)
+        if (link.expires_at && new Date(link.expires_at) < new Date()) return json({ error: 'Share link expired' }, 410)
+
+        const { data, error } = await supabase
+          .from('media_comments')
+          .insert({ asset_id: aid, user_id: null, guest_name: guestName?.trim() || 'Anonymous', body, timestamp_seconds: timestampSeconds ?? null, parent_comment_id: parentCommentId ?? null })
+          .select()
+          .single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ comment: data }, 201)
+      }
+
+      // Authenticated comment
+      if (!user) return json({ error: 'Unauthorized' }, 401)
 
       const { data, error } = await supabase
         .from('media_comments')
@@ -56,6 +75,8 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500)
       return json({ comment: data }, 201)
     }
+
+    if (!user) return json({ error: 'Unauthorized' }, 401)
 
     if (req.method === 'PUT') {
       if (!id) return json({ error: 'id required' }, 400)

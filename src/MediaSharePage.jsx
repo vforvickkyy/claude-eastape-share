@@ -19,6 +19,7 @@ export default function MediaSharePage() {
   const [pwError,    setPwError]   = useState("");
   const [comments,   setComments]  = useState([]);
   const [newComment, setNewComment] = useState("");
+  const [guestName,  setGuestName]  = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const videoRef = useRef(null);
@@ -60,14 +61,22 @@ export default function MediaSharePage() {
     if (!newComment.trim()) return;
     setSubmitting(true);
     try {
-      const d = await mediaApi.createComment({
-        assetId: data?.asset?.id,
-        body: newComment.trim(),
-        timestampSeconds: currentTime > 0 ? Math.floor(currentTime) : null,
-        shareToken: token,
+      const res = await fetch(`${BASE}/media-comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId: data?.asset?.id,
+          body: newComment.trim(),
+          timestampSeconds: currentTime > 0 ? Math.floor(currentTime) : null,
+          shareToken: token,
+          guestName: guestName.trim() || 'Anonymous',
+        }),
       });
-      setComments(cs => [...cs, d.comment]);
-      setNewComment("");
+      const d = await res.json();
+      if (d.comment) {
+        setComments(cs => [...cs, { ...d.comment, guest_name: guestName.trim() || 'Anonymous' }]);
+        setNewComment("");
+      }
     } catch {}
     setSubmitting(false);
   }
@@ -234,7 +243,7 @@ export default function MediaSharePage() {
                           {formatDuration(c.timestamp_seconds)}
                         </button>
                       )}
-                      <span className="share-comment-author">{c.profiles?.full_name || "Anonymous"}</span>
+                      <span className="share-comment-author">{c.profiles?.full_name || c.guest_name || "Anonymous"}</span>
                     </div>
                     <p className="share-comment-body">{c.body}</p>
                   </div>
@@ -246,6 +255,14 @@ export default function MediaSharePage() {
               {currentTime > 0 && (
                 <span className="share-comment-time-hint">Comment at {formatDuration(currentTime)}</span>
               )}
+              <input
+                className="form-input"
+                placeholder="Your name (optional)"
+                value={guestName}
+                onChange={e => setGuestName(e.target.value)}
+                disabled={submitting}
+                style={{ marginBottom: 6 }}
+              />
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   className="form-input"
