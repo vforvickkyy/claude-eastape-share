@@ -22,6 +22,45 @@ async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer
   return crypto.subtle.sign('HMAC', k, enc.encode(msg))
 }
 
+// Simple presigned GET — no response-* overrides (use for view/streaming)
+async function presignGetSimple(
+  endpoint: string, bucket: string, key: string,
+  accessKeyId: string, secretAccessKey: string, region: string,
+  expiresIn = 14400,
+): Promise<string> {
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const service = 's3'
+  const credentialScope = `${date}/${region}/${service}/aws4_request`
+
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm',     'AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential',    `${accessKeyId}/${credentialScope}`)
+  qp.set('X-Amz-Date',          datetime)
+  qp.set('X-Amz-Expires',       String(expiresIn))
+  qp.set('X-Amz-SignedHeaders', 'host')
+
+  const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
+
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+
+  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion  = await hmac(kDate, region)
+  const kService = await hmac(kRegion, service)
+  const kSign    = await hmac(kService, 'aws4_request')
+  const sig      = hex(await hmac(kSign, stringToSign))
+
+  return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
+}
+
+// Presigned GET with response-content-disposition override (use for forced download)
 async function presignGet(
   endpoint: string,
   bucket: string,
@@ -31,7 +70,6 @@ async function presignGet(
   secretAccessKey: string,
   region: string,
   expiresIn = 120,
-  inline = false,
 ): Promise<string> {
   const now = new Date()
   const date = now.toISOString().slice(0, 10).replace(/-/g, '')
@@ -48,12 +86,7 @@ async function presignGet(
   qp.set('X-Amz-Date', datetime)
   qp.set('X-Amz-Expires', String(expiresIn))
   qp.set('X-Amz-SignedHeaders', 'host')
-  qp.set('response-cache-control', 'no-store')
-  if (inline) {
-    qp.set('response-content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`)
-  } else {
-    qp.set('response-content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
-  }
+  qp.set('response-content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
 
   const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
   const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
@@ -161,11 +194,13 @@ Deno.serve(async (req) => {
         // Increment view count (fire and forget)
         supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
 
-        const isInline = dlType === 'view'
-        const viewUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 14400, isInline)
+        const isView = dlType === 'view'
+        const viewUrl = isView
+          ? await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
+          : await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 3600)
         let thumbnailUrl: string | null = null
         if (asset.wasabi_thumbnail_key) {
-          thumbnailUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, asset.name + '.jpg', ACCESS, SECRET, REGION, 3600, true)
+          thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
         }
 
         return json({ url: viewUrl, thumbnailUrl, asset })
@@ -186,11 +221,13 @@ Deno.serve(async (req) => {
         if (!member) return json({ error: 'Forbidden' }, 403)
       }
 
-      const isInline = dlType === 'view'
-      const viewUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 14400, isInline)
+      const isView = dlType === 'view'
+      const viewUrl = isView
+        ? await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
+        : await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 3600)
       let thumbnailUrl: string | null = null
       if (asset.wasabi_thumbnail_key) {
-        thumbnailUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, asset.name + '.jpg', ACCESS, SECRET, REGION, 3600, true)
+        thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
       }
 
       return json({ url: viewUrl, thumbnailUrl, asset })

@@ -238,6 +238,7 @@ export default function MediaAssetPage() {
                   <VideoPlayer
                     ref={playerRef}
                     src={videoSrc}
+                    mimeType={asset.mime_type}
                     poster={thumbSrc}
                     onTimeUpdate={setCurrentTime}
                   />

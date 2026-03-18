@@ -2,7 +2,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
 
-const VideoPlayer = forwardRef(({ src, poster, onTimeUpdate, onReady }, ref) => {
+const VideoPlayer = forwardRef(({ src, mimeType, poster, onTimeUpdate, onReady }, ref) => {
   const videoRef = useRef(null)
   const playerRef = useRef(null)
 
@@ -22,7 +22,7 @@ const VideoPlayer = forwardRef(({ src, poster, onTimeUpdate, onReady }, ref) => 
         preload: 'metadata',
         poster,
         playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
-        sources: src ? [{ src, type: 'video/mp4' }] : [],
+        sources: src ? [{ src, type: mimeType || 'video/mp4' }] : [],
       })
 
       playerRef.current.on('timeupdate', () => {
@@ -37,7 +37,7 @@ const VideoPlayer = forwardRef(({ src, poster, onTimeUpdate, onReady }, ref) => 
 
   useEffect(() => {
     if (playerRef.current && src) {
-      playerRef.current.src([{ src, type: 'video/mp4' }])
+      playerRef.current.src([{ src, type: mimeType || 'video/mp4' }])
       if (poster) playerRef.current.poster(poster)
     }
   }, [src, poster])
