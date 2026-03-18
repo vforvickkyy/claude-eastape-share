@@ -15,7 +15,8 @@
       "mcp__claude_ai_Supabase__execute_sql",
       "mcp__claude_ai_Supabase__list_edge_functions",
       "Bash(node -e \"const p = require\\(''d:/Node/claude-eastape-share/node_modules/@phosphor-icons/react''\\); const icons = [''FolderArrowDown'',''CheckSquare'',''Square'',''ArrowsOut'']; icons.forEach\\(i => console.log\\(i, !!p[i]\\)\\)\")",
-      "Bash(node -e \"const p = require\\(''@phosphor-icons/react''\\); [''FolderArrowDown'',''CheckSquare'',''Square'',''ArrowsOut''].forEach\\(i => console.log\\(i, !!p[i]\\)\\)\")"
+      "Bash(node -e \"const p = require\\(''@phosphor-icons/react''\\); [''FolderArrowDown'',''CheckSquare'',''Square'',''ArrowsOut''].forEach\\(i => console.log\\(i, !!p[i]\\)\\)\")",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

@@ -93,26 +93,32 @@ export const userApi = {
 // ── Media ──────────────────────────────────────────────────────────
 export const mediaApi = {
   // Projects
-  getProjects:    ()     => get(`${BASE}/media-projects`, {}, true),
-  createProject:  (body) => post(`${BASE}/media-projects`, body, true),
+  getProjects:    ()         => get(`${BASE}/media-projects`, {}, true),
+  createProject:  (body)     => post(`${BASE}/media-projects`, body, true),
   updateProject:  (id, body) => put(`${BASE}/media-projects`, { id }, body, true),
-  deleteProject:  (id)   => del(`${BASE}/media-projects`, { id }, true),
+  deleteProject:  (id)       => del(`${BASE}/media-projects`, { id }, true),
 
   // Folders
-  getFolders:     (params) => get(`${BASE}/media-folders`, params, true),
-  createFolder:   (body)   => post(`${BASE}/media-folders`, body, true),
+  getFolders:     (params)   => get(`${BASE}/media-folders`, params, true),
+  createFolder:   (body)     => post(`${BASE}/media-folders`, body, true),
   updateFolder:   (id, body) => put(`${BASE}/media-folders`, { id }, body, true),
-  deleteFolder:   (id)     => del(`${BASE}/media-folders`, { id }, true),
+  deleteFolder:   (id)       => del(`${BASE}/media-folders`, { id }, true),
 
   // Assets
-  getAssets:      (params) => get(`${BASE}/media-assets`, params, true),
-  getAsset:       (id)     => get(`${BASE}/media-assets`, { id }, true),
+  getAssets:      (params)   => get(`${BASE}/media-assets`, params, true),
+  getAsset:       (id)       => get(`${BASE}/media-assets`, { id }, true),
   updateAsset:    (id, body) => put(`${BASE}/media-assets`, { id }, body, true),
-  deleteAsset:    (id)     => del(`${BASE}/media-assets`, { id }, true),
+  deleteAsset:    (id)       => del(`${BASE}/media-assets`, { id }, true),
 
-  // Upload
-  uploadInit:     (body)   => post(`${BASE}/media-upload-init`, body, true),
-  uploadStatus:   (assetId) => get(`${BASE}/media-upload-status`, { assetId }, true),
+  // Upload — Wasabi S3 via extended presign + media-confirm-upload
+  mediaPresignUpload:  (body) => post(`${BASE}/presign`, { ...body, upload_type: 'media' }, true),
+  mediaConfirmUpload:  (body) => post(`${BASE}/media-confirm-upload`, body, true),
+
+  // Playback / download — via extended download function
+  mediaGetViewUrl:     (assetId) => get(`${BASE}/download`, { asset_id: assetId, type: 'view' }, true),
+  mediaGetDownloadUrl: (assetId) => get(`${BASE}/download`, { asset_id: assetId, type: 'download' }, true),
+  mediaGetPublicUrl:   (assetId, shareToken, type = 'view') =>
+    get(`${BASE}/download`, { asset_id: assetId, share_token: shareToken, type }),
 
   // Comments
   getComments:    (assetId) => get(`${BASE}/media-comments`, { assetId }, true),
@@ -121,16 +127,16 @@ export const mediaApi = {
   deleteComment:  (id)      => del(`${BASE}/media-comments`, { id }, true),
 
   // Share links
-  getShareLinks:  (assetId) => assetId ? get(`${BASE}/media-share`, { assetId }, true) : get(`${BASE}/media-share`, {}, true),
-  createShareLink:(body)    => post(`${BASE}/media-share`, body, true),
-  deleteShareLink:(id)      => del(`${BASE}/media-share`, { id }, true),
-  resolveShare:   (token, password) => get(`${BASE}/media-share-resolve`, password ? { token, password } : { token }),
+  getShareLinks:   (assetId) => assetId ? get(`${BASE}/media-share`, { assetId }, true) : get(`${BASE}/media-share`, {}, true),
+  createShareLink: (body)    => post(`${BASE}/media-share`, body, true),
+  deleteShareLink: (id)      => del(`${BASE}/media-share`, { id }, true),
+  resolveShare:    (token, password) => get(`${BASE}/media-share-resolve`, password ? { token, password } : { token }),
 
   // Team
-  getTeam:        (projectId) => get(`${BASE}/media-team`, { projectId }, true),
-  inviteMember:   (body)      => post(`${BASE}/media-team`, body, true),
-  updateMember:   (id, body)  => put(`${BASE}/media-team`, { id }, body, true),
-  removeMember:   (id)        => del(`${BASE}/media-team`, { id }, true),
+  getTeam:       (projectId) => get(`${BASE}/media-team`, { projectId }, true),
+  inviteMember:  (body)      => post(`${BASE}/media-team`, body, true),
+  updateMember:  (id, body)  => put(`${BASE}/media-team`, { id }, body, true),
+  removeMember:  (id)        => del(`${BASE}/media-team`, { id }, true),
 }
 
 /**
@@ -174,8 +180,6 @@ function legacyPathToEdge(path) {
     '/api/media/assets':           `${BASE}/media-assets`,
     '/api/media/comments':         `${BASE}/media-comments`,
     '/api/media/share':            `${BASE}/media-share`,
-    '/api/media/upload-init':      `${BASE}/media-upload-init`,
-    '/api/media/upload-status':    `${BASE}/media-upload-status`,
     '/api/media/team':             `${BASE}/media-team`,
   }
 

@@ -27,12 +27,11 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
     const url = new URL(req.url)
-    const id = url.searchParams.get('id')
+    const id        = url.searchParams.get('id')
     const projectId = url.searchParams.get('projectId')
-    const folderId = url.searchParams.get('folderId')
+    const folderId  = url.searchParams.get('folderId')
     const limitParam = url.searchParams.get('limit')
 
-    // ── Helper: get user's role in a project (null = no access) ──────────────
     async function getProjectRole(pId: string): Promise<string | null> {
       const { data: proj } = await supabase.from('media_projects').select('user_id').eq('id', pId).single()
       if (!proj) return null
@@ -42,14 +41,12 @@ Deno.serve(async (req) => {
     }
 
     if (req.method === 'GET') {
-      // Single asset by id
       if (id) {
         const { data, error } = await supabase
           .from('media_assets')
           .select('*, media_asset_versions(*), media_comments(count)')
           .eq('id', id).single()
         if (error || !data) return json({ error: 'Not found' }, 404)
-        // Allow if owner or team member
         if (data.user_id !== user.id) {
           const role = await getProjectRole(data.project_id)
           if (!role) return json({ error: 'Forbidden' }, 403)
@@ -57,7 +54,6 @@ Deno.serve(async (req) => {
         return json({ asset: data })
       }
 
-      // List — if projectId given, check access; else return user's own assets
       if (projectId) {
         const role = await getProjectRole(projectId)
         if (!role) return json({ error: 'Forbidden' }, 403)
@@ -72,7 +68,6 @@ Deno.serve(async (req) => {
         return json({ assets: data })
       }
 
-      // No projectId — return all user's own assets
       let q = supabase.from('media_assets').select('*, media_projects(name)').eq('user_id', user.id)
       q = q.order('created_at', { ascending: false })
       if (limitParam) q = q.limit(parseInt(limitParam))
@@ -85,8 +80,9 @@ Deno.serve(async (req) => {
       if (!id) return json({ error: 'id required' }, 400)
       const body = await req.json()
 
-      // Check if user can edit this asset
-      const { data: existing } = await supabase.from('media_assets').select('user_id, project_id, version, share_token, bunny_video_guid, bunny_playback_url, bunny_thumbnail_url').eq('id', id).single()
+      const { data: existing } = await supabase.from('media_assets')
+        .select('user_id, project_id, version, share_token, wasabi_key, wasabi_thumbnail_key')
+        .eq('id', id).single()
       if (!existing) return json({ error: 'Not found' }, 404)
       if (existing.user_id !== user.id) {
         const role = await getProjectRole(existing.project_id)
@@ -94,7 +90,7 @@ Deno.serve(async (req) => {
       }
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-      const ALLOWED = ['name', 'status', 'folder_id', 'share_enabled', 'bunny_video_guid', 'bunny_video_status', 'bunny_playback_url', 'bunny_thumbnail_url', 'duration', 'notes']
+      const ALLOWED = ['name', 'status', 'folder_id', 'share_enabled', 'wasabi_key', 'wasabi_thumbnail_key', 'wasabi_status', 'duration', 'width', 'height', 'notes']
       for (const key of ALLOWED) {
         if (key in body) updates[key] = body[key]
       }
@@ -107,9 +103,8 @@ Deno.serve(async (req) => {
         await supabase.from('media_asset_versions').insert({
           asset_id: id,
           version_number: existing.version,
-          bunny_video_guid: existing.bunny_video_guid,
-          bunny_playback_url: existing.bunny_playback_url,
-          bunny_thumbnail_url: existing.bunny_thumbnail_url,
+          wasabi_key: existing.wasabi_key,
+          wasabi_thumbnail_key: existing.wasabi_thumbnail_key,
           uploaded_by: user.id,
         })
         updates.version = ((existing.version as number) || 1) + 1
@@ -122,18 +117,11 @@ Deno.serve(async (req) => {
 
     if (req.method === 'DELETE') {
       if (!id) return json({ error: 'id required' }, 400)
-      const { data: asset } = await supabase.from('media_assets').select('user_id, project_id, bunny_video_guid').eq('id', id).single()
+      const { data: asset } = await supabase.from('media_assets').select('user_id, project_id').eq('id', id).single()
       if (!asset) return json({ error: 'Not found' }, 404)
       if (asset.user_id !== user.id) {
         const role = await getProjectRole(asset.project_id)
         if (role !== 'editor' && role !== 'owner') return json({ error: 'Forbidden' }, 403)
-      }
-
-      if (asset.bunny_video_guid && Deno.env.get('BUNNY_STREAM_API_KEY') && Deno.env.get('BUNNY_STREAM_LIBRARY_ID')) {
-        fetch(
-          `https://video.bunnycdn.com/library/${Deno.env.get('BUNNY_STREAM_LIBRARY_ID')}/videos/${asset.bunny_video_guid}`,
-          { method: 'DELETE', headers: { AccessKey: Deno.env.get('BUNNY_STREAM_API_KEY')! } }
-        ).catch(() => {})
       }
 
       const { error } = await supabase.from('media_assets').delete().eq('id', id)

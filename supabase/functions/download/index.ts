@@ -10,7 +10,6 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
-// ── Native AWS Signature V4 ───────────────────────────────────────────────────
 const enc = new TextEncoder()
 
 function hex(buf: ArrayBuffer): string {
@@ -32,6 +31,7 @@ async function presignGet(
   secretAccessKey: string,
   region: string,
   expiresIn = 120,
+  inline = false,
 ): Promise<string> {
   const now = new Date()
   const date = now.toISOString().slice(0, 10).replace(/-/g, '')
@@ -49,7 +49,11 @@ async function presignGet(
   qp.set('X-Amz-Expires', String(expiresIn))
   qp.set('X-Amz-SignedHeaders', 'host')
   qp.set('response-cache-control', 'no-store')
-  qp.set('response-content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+  if (inline) {
+    qp.set('response-content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+  } else {
+    qp.set('response-content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+  }
 
   const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
   const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
@@ -127,15 +131,75 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
     const url = new URL(req.url)
-    const token = url.searchParams.get('token')
-    const fileId = url.searchParams.get('fileId')
-    if (!token || !fileId) return json({ error: 'token and fileId are required' }, 400)
+    const assetId   = url.searchParams.get('asset_id')
+    const shareToken = url.searchParams.get('share_token')
+    const dlType    = url.searchParams.get('type') || 'view'   // 'view' | 'download'
 
     const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
     const BUCKET   = (Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? '')
     const ACCESS   = (Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? '')
     const SECRET   = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
     const REGION   = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
+
+    // ── MEDIA ASSET PATH ─────────────────────────────────────────────────────
+    if (assetId) {
+      // Public share token access
+      if (shareToken) {
+        const { data: link } = await supabase
+          .from('media_share_links')
+          .select('*, media_assets(*)')
+          .eq('token', shareToken)
+          .single()
+
+        if (!link) return json({ error: 'Share link not found' }, 404)
+        if (link.expires_at && new Date(link.expires_at) < new Date()) return json({ error: 'Share link expired' }, 410)
+        if (dlType === 'download' && !link.allow_download) return json({ error: 'Download not allowed' }, 403)
+
+        const asset = link.media_assets
+        if (!asset || asset.id !== assetId) return json({ error: 'Asset not found' }, 404)
+
+        // Increment view count (fire and forget)
+        supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
+
+        const isInline = dlType === 'view'
+        const viewUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 14400, isInline)
+        let thumbnailUrl: string | null = null
+        if (asset.wasabi_thumbnail_key) {
+          thumbnailUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, asset.name + '.jpg', ACCESS, SECRET, REGION, 3600, true)
+        }
+
+        return json({ url: viewUrl, thumbnailUrl, asset })
+      }
+
+      // Authenticated access
+      const authHeader = req.headers.get('Authorization') ?? ''
+      const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } })
+      const { data: { user }, error: authErr } = await authClient.auth.getUser()
+      if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+
+      const { data: asset, error: assetErr } = await supabase.from('media_assets').select('*').eq('id', assetId).single()
+      if (assetErr || !asset) return json({ error: 'Asset not found' }, 404)
+
+      // Verify ownership or team membership
+      if (asset.user_id !== user.id) {
+        const { data: member } = await supabase.from('media_team_members').select('role').eq('project_id', asset.project_id).eq('user_id', user.id).single()
+        if (!member) return json({ error: 'Forbidden' }, 403)
+      }
+
+      const isInline = dlType === 'view'
+      const viewUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 14400, isInline)
+      let thumbnailUrl: string | null = null
+      if (asset.wasabi_thumbnail_key) {
+        thumbnailUrl = await presignGet(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, asset.name + '.jpg', ACCESS, SECRET, REGION, 3600, true)
+      }
+
+      return json({ url: viewUrl, thumbnailUrl, asset })
+    }
+
+    // ── DRIVE DOWNLOAD PATH (original logic) ──────────────────────────────────
+    const token  = url.searchParams.get('token')
+    const fileId = url.searchParams.get('fileId')
+    if (!token || !fileId) return json({ error: 'token and fileId are required' }, 400)
 
     const { data, error } = await supabase
       .from('shares')
@@ -160,7 +224,6 @@ Deno.serve(async (req) => {
       .update({ storage_deleted: true, storage_deleted_at: new Date().toISOString() })
       .eq('token', data.token)
 
-    // Background delete (fire and forget)
     if (batchFiles?.length && ENDPOINT && BUCKET && ACCESS && SECRET) {
       Promise.allSettled(
         batchFiles.map((f: { file_url: string }) => s3Delete(ENDPOINT, BUCKET, f.file_url, ACCESS, SECRET, REGION))
