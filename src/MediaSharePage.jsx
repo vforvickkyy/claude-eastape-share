@@ -4,11 +4,13 @@ import { motion } from "framer-motion";
 import {
   DownloadSimple, Lock, Warning, MusicNote, File,
   FileImage, FileVideo, ChatCircle, PaperPlaneTilt, X,
-  Play,
+  CaretLeft, CaretRight,
 } from "@phosphor-icons/react";
 import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
 import { mediaApi } from "./lib/api.js";
+import VideoPlayer from "./components/media/VideoPlayer";
+import "./styles/videojs-theme.css";
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
@@ -23,8 +25,10 @@ export default function MediaSharePage() {
   const [guestName,  setGuestName]  = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const videoRef = useRef(null);
-  const [assetPreview, setAssetPreview] = useState(null);
+  const playerRef = useRef(null);
+
+  // Folder/project preview modal — track by index for prev/next
+  const [previewIdx, setPreviewIdx] = useState(null);
 
   useEffect(() => { loadShare(); }, []);
 
@@ -49,12 +53,8 @@ export default function MediaSharePage() {
       const { url } = await res.json()
       if (!url) return
       const a = document.createElement('a')
-      a.href = url
-      a.target = '_blank'
-      a.rel = 'noopener noreferrer'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
     } catch {}
   }
 
@@ -131,6 +131,7 @@ export default function MediaSharePage() {
   if (data.type === "folder" || data.type === "project") {
     const { folder, project, assets: folderAssets = [], allowDownload: dlOk } = data;
     const title = folder?.name || project?.name || "Shared Folder";
+    const previewAsset = previewIdx != null ? folderAssets[previewIdx] : null;
 
     async function downloadAll() {
       for (const a of folderAssets) {
@@ -163,41 +164,70 @@ export default function MediaSharePage() {
             <p style={{ color: "var(--t3)", fontSize: 13 }}>No files in this shared folder.</p>
           ) : (
             <div className="media-asset-grid">
-              {folderAssets.map(a => (
-                <SharedAssetTile key={a.id} asset={a} allowDownload={dlOk} parentToken={token} onPreview={() => setAssetPreview(a)} />
+              {folderAssets.map((a, idx) => (
+                <SharedAssetTile
+                  key={a.id}
+                  asset={a}
+                  allowDownload={dlOk}
+                  parentToken={token}
+                  onPreview={() => setPreviewIdx(idx)}
+                />
               ))}
             </div>
           )}
         </div>
 
-        {/* Asset preview overlay */}
-        {assetPreview && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-            onClick={() => setAssetPreview(null)}
+        {/* Asset preview modal with VideoPlayer + prev/next */}
+        {previewAsset && (
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+            onClick={() => setPreviewIdx(null)}
           >
-            <div style={{ position: 'relative', width: '100%', maxWidth: 900, background: '#0d1320', borderRadius: 12, overflow: 'hidden', padding: 16 }}
+            <div
+              style={{ position: 'relative', width: '100%', maxWidth: 960, background: '#0d1320', borderRadius: 14, overflow: 'hidden' }}
               onClick={e => e.stopPropagation()}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontWeight: 600 }}>{assetPreview.name}</span>
-                <button className="btn-ghost" onClick={() => setAssetPreview(null)}><X size={16} /></button>
+              {/* Modal header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                {/* Prev */}
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12, opacity: previewIdx > 0 ? 1 : 0.25 }}
+                  disabled={previewIdx <= 0}
+                  onClick={() => setPreviewIdx(i => i - 1)}
+                >
+                  <CaretLeft size={13} /> Prev
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--t3)', minWidth: 48, textAlign: 'center' }}>
+                  {previewIdx + 1} / {folderAssets.length}
+                </span>
+                {/* Next */}
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12, opacity: previewIdx < folderAssets.length - 1 ? 1 : 0.25 }}
+                  disabled={previewIdx >= folderAssets.length - 1}
+                  onClick={() => setPreviewIdx(i => i + 1)}
+                >
+                  Next <CaretRight size={13} />
+                </button>
+
+                <span style={{ fontWeight: 600, fontSize: 13, flex: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {previewAsset.name}
+                </span>
+
+                {/* Download */}
+                {dlOk && previewAsset.wasabi_status === 'ready' && (
+                  <SharedAssetTile asset={previewAsset} allowDownload={dlOk} parentToken={token} downloadOnly />
+                )}
+                <button className="btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setPreviewIdx(null)}>
+                  <X size={16} />
+                </button>
               </div>
-              {assetPreview.videoUrl ? (
-                assetPreview.type === 'video' || assetPreview.mime_type?.startsWith('video/') ? (
-                  <video src={assetPreview.videoUrl} poster={assetPreview.thumbnailUrl} controls autoPlay playsInline style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: '70vh' }} />
-                ) : assetPreview.type === 'image' || assetPreview.mime_type?.startsWith('image/') ? (
-                  <img src={assetPreview.videoUrl} alt={assetPreview.name} style={{ width: '100%', objectFit: 'contain', maxHeight: '70vh' }} />
-                ) : assetPreview.type === 'audio' || assetPreview.mime_type?.startsWith('audio/') ? (
-                  <audio controls src={assetPreview.videoUrl} style={{ width: '100%' }} autoPlay />
-                ) : null
-              ) : (
-                <p style={{ color: 'var(--t3)', textAlign: 'center', padding: 32 }}>No preview available</p>
-              )}
-              {dlOk && assetPreview.wasabi_status === 'ready' && (
-                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-                  <SharedAssetTile asset={assetPreview} allowDownload={dlOk} parentToken={token} downloadOnly />
-                </div>
-              )}
+
+              {/* Media content */}
+              <div style={{ padding: 16 }}>
+                <AssetMediaPlayer asset={previewAsset} />
+              </div>
             </div>
           </div>
         )}
@@ -205,7 +235,7 @@ export default function MediaSharePage() {
     );
   }
 
-  /* ── Asset view ── */
+  /* ── Asset view (single asset share) ── */
   const { asset, allowDownload, allowComments } = data;
   const isVideo = asset?.type === 'video' || asset?.mime_type?.startsWith('video/')
   const isImage = asset?.type === 'image' || asset?.mime_type?.startsWith('image/')
@@ -237,14 +267,12 @@ export default function MediaSharePage() {
           <div className="asset-player share-player">
             {asset?.wasabi_status === 'ready' && asset?.videoUrl ? (
               isVideo ? (
-                <video
-                  ref={videoRef}
+                <VideoPlayer
+                  ref={playerRef}
                   src={asset.videoUrl}
+                  mimeType={asset.mime_type}
                   poster={asset.thumbnailUrl || undefined}
-                  controls
-                  playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
-                  onTimeUpdate={e => setCurrentTime(e.target.currentTime)}
+                  onTimeUpdate={setCurrentTime}
                 />
               ) : isImage ? (
                 <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
@@ -295,7 +323,7 @@ export default function MediaSharePage() {
                       {c.timestamp_seconds != null && (
                         <button
                           className="share-comment-ts"
-                          onClick={() => { if (videoRef.current) videoRef.current.currentTime = c.timestamp_seconds }}
+                          onClick={() => playerRef.current?.seekTo(c.timestamp_seconds)}
                         >
                           {formatDuration(c.timestamp_seconds)}
                         </button>
@@ -340,6 +368,51 @@ export default function MediaSharePage() {
   );
 }
 
+/* Renders the right player/preview for any asset type — used in the folder modal */
+function AssetMediaPlayer({ asset }) {
+  const isVideo = asset?.type === 'video' || asset?.mime_type?.startsWith('video/')
+  const isImage = asset?.type === 'image' || asset?.mime_type?.startsWith('image/')
+  const isAudio = asset?.type === 'audio' || asset?.mime_type?.startsWith('audio/')
+
+  if (!asset?.videoUrl) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 48, color: 'var(--t3)' }}>
+        <FileVideo size={40} weight="thin" />
+        <p style={{ fontSize: 13 }}>No preview available</p>
+      </div>
+    )
+  }
+
+  if (isVideo) {
+    return (
+      <VideoPlayer
+        src={asset.videoUrl}
+        mimeType={asset.mime_type}
+        poster={asset.thumbnailUrl || undefined}
+      />
+    )
+  }
+  if (isImage) {
+    return (
+      <img src={asset.videoUrl} alt={asset.name} style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
+    )
+  }
+  if (isAudio) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '24px 0' }}>
+        <MusicNote size={40} weight="duotone" style={{ color: 'var(--purple-l)' }} />
+        <audio controls src={asset.videoUrl} style={{ width: '100%' }} autoPlay />
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 48, color: 'var(--t3)' }}>
+      <File size={40} weight="duotone" />
+      <p style={{ fontSize: 13 }}>{asset.name}</p>
+    </div>
+  )
+}
+
 function SharedAssetTile({ asset, allowDownload, parentToken, onPreview, downloadOnly }) {
   const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
@@ -382,7 +455,7 @@ function SharedAssetTile({ asset, allowDownload, parentToken, onPreview, downloa
         <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
           {canView && (
             <button className="btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }} onClick={e => { e.stopPropagation(); onPreview?.(); }}>
-              <Play size={11} /> View
+              <CaretRight size={11} /> View
             </button>
           )}
           {allowDownload && asset.wasabi_status === 'ready' && (
