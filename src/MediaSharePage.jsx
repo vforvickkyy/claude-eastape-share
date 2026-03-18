@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   DownloadSimple, Lock, Warning, MusicNote, File,
-  FileImage, FileVideo, ChatCircle, PaperPlaneTilt,
+  FileImage, FileVideo, ChatCircle, PaperPlaneTilt, X,
+  Play,
 } from "@phosphor-icons/react";
 import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
@@ -23,6 +24,7 @@ export default function MediaSharePage() {
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const videoRef = useRef(null);
+  const [assetPreview, setAssetPreview] = useState(null);
 
   useEffect(() => { loadShare(); }, []);
 
@@ -129,21 +131,76 @@ export default function MediaSharePage() {
   if (data.type === "folder" || data.type === "project") {
     const { folder, project, assets: folderAssets = [], allowDownload: dlOk } = data;
     const title = folder?.name || project?.name || "Shared Folder";
+
+    async function downloadAll() {
+      for (const a of folderAssets) {
+        if (!a.wasabi_key || a.wasabi_status !== 'ready') continue;
+        try {
+          const res = await fetch(`${BASE}/download?asset_id=${a.id}&share_token=${token}&type=download`);
+          const { url } = await res.json();
+          if (!url) continue;
+          const el = document.createElement('a');
+          el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer';
+          document.body.appendChild(el); el.click(); document.body.removeChild(el);
+          await new Promise(r => setTimeout(r, 400));
+        } catch {}
+      }
+    }
+
     return (
       <PageShell>
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 0" }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{title}</h1>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h1>
+            {dlOk && folderAssets.some(a => a.wasabi_status === 'ready') && (
+              <button className="btn-ghost" style={{ fontSize: 13 }} onClick={downloadAll}>
+                <DownloadSimple size={14} /> Download all
+              </button>
+            )}
+          </div>
           <p style={{ color: "var(--t3)", fontSize: 12, marginBottom: 24 }}>{folderAssets.length} file{folderAssets.length !== 1 ? "s" : ""}</p>
           {folderAssets.length === 0 ? (
             <p style={{ color: "var(--t3)", fontSize: 13 }}>No files in this shared folder.</p>
           ) : (
             <div className="media-asset-grid">
               {folderAssets.map(a => (
-                <SharedAssetTile key={a.id} asset={a} allowDownload={dlOk} parentToken={token} />
+                <SharedAssetTile key={a.id} asset={a} allowDownload={dlOk} parentToken={token} onPreview={() => setAssetPreview(a)} />
               ))}
             </div>
           )}
         </div>
+
+        {/* Asset preview overlay */}
+        {assetPreview && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            onClick={() => setAssetPreview(null)}
+          >
+            <div style={{ position: 'relative', width: '100%', maxWidth: 900, background: '#0d1320', borderRadius: 12, overflow: 'hidden', padding: 16 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontWeight: 600 }}>{assetPreview.name}</span>
+                <button className="btn-ghost" onClick={() => setAssetPreview(null)}><X size={16} /></button>
+              </div>
+              {assetPreview.videoUrl ? (
+                assetPreview.type === 'video' || assetPreview.mime_type?.startsWith('video/') ? (
+                  <video src={assetPreview.videoUrl} poster={assetPreview.thumbnailUrl} controls autoPlay playsInline style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: '70vh' }} />
+                ) : assetPreview.type === 'image' || assetPreview.mime_type?.startsWith('image/') ? (
+                  <img src={assetPreview.videoUrl} alt={assetPreview.name} style={{ width: '100%', objectFit: 'contain', maxHeight: '70vh' }} />
+                ) : assetPreview.type === 'audio' || assetPreview.mime_type?.startsWith('audio/') ? (
+                  <audio controls src={assetPreview.videoUrl} style={{ width: '100%' }} autoPlay />
+                ) : null
+              ) : (
+                <p style={{ color: 'var(--t3)', textAlign: 'center', padding: 32 }}>No preview available</p>
+              )}
+              {dlOk && assetPreview.wasabi_status === 'ready' && (
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+                  <SharedAssetTile asset={assetPreview} allowDownload={dlOk} parentToken={token} downloadOnly />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </PageShell>
     );
   }
@@ -283,26 +340,33 @@ export default function MediaSharePage() {
   );
 }
 
-function SharedAssetTile({ asset, allowDownload, parentToken }) {
+function SharedAssetTile({ asset, allowDownload, parentToken, onPreview, downloadOnly }) {
+  const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+
   async function handleDownload(e) {
-    e.stopPropagation()
+    e?.stopPropagation()
     try {
-      const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
       const res = await fetch(`${BASE}/download?asset_id=${asset.id}&share_token=${parentToken}&type=download`)
       const { url } = await res.json()
       if (!url) return
       const a = document.createElement('a')
-      a.href = url
-      a.target = '_blank'
-      a.rel = 'noopener noreferrer'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
     } catch {}
   }
 
+  if (downloadOnly) {
+    return allowDownload && asset.wasabi_status === 'ready' ? (
+      <button className="btn-ghost" style={{ fontSize: 13 }} onClick={handleDownload}>
+        <DownloadSimple size={14} /> Download
+      </button>
+    ) : null;
+  }
+
+  const canView = asset.wasabi_status === 'ready' && asset.videoUrl
+
   return (
-    <div className="media-asset-card" style={{ cursor: "default" }}>
+    <div className="media-asset-card" style={{ cursor: canView ? 'pointer' : 'default' }} onClick={canView ? onPreview : undefined}>
       <div className="media-asset-thumb">
         {asset.thumbnailUrl ? (
           <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = 'none' }} />
@@ -315,15 +379,18 @@ function SharedAssetTile({ asset, allowDownload, parentToken }) {
       </div>
       <div className="media-asset-info">
         <span className="media-asset-name">{asset.name}</span>
-        {allowDownload && asset.wasabi_status === 'ready' && (
-          <button
-            className="btn-ghost"
-            style={{ fontSize: 11, padding: "2px 8px", marginTop: 4 }}
-            onClick={handleDownload}
-          >
-            <DownloadSimple size={12} /> Download
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+          {canView && (
+            <button className="btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }} onClick={e => { e.stopPropagation(); onPreview?.(); }}>
+              <Play size={11} /> View
+            </button>
+          )}
+          {allowDownload && asset.wasabi_status === 'ready' && (
+            <button className="btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }} onClick={handleDownload}>
+              <DownloadSimple size={12} /> Download
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import {
   ArrowLeft, DownloadSimple, Trash, Copy, CheckCircle,
   ChatCircle, ClockCounterClockwise, Info, PencilSimple,
   Check, X, SidebarSimple, MusicNote, File, FileImage,
-  FilePdf, FilePpt, FileXls, FileDoc,
+  FilePdf, FilePpt, FileXls, FileDoc, CaretLeft, CaretRight,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import DashboardLayout from './DashboardLayout'
@@ -46,6 +46,7 @@ export default function MediaAssetPage() {
   const [showShare,   setShowShare]  = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [editNotes,   setEditNotes]  = useState(false)
+  const [siblings,    setSiblings]   = useState([])
   const [notesVal,    setNotesVal]   = useState('')
 
   const playerRef = useRef(null)
@@ -68,6 +69,13 @@ export default function MediaAssetPage() {
       setNotesVal(a?.notes || '')
       if (a?.wasabi_status === 'ready') {
         await fetchPlaybackUrl(a)
+      }
+      // Fetch sibling assets for prev/next navigation
+      if (a?.project_id) {
+        const folderQ = a.folder_id ? `&folderId=${a.folder_id}` : '&folderId=root'
+        userApiFetch(`/api/media/assets?projectId=${a.project_id}${folderQ}`)
+          .then(sd => setSiblings(sd.assets || []))
+          .catch(() => {})
       }
     } catch {
       navigate('/media')
@@ -187,7 +195,7 @@ export default function MediaAssetPage() {
     <DashboardLayout title={asset.name}>
       {/* Top bar */}
       <div className="asset-topbar">
-        <button className="btn-ghost" onClick={() => navigate(`/media/project/${asset.project_id}`)}>
+        <button className="btn-ghost" onClick={() => navigate(asset.folder_id ? `/media/project/${asset.project_id}/folder/${asset.folder_id}` : `/media/project/${asset.project_id}`)}>
           <ArrowLeft size={14} /> Back
         </button>
 
@@ -210,7 +218,7 @@ export default function MediaAssetPage() {
         )}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span className={`media-status-badge ${statusMeta.class}`}>{statusMeta.label}</span>
+          <span className={`media-status-badge ${statusMeta.class}`} style={{ position: 'static' }}>{statusMeta.label}</span>
           <button className="btn-ghost" onClick={handleDownload}>
             <DownloadSimple size={14} /> Download
           </button>
@@ -227,6 +235,34 @@ export default function MediaAssetPage() {
           </button>
         </div>
       </div>
+
+      {/* Prev / Next navigation */}
+      {siblings.length > 1 && (() => {
+        const idx = siblings.findIndex(s => s.id === assetId)
+        const prev = idx > 0 ? siblings[idx - 1] : null
+        const next = idx < siblings.length - 1 ? siblings[idx + 1] : null
+        return (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8 }}>
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 12, opacity: prev ? 1 : 0.3 }}
+              disabled={!prev}
+              onClick={() => navigate(`/media/asset/${prev.id}`)}
+            >
+              <CaretLeft size={13} /> Prev
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--t3)' }}>{idx + 1} / {siblings.length}</span>
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 12, opacity: next ? 1 : 0.3 }}
+              disabled={!next}
+              onClick={() => navigate(`/media/asset/${next.id}`)}
+            >
+              Next <CaretRight size={13} />
+            </button>
+          </div>
+        )
+      })()}
 
       {/* Main layout */}
       <div className={`asset-layout ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
