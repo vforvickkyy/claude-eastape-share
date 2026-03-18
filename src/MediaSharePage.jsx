@@ -43,14 +43,16 @@ export default function MediaSharePage() {
   async function handleDownload() {
     try {
       const res = await fetch(`${BASE}/download?asset_id=${data.asset.id}&share_token=${token}&type=download`)
-      const { url } = await res.json()
-      if (!url) return
+      if (!res.ok) return
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = blobUrl
       a.download = data.asset.name
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
     } catch {}
   }
 
@@ -271,14 +273,16 @@ function SharedAssetTile({ asset, allowDownload, parentToken }) {
     try {
       const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
       const res = await fetch(`${BASE}/download?asset_id=${asset.id}&share_token=${parentToken}&type=download`)
-      const { url } = await res.json()
-      if (!url) return
+      if (!res.ok) return
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = blobUrl
       a.download = asset.name
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
     } catch {}
   }
 

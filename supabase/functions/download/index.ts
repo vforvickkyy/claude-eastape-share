@@ -194,10 +194,22 @@ Deno.serve(async (req) => {
         // Increment view count (fire and forget)
         supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
 
-        const isView = dlType === 'view'
-        const viewUrl = isView
-          ? await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
-          : await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 3600)
+        if (dlType === 'download') {
+          const dlUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 60)
+          const wasabiRes = await fetch(dlUrl)
+          if (!wasabiRes.ok) return json({ error: 'Storage fetch failed' }, 502)
+          const safeName = asset.name.replace(/"/g, '\\"')
+          return new Response(wasabiRes.body, {
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Content-Type': wasabiRes.headers.get('Content-Type') || 'application/octet-stream',
+              'Content-Disposition': `attachment; filename="${safeName}"`,
+              'Content-Length': wasabiRes.headers.get('Content-Length') || '',
+            },
+          })
+        }
+
+        const viewUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
         let thumbnailUrl: string | null = null
         if (asset.wasabi_thumbnail_key) {
           thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
@@ -221,10 +233,22 @@ Deno.serve(async (req) => {
         if (!member) return json({ error: 'Forbidden' }, 403)
       }
 
-      const isView = dlType === 'view'
-      const viewUrl = isView
-        ? await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
-        : await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 3600)
+      if (dlType === 'download') {
+        const dlUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 60)
+        const wasabiRes = await fetch(dlUrl)
+        if (!wasabiRes.ok) return json({ error: 'Storage fetch failed' }, 502)
+        const safeName = asset.name.replace(/"/g, '\\"')
+        return new Response(wasabiRes.body, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': wasabiRes.headers.get('Content-Type') || 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${safeName}"`,
+            'Content-Length': wasabiRes.headers.get('Content-Length') || '',
+          },
+        })
+      }
+
+      const viewUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
       let thumbnailUrl: string | null = null
       if (asset.wasabi_thumbnail_key) {
         thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
