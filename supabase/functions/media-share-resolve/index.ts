@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       const { data: folder } = await supabase.from('media_folders').select('id, name, project_id, created_at').eq('id', link.folder_id).single()
       const { data: assets } = await supabase
         .from('media_assets')
-        .select('id, name, type, mime_type, wasabi_thumbnail_key, wasabi_status, duration, status, created_at')
+        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, status, created_at')
         .eq('folder_id', link.folder_id)
       const withUrlsAll = await Promise.all((assets || []).map(withUrls))
       return json({ ...payload, type: 'folder', folder, assets: withUrlsAll })
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
       const { data: project } = await supabase.from('media_projects').select('id, name, description, color, created_at').eq('id', link.project_id).single()
       const { data: assets } = await supabase
         .from('media_assets')
-        .select('id, name, type, mime_type, wasabi_thumbnail_key, wasabi_status, duration, status, created_at')
+        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, status, created_at')
         .eq('project_id', link.project_id)
       const withUrlsAll = await Promise.all((assets || []).map(withUrls))
       return json({ ...payload, type: 'project', project, assets: withUrlsAll })

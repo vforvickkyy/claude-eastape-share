@@ -189,8 +189,18 @@ Deno.serve(async (req) => {
         if (link.expires_at && new Date(link.expires_at) < new Date()) return json({ error: 'Share link expired' }, 410)
         if (dlType === 'download' && !link.allow_download) return json({ error: 'Download not allowed' }, 403)
 
-        const asset = link.media_assets
-        if (!asset || asset.id !== assetId) return json({ error: 'Asset not found' }, 404)
+        // Resolve asset — handle asset-level, folder-level, and project-level share tokens
+        let asset = link.media_assets
+        if (!asset || asset.id !== assetId) {
+          // Folder or project share: verify the requested asset belongs to the shared scope
+          let q = supabase.from('media_assets').select('*').eq('id', assetId)
+          if (link.folder_id)  q = q.eq('folder_id',  link.folder_id)
+          else if (link.project_id) q = q.eq('project_id', link.project_id)
+          else return json({ error: 'Asset not found' }, 404)
+          const { data: a } = await q.single()
+          if (!a) return json({ error: 'Asset not found' }, 404)
+          asset = a
+        }
 
         // Increment view count (fire and forget)
         supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
