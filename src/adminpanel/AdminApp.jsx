@@ -12,7 +12,8 @@ const AdminDatabase  = lazy(() => import("./pages/AdminDatabase"));
 const AdminAnalytics = lazy(() => import("./pages/AdminAnalytics"));
 const AdminAuditLogs = lazy(() => import("./pages/AdminAuditLogs"));
 const AdminSettings  = lazy(() => import("./pages/AdminSettings"));
-const AdminAdmins    = lazy(() => import("./pages/AdminAdmins"));
+const AdminAdmins         = lazy(() => import("./pages/AdminAdmins"));
+const AdminPlayerSettings = lazy(() => import("./pages/AdminPlayerSettings"));
 
 /* ── Env vars ───────────────────────────────────────────────── */
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
@@ -265,6 +266,14 @@ export default function AdminApp() {
           element={
             <Suspense fallback={<PageLoader />}>
               <AdminAdmins />
+            </Suspense>
+          }
+        />
+        <Route
+          path="ui/player"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <AdminPlayerSettings />
             </Suspense>
           }
         />

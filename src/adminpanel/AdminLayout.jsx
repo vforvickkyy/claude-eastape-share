@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   List,
   X,
+  PlayCircle,
 } from "@phosphor-icons/react";
 
 /* ── Navigation structure ───────────────────────────────────── */
@@ -42,6 +43,12 @@ const NAV_SECTIONS = [
     items: [
       { to: "/adminpanel/database",   label: "Database",    icon: <Database      size={16} weight="duotone" /> },
       { to: "/adminpanel/analytics",  label: "Analytics",   icon: <ChartBar      size={16} weight="duotone" /> },
+    ],
+  },
+  {
+    label: "UI",
+    items: [
+      { to: "/adminpanel/ui/player",  label: "Player Settings", icon: <PlayCircle size={16} weight="duotone" /> },
     ],
   },
   {
