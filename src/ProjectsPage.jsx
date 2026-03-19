@@ -156,7 +156,10 @@ export default function ProjectsPage() {
                         {p.name.slice(0, 2).toUpperCase()}
                       </div>
                     </div>
-                    {/* 3-dot menu */}
+                  </div>
+
+                  {/* 3-dot menu — outside of overflow:hidden top */}
+                  <div className="project-card-menu-wrap" onClick={e => e.stopPropagation()}>
                     <button
                       className="project-card-menu-btn"
                       onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); setStatusMenu(null); }}

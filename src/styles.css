@@ -3451,18 +3451,19 @@ body { overflow-x: hidden; }
   letter-spacing: 0.02em;
   border: 1px solid rgba(255,255,255,0.25);
 }
+.project-card-menu-wrap {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+}
 .project-card-menu-btn {
-  position: absolute; top: 8px; right: 8px; z-index: 3;
-  background: rgba(0,0,0,0.35); border: none; color: #fff;
+  background: rgba(0,0,0,0.45); border: none; color: #fff;
   border-radius: 7px; width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-  transition: background 0.15s;
+  cursor: pointer; transition: background 0.15s;
 }
-.project-card-menu-btn:hover { background: rgba(0,0,0,0.55); }
+.project-card-menu-btn:hover { background: rgba(0,0,0,0.65); }
 
 .project-card-menu {
-  position: absolute; top: 100%; right: 0; margin-top: 4px;
+  position: absolute; top: calc(100% + 4px); right: 0;
   background: var(--bg3); border: 1px solid var(--border);
   border-radius: var(--r-md); padding: 4px;
   display: flex; flex-direction: column; gap: 2px;
