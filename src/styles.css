@@ -3358,6 +3358,35 @@ body { overflow-x: hidden; }
   .stat-card { padding: 10px 12px; }
 }
 
+/* ── Generic form input ── */
+.input-field {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 9px 12px; font-size: 13.5px;
+  color: var(--t1); outline: none; transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.input-field::placeholder { color: var(--t4); }
+.input-field:focus { border-color: var(--purple); }
+
+/* ── Generic modal overlay + box ── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.modal-box {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r-xl); padding: 24px;
+  width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.modal-header h3 { font-size: 16px; font-weight: 600; color: var(--t1); margin: 0; }
+
 /* ═══════════════════════════════════════════════════════════════
    PROJECTS PAGE
 ═══════════════════════════════════════════════════════════════ */

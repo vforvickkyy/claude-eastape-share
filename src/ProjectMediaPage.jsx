@@ -257,18 +257,19 @@ export default function ProjectMediaPage() {
                     className="mpv-card-thumb"
                     onClick={() => navigate(`/projects/${projectId}/media/${asset.id}`)}
                   >
-                    {asset.wasabi_thumbnail_key ? (
-                      <img
-                        src={`${import.meta.env.VITE_WASABI_CDN || ""}/${asset.wasabi_thumbnail_key}`}
-                        alt={asset.name}
-                        onError={e => { e.target.style.display = "none"; }}
-                      />
+                    {asset.thumbnailUrl ? (
+                      <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = "none"; }} />
                     ) : (
                       <div className="mpv-card-icon">{typeIcon(asset.type, asset.mime_type)}</div>
                     )}
                     {asset.duration && (
                       <span className="mpv-card-duration">
                         {Math.floor(asset.duration / 60)}:{String(Math.round(asset.duration % 60)).padStart(2, "0")}
+                      </span>
+                    )}
+                    {asset.status && STATUS_COLORS[asset.status] && (
+                      <span className={`media-status-badge ${STATUS_COLORS[asset.status].class}`}>
+                        {STATUS_COLORS[asset.status].label}
                       </span>
                     )}
                     {asset.wasabi_status === "processing" && (
@@ -294,11 +295,6 @@ export default function ProjectMediaPage() {
                       />
                     ) : (
                       <span className="mpv-card-name" title={asset.name}>{asset.name}</span>
-                    )}
-                    {asset.status && STATUS_COLORS[asset.status] && (
-                      <span className={`media-status-badge ${STATUS_COLORS[asset.status].class}`}>
-                        {STATUS_COLORS[asset.status].label}
-                      </span>
                     )}
                     <div className="mpv-card-actions">
                       <button title="Copy share link" onClick={() => copyShareLink(asset)}>
