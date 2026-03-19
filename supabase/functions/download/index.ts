@@ -22,7 +22,6 @@ async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer
   return crypto.subtle.sign('HMAC', k, enc.encode(msg))
 }
 
-// Simple presigned GET — no response-* overrides (use for view/streaming)
 async function presignGetSimple(
   endpoint: string, bucket: string, key: string,
   accessKeyId: string, secretAccessKey: string, region: string,
@@ -31,11 +30,9 @@ async function presignGetSimple(
   const now = new Date()
   const date = now.toISOString().slice(0, 10).replace(/-/g, '')
   const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
-
   const host = new URL(endpoint).host
   const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
-  const service = 's3'
-  const credentialScope = `${date}/${region}/${service}/aws4_request`
+  const credentialScope = `${date}/${region}/s3/aws4_request`
 
   const qp = new URLSearchParams()
   qp.set('X-Amz-Algorithm',     'AWS4-HMAC-SHA256')
@@ -43,119 +40,51 @@ async function presignGetSimple(
   qp.set('X-Amz-Date',          datetime)
   qp.set('X-Amz-Expires',       String(expiresIn))
   qp.set('X-Amz-SignedHeaders', 'host')
-
   const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
   const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
   const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
-
   const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
   const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
-
-  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
-  const kRegion  = await hmac(kDate, region)
-  const kService = await hmac(kRegion, service)
-  const kSign    = await hmac(kService, 'aws4_request')
-  const sig      = hex(await hmac(kSign, stringToSign))
-
+  const kDate = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion = await hmac(kDate, region)
+  const kService = await hmac(kRegion, 's3')
+  const kSign = await hmac(kService, 'aws4_request')
+  const sig = hex(await hmac(kSign, stringToSign))
   return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
 }
 
-// Presigned GET with response-content-disposition override (use for forced download)
 async function presignGet(
-  endpoint: string,
-  bucket: string,
-  key: string,
-  fileName: string,
-  accessKeyId: string,
-  secretAccessKey: string,
-  region: string,
-  expiresIn = 120,
+  endpoint: string, bucket: string, key: string, fileName: string,
+  accessKeyId: string, secretAccessKey: string, region: string,
+  expiresIn = 3600,
 ): Promise<string> {
   const now = new Date()
   const date = now.toISOString().slice(0, 10).replace(/-/g, '')
   const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
-
   const host = new URL(endpoint).host
   const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
-  const service = 's3'
-  const credentialScope = `${date}/${region}/${service}/aws4_request`
+  const credentialScope = `${date}/${region}/s3/aws4_request`
 
+  const safeFileName = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '_')
   const qp = new URLSearchParams()
   qp.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256')
   qp.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
   qp.set('X-Amz-Date', datetime)
   qp.set('X-Amz-Expires', String(expiresIn))
   qp.set('X-Amz-SignedHeaders', 'host')
-  const safeFileName = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '_')
   qp.set('response-content-disposition', `attachment; filename="${safeFileName}"`)
-
   const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
   const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
-
-  const canonicalHeaders = `host:${host}\n`
-  const signedHeaders = 'host'
-
-  const canonicalRequest = [
-    'GET',
-    `/${bucket}/${encodedKey}`,
-    canonicalQs,
-    canonicalHeaders,
-    signedHeaders,
-    'UNSIGNED-PAYLOAD',
-  ].join('\n')
-
+  const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
   const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
   const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
-
-  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
-  const kRegion  = await hmac(kDate, region)
-  const kService = await hmac(kRegion, service)
-  const kSign    = await hmac(kService, 'aws4_request')
-  const sig      = hex(await hmac(kSign, stringToSign))
-
+  const kDate = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion = await hmac(kDate, region)
+  const kService = await hmac(kRegion, 's3')
+  const kSign = await hmac(kService, 'aws4_request')
+  const sig = hex(await hmac(kSign, stringToSign))
   return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
 }
-
-async function s3Delete(
-  endpoint: string,
-  bucket: string,
-  key: string,
-  accessKeyId: string,
-  secretAccessKey: string,
-  region: string,
-): Promise<void> {
-  const now = new Date()
-  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
-  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
-
-  const host = new URL(endpoint).host
-  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
-  const service = 's3'
-  const credentialScope = `${date}/${region}/${service}/aws4_request`
-  const emptyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
-
-  const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${emptyHash}\nx-amz-date:${datetime}\n`
-  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
-
-  const canonicalRequest = ['DELETE', `/${bucket}/${encodedKey}`, '', canonicalHeaders, signedHeaders, emptyHash].join('\n')
-  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
-  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
-
-  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
-  const kRegion  = await hmac(kDate, region)
-  const kService = await hmac(kRegion, service)
-  const kSign    = await hmac(kService, 'aws4_request')
-  const sig      = hex(await hmac(kSign, stringToSign))
-
-  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`
-
-  await fetch(`${endpoint}/${bucket}/${encodedKey}`, {
-    method: 'DELETE',
-    headers: { Host: host, 'x-amz-date': datetime, 'x-amz-content-sha256': emptyHash, Authorization: authorization },
-  })
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -163,120 +92,110 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-
     const url = new URL(req.url)
-    const assetId   = url.searchParams.get('asset_id')
-    const shareToken = url.searchParams.get('share_token')
-    const dlType    = url.searchParams.get('type') || 'view'   // 'view' | 'download'
 
     const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
     const BUCKET   = (Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? '')
     const ACCESS   = (Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? '')
     const SECRET   = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
     const REGION   = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
+    if (!ENDPOINT || !BUCKET || !ACCESS || !SECRET) return json({ error: 'Storage not configured' }, 500)
 
-    // ── MEDIA ASSET PATH ─────────────────────────────────────────────────────
-    if (assetId) {
+    const mediaId    = url.searchParams.get('media_id') || url.searchParams.get('asset_id')
+    const fileId     = url.searchParams.get('file_id')
+    const driveId    = url.searchParams.get('drive_id')
+    const shareToken = url.searchParams.get('share_token')
+    const dlType     = url.searchParams.get('type') || 'view'
+
+    // ── PROJECT MEDIA ─────────────────────────────────────────────────────────
+    if (mediaId) {
       // Public share token access
       if (shareToken) {
-        const { data: link } = await supabase
-          .from('media_share_links')
-          .select('*, media_assets(*)')
-          .eq('token', shareToken)
-          .single()
-
+        const { data: link } = await supabase.from('share_links').select('*, project_media(*)').eq('token', shareToken).single()
         if (!link) return json({ error: 'Share link not found' }, 404)
         if (link.expires_at && new Date(link.expires_at) < new Date()) return json({ error: 'Share link expired' }, 410)
         if (dlType === 'download' && !link.allow_download) return json({ error: 'Download not allowed' }, 403)
 
-        // Resolve asset — handle asset-level, folder-level, and project-level share tokens
-        let asset = link.media_assets
-        if (!asset || asset.id !== assetId) {
-          // Folder or project share: verify the requested asset belongs to the shared scope
-          let q = supabase.from('media_assets').select('*').eq('id', assetId)
-          if (link.folder_id)  q = q.eq('folder_id',  link.folder_id)
-          else if (link.project_id) q = q.eq('project_id', link.project_id)
+        let media = link.project_media
+        if (!media || media.id !== mediaId) {
+          // Folder/project-level share: verify asset belongs to shared scope
+          let q = supabase.from('project_media').select('*').eq('id', mediaId)
+          if (link.project_id) q = q.eq('project_id', link.project_id)
           else return json({ error: 'Asset not found' }, 404)
-          const { data: a } = await q.single()
-          if (!a) return json({ error: 'Asset not found' }, 404)
-          asset = a
+          const { data: m } = await q.single()
+          if (!m) return json({ error: 'Asset not found' }, 404)
+          media = m
         }
 
-        // Increment view count (fire and forget)
-        supabase.from('media_share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
+        supabase.from('share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
 
-        const isView = dlType === 'view'
-        const viewUrl = isView
-          ? await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
-          : await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 3600)
-        let thumbnailUrl: string | null = null
-        if (asset.wasabi_thumbnail_key) {
-          thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
-        }
-        return json({ url: viewUrl, thumbnailUrl, asset })
+        const mediaUrl = dlType === 'view'
+          ? await presignGetSimple(ENDPOINT, BUCKET, media.wasabi_key, ACCESS, SECRET, REGION, 14400)
+          : await presignGet(ENDPOINT, BUCKET, media.wasabi_key, media.name, ACCESS, SECRET, REGION, 3600)
+        const thumbnailUrl = media.wasabi_thumbnail_key
+          ? await presignGetSimple(ENDPOINT, BUCKET, media.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
+          : null
+        return json({ url: mediaUrl, thumbnailUrl, asset: media })
       }
 
       // Authenticated access
-      const authHeader = req.headers.get('Authorization') ?? ''
-      const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } })
+      const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } }
+      })
       const { data: { user }, error: authErr } = await authClient.auth.getUser()
       if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-      const { data: asset, error: assetErr } = await supabase.from('media_assets').select('*').eq('id', assetId).single()
-      if (assetErr || !asset) return json({ error: 'Asset not found' }, 404)
-
-      // Verify ownership or team membership
-      if (asset.user_id !== user.id) {
-        const { data: member } = await supabase.from('media_team_members').select('role').eq('project_id', asset.project_id).eq('user_id', user.id).single()
+      const { data: media } = await supabase.from('project_media').select('*').eq('id', mediaId).single()
+      if (!media) return json({ error: 'Media not found' }, 404)
+      if (media.user_id !== user.id) {
+        const { data: member } = await supabase.from('project_members').select('role').eq('project_id', media.project_id).eq('user_id', user.id).eq('accepted', true).single()
         if (!member) return json({ error: 'Forbidden' }, 403)
       }
 
-      const isView = dlType === 'view'
-      const viewUrl = isView
-        ? await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_key, ACCESS, SECRET, REGION, 14400)
-        : await presignGet(ENDPOINT, BUCKET, asset.wasabi_key, asset.name, ACCESS, SECRET, REGION, 3600)
-      let thumbnailUrl: string | null = null
-      if (asset.wasabi_thumbnail_key) {
-        thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, asset.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
+      const mediaUrl = dlType === 'view'
+        ? await presignGetSimple(ENDPOINT, BUCKET, media.wasabi_key, ACCESS, SECRET, REGION, 14400)
+        : await presignGet(ENDPOINT, BUCKET, media.wasabi_key, media.name, ACCESS, SECRET, REGION, 3600)
+      const thumbnailUrl = media.wasabi_thumbnail_key
+        ? await presignGetSimple(ENDPOINT, BUCKET, media.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
+        : null
+      return json({ url: mediaUrl, thumbnailUrl, asset: media })
+    }
+
+    // ── PROJECT FILE ──────────────────────────────────────────────────────────
+    if (fileId) {
+      const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } }
+      })
+      const { data: { user }, error: authErr } = await authClient.auth.getUser()
+      if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+
+      const { data: file } = await supabase.from('project_files').select('*').eq('id', fileId).single()
+      if (!file) return json({ error: 'File not found' }, 404)
+      if (file.user_id !== user.id) {
+        const { data: member } = await supabase.from('project_members').select('role').eq('project_id', file.project_id).eq('user_id', user.id).eq('accepted', true).single()
+        if (!member) return json({ error: 'Forbidden' }, 403)
       }
-      return json({ url: viewUrl, thumbnailUrl, asset })
+
+      const fileUrl = await presignGet(ENDPOINT, BUCKET, file.wasabi_key, file.name, ACCESS, SECRET, REGION, 3600)
+      return json({ url: fileUrl, fileName: file.name })
     }
 
-    // ── DRIVE DOWNLOAD PATH (original logic) ──────────────────────────────────
-    const token  = url.searchParams.get('token')
-    const fileId = url.searchParams.get('fileId')
-    if (!token || !fileId) return json({ error: 'token and fileId are required' }, 400)
+    // ── DRIVE FILE ────────────────────────────────────────────────────────────
+    if (driveId) {
+      const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } }
+      })
+      const { data: { user }, error: authErr } = await authClient.auth.getUser()
+      if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-    const { data, error } = await supabase
-      .from('shares')
-      .select('id, file_name, file_url, file_size, expires_at, token, storage_deleted')
-      .eq('token', token)
-      .eq('id', fileId)
-      .single()
+      const { data: file } = await supabase.from('drive_files').select('*').eq('id', driveId).eq('user_id', user.id).single()
+      if (!file) return json({ error: 'File not found' }, 404)
 
-    if (error || !data) return json({ error: 'File not found' }, 404)
-    if (data.storage_deleted) return json({ error: 'This file has already been downloaded and permanently deleted from our servers.', reason: 'downloaded' }, 410)
-    if (data.expires_at && new Date(data.expires_at) < new Date()) return json({ error: 'This share link has expired' }, 410)
-
-    if (!ENDPOINT || !BUCKET || !ACCESS || !SECRET) {
-      return json({ error: 'Storage not configured' }, 500)
+      const fileUrl = await presignGet(ENDPOINT, BUCKET, file.wasabi_key, file.name, ACCESS, SECRET, REGION, 3600)
+      return json({ url: fileUrl, fileName: file.name })
     }
 
-    const presignedUrl = await presignGet(ENDPOINT, BUCKET, data.file_url, data.file_name, ACCESS, SECRET, REGION)
-
-    const { data: batchFiles } = await supabase.from('shares').select('id, file_url').eq('token', data.token)
-
-    await supabase.from('shares')
-      .update({ storage_deleted: true, storage_deleted_at: new Date().toISOString() })
-      .eq('token', data.token)
-
-    if (batchFiles?.length && ENDPOINT && BUCKET && ACCESS && SECRET) {
-      Promise.allSettled(
-        batchFiles.map((f: { file_url: string }) => s3Delete(ENDPOINT, BUCKET, f.file_url, ACCESS, SECRET, REGION))
-      ).catch(() => {})
-    }
-
-    return json({ url: presignedUrl, fileName: data.file_name })
+    return json({ error: 'No file identifier provided' }, 400)
   } catch (err) {
     return json({ error: err.message }, 500)
   }

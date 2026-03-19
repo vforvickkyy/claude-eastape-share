@@ -113,7 +113,7 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      upload_type: 'media',
+      upload_type: 'project_media',
       filename: file.name,
       filesize: file.size,
       mimetype: file.type,
@@ -129,7 +129,9 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
     throw err
   }
 
-  const { uploadUrl, assetId } = presignData
+  // Support both old (camelCase) and new (snake_case) response shapes
+  const uploadUrl = presignData.uploadUrl || presignData.upload_url
+  const assetId   = presignData.assetId   || presignData.asset_id || presignData.media_id
 
   // 2. Generate thumbnail
   let thumbnailBase64 = null

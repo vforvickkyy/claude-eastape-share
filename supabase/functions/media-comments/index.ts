@@ -27,37 +27,34 @@ Deno.serve(async (req) => {
       if (!assetId) return json({ error: 'assetId required' }, 400)
       if (!user) return json({ error: 'Unauthorized' }, 401)
 
-      const { data: asset } = await supabase.from('media_assets').select('id, user_id').eq('id', assetId).single()
+      // Verify asset exists in new table
+      const { data: asset } = await supabase.from('project_media').select('id, user_id').eq('id', assetId).single()
       if (!asset) return json({ error: 'Asset not found' }, 404)
 
       const { data, error } = await supabase
-        .from('media_comments')
-        .select('*, profiles:user_id (id, raw_user_meta_data->full_name as full_name, raw_user_meta_data->avatar_url as avatar_url, email)')
-        .eq('asset_id', assetId)
+        .from('project_media_comments')
+        .select('*, profiles:user_id (id, full_name, avatar_url)')
+        .eq('media_id', assetId)
         .order('created_at')
 
-      if (error) {
-        const { data: simple, error: e2 } = await supabase.from('media_comments').select('*').eq('asset_id', assetId).order('created_at')
-        if (e2) return json({ error: e2.message }, 500)
-        return json({ comments: simple })
-      }
-      return json({ comments: data })
+      if (error) return json({ error: error.message }, 500)
+      return json({ comments: data || [] })
     }
 
     if (req.method === 'POST') {
       const { assetId: aid, body, timestampSeconds, parentCommentId, shareToken, guestName } = await req.json()
       if (!aid || !body) return json({ error: 'assetId and body required' }, 400)
 
-      // Guest comment via share token (no auth required)
+      // Guest comment via share token
       if (shareToken) {
-        const { data: link } = await supabase.from('media_share_links').select('*').eq('token', shareToken).eq('asset_id', aid).single()
+        const { data: link } = await supabase.from('share_links').select('*').eq('token', shareToken).eq('project_media_id', aid).single()
         if (!link) return json({ error: 'Invalid share token' }, 403)
         if (!link.allow_comments) return json({ error: 'Comments not allowed on this link' }, 403)
         if (link.expires_at && new Date(link.expires_at) < new Date()) return json({ error: 'Share link expired' }, 410)
 
         const { data, error } = await supabase
-          .from('media_comments')
-          .insert({ asset_id: aid, user_id: null, guest_name: guestName?.trim() || 'Anonymous', body, timestamp_seconds: timestampSeconds ?? null, parent_comment_id: parentCommentId ?? null })
+          .from('project_media_comments')
+          .insert({ media_id: aid, user_id: null, guest_name: guestName?.trim() || 'Anonymous', body, timestamp_seconds: timestampSeconds ?? null, parent_comment_id: parentCommentId ?? null })
           .select()
           .single()
         if (error) return json({ error: error.message }, 500)
@@ -68,8 +65,8 @@ Deno.serve(async (req) => {
       if (!user) return json({ error: 'Unauthorized' }, 401)
 
       const { data, error } = await supabase
-        .from('media_comments')
-        .insert({ asset_id: aid, user_id: user.id, body, timestamp_seconds: timestampSeconds ?? null, parent_comment_id: parentCommentId ?? null })
+        .from('project_media_comments')
+        .insert({ media_id: aid, user_id: user.id, body, timestamp_seconds: timestampSeconds ?? null, parent_comment_id: parentCommentId ?? null })
         .select()
         .single()
       if (error) return json({ error: error.message }, 500)
@@ -85,26 +82,25 @@ Deno.serve(async (req) => {
       if ('resolved' in body) updates.resolved = body.resolved
       if ('body' in body) updates.body = body.body
 
-      // Allow comment author OR asset owner to update (e.g. resolve)
-      const { data: comment } = await supabase.from('media_comments').select('user_id, asset_id').eq('id', id).single()
+      const { data: comment } = await supabase.from('project_media_comments').select('user_id, media_id').eq('id', id).single()
       if (!comment) return json({ error: 'Not found' }, 404)
 
       const isAuthor = comment.user_id === user.id
       let allowed = isAuthor
       if (!isAuthor) {
-        const { data: asset } = await supabase.from('media_assets').select('user_id').eq('id', comment.asset_id).single()
+        const { data: asset } = await supabase.from('project_media').select('user_id').eq('id', comment.media_id).single()
         allowed = asset?.user_id === user.id
       }
       if (!allowed) return json({ error: 'Forbidden' }, 403)
 
-      const { data, error } = await supabase.from('media_comments').update(updates).eq('id', id).select().single()
+      const { data, error } = await supabase.from('project_media_comments').update(updates).eq('id', id).select().single()
       if (error) return json({ error: error.message }, 500)
       return json({ comment: data })
     }
 
     if (req.method === 'DELETE') {
       if (!id) return json({ error: 'id required' }, 400)
-      const { error } = await supabase.from('media_comments').delete().eq('id', id).eq('user_id', user.id)
+      const { error } = await supabase.from('project_media_comments').delete().eq('id', id).eq('user_id', user.id)
       if (error) return json({ error: error.message }, 500)
       return json({ ok: true })
     }

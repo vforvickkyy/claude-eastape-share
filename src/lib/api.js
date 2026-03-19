@@ -1,6 +1,6 @@
 /**
  * Central API utility — all calls go to Supabase Edge Functions.
- * Import this instead of calling fetch('/api/...') directly.
+ * Import typed API objects; avoid calling fetch() directly in components.
  */
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
@@ -69,80 +69,156 @@ export const authApi = {
   refresh: (body) => post(`${BASE}/auth-refresh`, body),
 }
 
-// ── Drive (presign / download / share-resolve) ─────────────────────
-export const driveApi = {
-  presign:        (body)   => post(`${BASE}/presign`, body, true),
-  download:       (params) => get(`${BASE}/download`, params),
-  shareResolve:   (token)  => get(`${BASE}/share-resolve`, { token }),
-  // user share management (trash / restore / move / rename / delete)
-  userShare:      (token, body) => put(`${BASE}/user-share`, { token }, body, true),
-  deleteUserShare:(token)  => del(`${BASE}/user-share`, { token }, true),
+// ── Dashboard ──────────────────────────────────────────────────────
+export const dashboardApi = {
+  getStats: () => get(`${BASE}/dashboard-stats`, {}, true),
+}
+
+// ── Projects ───────────────────────────────────────────────────────
+export const projectsApi = {
+  list:   (params = {}) => get(`${BASE}/projects`, params, true),
+  get:    (id)          => get(`${BASE}/projects`, { id }, true),
+  create: (body)        => post(`${BASE}/projects`, body, true),
+  update: (id, body)    => put(`${BASE}/projects`, { id }, body, true),
+  delete: (id)          => del(`${BASE}/projects`, { id }, true),
+}
+
+// ── Project Members ────────────────────────────────────────────────
+export const membersApi = {
+  list:   (projectId)       => get(`${BASE}/project-members`, { projectId }, true),
+  invite: (body)            => post(`${BASE}/project-members`, body, true),
+  update: (id, body)        => put(`${BASE}/project-members`, { id }, body, true),
+  remove: (id)              => del(`${BASE}/project-members`, { id }, true),
+}
+
+// ── Project Media ──────────────────────────────────────────────────
+export const projectMediaApi = {
+  list:    (params = {}) => get(`${BASE}/project-media`, params, true),
+  get:     (id)          => get(`${BASE}/project-media`, { id }, true),
+  update:  (id, body)    => put(`${BASE}/project-media`, { id }, body, true),
+  delete:  (id, hard = false) => del(`${BASE}/project-media`, { id, hard: hard ? 'true' : undefined }, true),
+  presign: (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'project_media' }, true),
+  confirm: (body)        => post(`${BASE}/media-confirm-upload`, body, true),
+  getViewUrl:     (id)   => get(`${BASE}/download`, { media_id: id, type: 'view' }, true),
+  getDownloadUrl: (id)   => get(`${BASE}/download`, { media_id: id, type: 'download' }, true),
+  getPublicUrl:   (id, shareToken, type = 'view') =>
+    get(`${BASE}/download`, { media_id: id, share_token: shareToken, type }),
+}
+
+// ── Project Files ──────────────────────────────────────────────────
+export const projectFilesApi = {
+  list:    (params = {}) => get(`${BASE}/project-files`, params, true),
+  get:     (id)          => get(`${BASE}/project-files`, { id }, true),
+  update:  (id, body)    => put(`${BASE}/project-files`, { id }, body, true),
+  delete:  (id, hard = false) => del(`${BASE}/project-files`, { id, hard: hard ? 'true' : undefined }, true),
+  presign: (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'project_file' }, true),
+  getDownloadUrl: (id)   => get(`${BASE}/download`, { file_id: id }, true),
+}
+
+// ── Project Folders (inside a project) ────────────────────────────
+export const projectFoldersApi = {
+  list:   (projectId)    => get(`${BASE}/project-folders`, { projectId }, true),
+  create: (body)         => post(`${BASE}/project-folders`, body, true),
+  update: (id, body)     => put(`${BASE}/project-folders`, { id }, body, true),
+  delete: (id)           => del(`${BASE}/project-folders`, { id }, true),
+}
+
+// ── Project Activity ───────────────────────────────────────────────
+export const activityApi = {
+  list: (projectId, limit = 20) => get(`${BASE}/project-activity`, { projectId, limit }, true),
+  log:  (body)                  => post(`${BASE}/project-activity`, body, true),
+}
+
+// ── Drive Files ────────────────────────────────────────────────────
+export const driveFilesApi = {
+  list:    (params = {}) => get(`${BASE}/drive-files`, params, true),
+  update:  (id, body)    => put(`${BASE}/drive-files`, { id }, body, true),
+  delete:  (id)          => del(`${BASE}/drive-files`, { id }, true),
+  presign: (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'drive' }, true),
+  getDownloadUrl: (id)   => get(`${BASE}/download`, { drive_id: id }, true),
+}
+
+// ── Drive Folders ──────────────────────────────────────────────────
+export const driveFoldersApi = {
+  list:   (parentId)     => get(`${BASE}/drive-folders`, parentId ? { parentId } : {}, true),
+  create: (body)         => post(`${BASE}/drive-folders`, body, true),
+  update: (id, body)     => put(`${BASE}/drive-folders`, { id }, body, true),
+  delete: (id)           => del(`${BASE}/drive-folders`, { id }, true),
+}
+
+// ── Share Links ────────────────────────────────────────────────────
+export const shareLinksApi = {
+  list:    (params = {})      => get(`${BASE}/share-links`, params, true),
+  create:  (body)             => post(`${BASE}/share-links`, body, true),
+  update:  (id, body)         => put(`${BASE}/share-links`, { id }, body, true),
+  delete:  (id)               => del(`${BASE}/share-links`, { id }, true),
+  resolve: (token, password)  => get(`${BASE}/share-resolve`, password ? { token, password } : { token }),
 }
 
 // ── User ───────────────────────────────────────────────────────────
 export const userApi = {
-  getFiles:   (params = {}) => get(`${BASE}/user-files`,   params, true),
-  getFolders: (params = {}) => get(`${BASE}/user-folders`, params, true),
-  createFolder:(body)       => post(`${BASE}/user-folders`, body, true),
-  getProfile: ()            => get(`${BASE}/user-profile`, {}, true),
-  updateProfile:(body)      => put(`${BASE}/user-profile`, {}, body, true),
-  uploadAvatar: (body)      => post(`${BASE}/user-avatar`, body, true),
-  deleteAvatar: ()          => del(`${BASE}/user-avatar`, {}, true),
+  getProfile:   ()       => get(`${BASE}/user-profile`, {}, true),
+  updateProfile:(body)   => put(`${BASE}/user-profile`, {}, body, true),
+  uploadAvatar: (body)   => post(`${BASE}/user-avatar`, body, true),
+  deleteAvatar: ()       => del(`${BASE}/user-avatar`, {}, true),
 }
 
-// ── Media ──────────────────────────────────────────────────────────
+// ── Legacy driveApi alias (used in SharePage / public routes) ──────
+export const driveApi = {
+  presign:      (body)   => post(`${BASE}/presign`, body, true),
+  download:     (params) => get(`${BASE}/download`, params),
+  shareResolve: (token)  => get(`${BASE}/share-resolve`, { token }),
+}
+
+// ── Legacy mediaApi alias (old media-* routes still referenced) ────
 export const mediaApi = {
-  // Projects
-  getProjects:    ()         => get(`${BASE}/media-projects`, {}, true),
-  createProject:  (body)     => post(`${BASE}/media-projects`, body, true),
-  updateProject:  (id, body) => put(`${BASE}/media-projects`, { id }, body, true),
-  deleteProject:  (id)       => del(`${BASE}/media-projects`, { id }, true),
+  // Mapped to new project-media endpoints
+  getProjects:   ()          => projectsApi.list(),
+  createProject: (body)      => projectsApi.create(body),
+  updateProject: (id, body)  => projectsApi.update(id, body),
+  deleteProject: (id)        => projectsApi.delete(id),
 
-  // Folders
-  getFolders:     (params)   => get(`${BASE}/media-folders`, params, true),
-  createFolder:   (body)     => post(`${BASE}/media-folders`, body, true),
-  updateFolder:   (id, body) => put(`${BASE}/media-folders`, { id }, body, true),
-  deleteFolder:   (id)       => del(`${BASE}/media-folders`, { id }, true),
+  getAssets:     (params)    => projectMediaApi.list(params),
+  getAsset:      (id)        => projectMediaApi.get(id),
+  updateAsset:   (id, body)  => projectMediaApi.update(id, body),
+  deleteAsset:   (id)        => projectMediaApi.delete(id),
 
-  // Assets
-  getAssets:      (params)   => get(`${BASE}/media-assets`, params, true),
-  getAsset:       (id)       => get(`${BASE}/media-assets`, { id }, true),
-  updateAsset:    (id, body) => put(`${BASE}/media-assets`, { id }, body, true),
-  deleteAsset:    (id)       => del(`${BASE}/media-assets`, { id }, true),
-
-  // Upload — Wasabi S3 via extended presign + media-confirm-upload
-  mediaPresignUpload:  (body) => post(`${BASE}/presign`, { ...body, upload_type: 'media' }, true),
-  mediaConfirmUpload:  (body) => post(`${BASE}/media-confirm-upload`, body, true),
-
-  // Playback / download — via extended download function
-  mediaGetViewUrl:     (assetId) => get(`${BASE}/download`, { asset_id: assetId, type: 'view' }, true),
-  mediaGetDownloadUrl: (assetId) => get(`${BASE}/download`, { asset_id: assetId, type: 'download' }, true),
-  mediaGetPublicUrl:   (assetId, shareToken, type = 'view') =>
-    get(`${BASE}/download`, { asset_id: assetId, share_token: shareToken, type }),
-
-  // Comments
-  getComments:    (assetId) => get(`${BASE}/media-comments`, { assetId }, true),
-  createComment:  (body)    => post(`${BASE}/media-comments`, body, true),
+  getComments:    (assetId)  => get(`${BASE}/media-comments`, { assetId }, true),
+  createComment:  (body)     => post(`${BASE}/media-comments`, body, true),
   updateComment:  (id, body) => put(`${BASE}/media-comments`, { id }, body, true),
-  deleteComment:  (id)      => del(`${BASE}/media-comments`, { id }, true),
+  deleteComment:  (id)       => del(`${BASE}/media-comments`, { id }, true),
 
-  // Share links
-  getShareLinks:   (assetId) => assetId ? get(`${BASE}/media-share`, { assetId }, true) : get(`${BASE}/media-share`, {}, true),
-  createShareLink: (body)    => post(`${BASE}/media-share`, body, true),
-  deleteShareLink: (id)      => del(`${BASE}/media-share`, { id }, true),
-  resolveShare:    (token, password) => get(`${BASE}/media-share-resolve`, password ? { token, password } : { token }),
+  getShareLinks:   (mediaId) => shareLinksApi.list(mediaId ? { mediaId } : {}),
+  createShareLink: (body)    => shareLinksApi.create(body),
+  deleteShareLink: (id)      => shareLinksApi.delete(id),
+  resolveShare:    (token, password) => shareLinksApi.resolve(token, password),
 
-  // Team
-  getTeam:       (projectId) => get(`${BASE}/media-team`, { projectId }, true),
-  inviteMember:  (body)      => post(`${BASE}/media-team`, body, true),
-  updateMember:  (id, body)  => put(`${BASE}/media-team`, { id }, body, true),
-  removeMember:  (id)        => del(`${BASE}/media-team`, { id }, true),
+  getTeam:      (projectId)  => membersApi.list(projectId),
+  inviteMember: (body)       => membersApi.invite(body),
+  updateMember: (id, body)   => membersApi.update(id, body),
+  removeMember: (id)         => membersApi.remove(id),
+
+  mediaPresignUpload:  (body) => projectMediaApi.presign(body),
+  mediaConfirmUpload:  (body) => projectMediaApi.confirm(body),
+  mediaGetViewUrl:     (id)   => projectMediaApi.getViewUrl(id),
+  mediaGetDownloadUrl: (id)   => projectMediaApi.getDownloadUrl(id),
+  mediaGetPublicUrl:   (id, shareToken, type) => projectMediaApi.getPublicUrl(id, shareToken, type),
+}
+
+// ── Utility ────────────────────────────────────────────────────────
+export function formatSize(bytes) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+export function totalShareSize(items = []) {
+  return items.reduce((sum, item) => sum + (item.file_size || 0), 0)
 }
 
 /**
- * Drop-in replacement for the old userApiFetch(path, options) pattern.
- * Routes /api/... paths to the correct edge function.
- * Use this for gradual migration — prefer the typed api objects above for new code.
+ * Legacy fetch helper — prefer typed API objects above for new code.
  */
 export async function userApiFetch(path, options = {}) {
   const token = getToken()
@@ -159,43 +235,32 @@ export async function userApiFetch(path, options = {}) {
   return data
 }
 
-/** Maps old /api/... paths to edge function URLs */
 function legacyPathToEdge(path) {
-  // Strip query string for routing, re-attach below
   const [pathname, qs] = path.split('?')
   const query = qs ? `?${qs}` : ''
-
   const map = {
-    '/api/presign':                `${BASE}/presign`,
-    '/api/download':               `${BASE}/download`,
-    '/api/auth/login':             `${BASE}/auth-login`,
-    '/api/auth/signup':            `${BASE}/auth-signup`,
-    '/api/auth/refresh':           `${BASE}/auth-refresh`,
-    '/api/user/files':             `${BASE}/user-files`,
-    '/api/user/folders':           `${BASE}/user-folders`,
-    '/api/user/profile':           `${BASE}/user-profile`,
-    '/api/user/avatar':            `${BASE}/user-avatar`,
-    '/api/media/projects':         `${BASE}/media-projects`,
-    '/api/media/folders':          `${BASE}/media-folders`,
-    '/api/media/assets':           `${BASE}/media-assets`,
-    '/api/media/comments':         `${BASE}/media-comments`,
-    '/api/media/share':            `${BASE}/media-share`,
-    '/api/media/team':             `${BASE}/media-team`,
+    '/api/presign':       `${BASE}/presign`,
+    '/api/download':      `${BASE}/download`,
+    '/api/auth/login':    `${BASE}/auth-login`,
+    '/api/auth/signup':   `${BASE}/auth-signup`,
+    '/api/auth/refresh':  `${BASE}/auth-refresh`,
+    '/api/user/profile':  `${BASE}/user-profile`,
+    '/api/user/avatar':   `${BASE}/user-avatar`,
+    '/api/user/files':    `${BASE}/drive-files`,
+    '/api/user/folders':  `${BASE}/drive-folders`,
+    '/api/media/projects':`${BASE}/projects`,
+    '/api/media/assets':  `${BASE}/project-media`,
+    '/api/media/comments':`${BASE}/media-comments`,
+    '/api/media/share':   `${BASE}/share-links`,
+    '/api/media/team':    `${BASE}/project-members`,
   }
-
-  // Dynamic paths: /api/share/:token  /api/user/share/:token  /api/media/share/:token
   if (pathname.startsWith('/api/media/share/')) {
     const token = pathname.split('/api/media/share/')[1]
-    return `${BASE}/media-share-resolve?token=${token}${qs ? '&' + qs : ''}`
-  }
-  if (pathname.startsWith('/api/user/share/')) {
-    const token = pathname.split('/api/user/share/')[1]
-    return `${BASE}/user-share?token=${token}${qs ? '&' + qs : ''}`
+    return `${BASE}/share-resolve?token=${token}${qs ? '&' + qs : ''}`
   }
   if (pathname.startsWith('/api/share/')) {
     const token = pathname.split('/api/share/')[1]
     return `${BASE}/share-resolve?token=${token}${qs ? '&' + qs : ''}`
   }
-
   return (map[pathname] || `${BASE}${pathname}`) + query
 }

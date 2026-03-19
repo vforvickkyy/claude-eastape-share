@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   HardDrive, VideoCamera, Clock, CloudArrowUp, Files,
-  LinkSimple, Users, ArrowRight, ChartBar,
+  LinkSimple, Users, ArrowRight, ChartBar, Briefcase,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { usePlan } from "./context/PlanContext";
 import DashboardLayout from "./DashboardLayout";
-import { userApiFetch, formatSize, totalShareSize } from "./lib/userApi";
+import { dashboardApi, formatSize } from "./lib/api";
 
 const CARD_VARIANTS = {
   hidden:  { opacity: 0, y: 16 },
@@ -20,9 +20,12 @@ export default function DashboardPage() {
   const plan = usePlan();
   const navigate = useNavigate();
 
-  const [shares,   setShares]   = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [loading,  setLoading]  = useState(true);
+  const [stats,        setStats]        = useState(null);
+  const [recentProjs,  setRecentProjs]  = useState([]);
+  const [recentFiles,  setRecentFiles]  = useState([]);
+  const [recentMedia,  setRecentMedia]  = useState([]);
+  const [activity,     setActivity]     = useState([]);
+  const [loading,      setLoading]      = useState(true);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login", { replace: true });
@@ -30,20 +33,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([
-      userApiFetch("/api/user/files?limit=6").then(d => d.shares || []).catch(() => []),
-      userApiFetch("/api/media/projects").then(d => d.projects || []).catch(() => []),
-    ]).then(([s, p]) => { setShares(s); setProjects(p); })
+    dashboardApi.getStats()
+      .then(d => {
+        setStats(d.stats);
+        setRecentProjs(d.recent_projects || []);
+        setRecentFiles(d.recent_files || []);
+        setRecentMedia(d.recent_media || []);
+        setActivity(d.activity || []);
+      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [user]);
 
-  const totalFiles   = shares.reduce((s, sh) => s + (sh.files?.length || 0), 0);
-  const activeLinks  = shares.filter(sh => new Date(sh.expires_at) > new Date()).length;
-
-  // Use real storage from PlanContext (Drive + Media combined)
-  const usedBytes   = plan.used_bytes   ?? 0;
+  // Storage from PlanContext (preferred) or dashboard stats fallback
+  const usedBytes   = plan.used_bytes   ?? (stats?.storage_bytes ?? 0);
   const limitBytes  = plan.limit_bytes  ?? (2 * 1024 * 1024 * 1024);
-  const percentUsed = plan.percent_used ?? 0;
+  const percentUsed = plan.percent_used ?? Math.min(100, Math.round((usedBytes / limitBytes) * 100));
   const planName    = plan.display_name ?? "Starter";
 
   const displayName = user?.user_metadata?.full_name?.split(" ")[0] || "there";
@@ -66,10 +71,10 @@ export default function DashboardPage() {
       {/* Stats row */}
       <div className="stats-bar">
         {[
-          { icon: <Files size={22} weight="duotone" />,      value: totalFiles,           label: "Drive Files"    },
-          { icon: <ChartBar size={22} weight="duotone" />,  value: formatSize(usedBytes), label: "Storage Used"   },
-          { icon: <LinkSimple size={22} weight="duotone" />, value: activeLinks,           label: "Active Links"   },
-          { icon: <VideoCamera size={22} weight="duotone" />, value: projects.length,      label: "Media Projects" },
+          { icon: <Briefcase size={22} weight="duotone" />,  value: stats?.project_count ?? 0,           label: "Projects"     },
+          { icon: <Files size={22} weight="duotone" />,      value: stats?.file_count ?? 0,              label: "Files"        },
+          { icon: <VideoCamera size={22} weight="duotone" />, value: stats?.video_count ?? 0,            label: "Videos"       },
+          { icon: <ChartBar size={22} weight="duotone" />,   value: formatSize(usedBytes),              label: "Storage Used" },
         ].map((stat, i) => (
           <motion.div key={stat.label} className="stat-card" custom={i} variants={CARD_VARIANTS} initial="hidden" animate="visible">
             <span className="stat-icon">{stat.icon}</span>
@@ -84,8 +89,41 @@ export default function DashboardPage() {
       {/* Main grid */}
       <div className="dash-grid">
 
-        {/* ── Drive card ── */}
+        {/* ── Projects card ── */}
         <motion.div className="dash-widget" custom={0} variants={CARD_VARIANTS} initial="hidden" animate="visible">
+          <div className="dash-widget-head">
+            <Briefcase size={18} weight="duotone" className="dash-widget-icon media" />
+            <span className="dash-widget-title">Recent Projects</span>
+            <button className="btn-ghost dash-widget-link" onClick={() => navigate("/projects")}>
+              View all <ArrowRight size={13} weight="bold" />
+            </button>
+          </div>
+          {loading ? (
+            <div className="empty-state" style={{ padding: "24px 0" }}><span className="spinner" /></div>
+          ) : recentProjs.length === 0 ? (
+            <div className="dash-empty">
+              <p>No projects yet</p>
+              <button className="btn-primary-sm" onClick={() => navigate("/projects?new=1")}>New Project</button>
+            </div>
+          ) : (
+            <div className="dash-project-list">
+              {recentProjs.slice(0, 5).map(p => (
+                <button
+                  key={p.id}
+                  className="dash-project-row"
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                >
+                  <span className="dash-project-dot" style={{ background: p.color || "#6366f1" }} />
+                  <span className="dash-project-name">{p.icon ? `${p.icon} ` : ""}{p.name}</span>
+                  <ArrowRight size={12} className="dash-project-arrow" />
+                </button>
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        {/* ── Drive card ── */}
+        <motion.div className="dash-widget" custom={1} variants={CARD_VARIANTS} initial="hidden" animate="visible">
           <div className="dash-widget-head">
             <HardDrive size={18} weight="duotone" className="dash-widget-icon drive" />
             <span className="dash-widget-title">Drive</span>
@@ -95,52 +133,19 @@ export default function DashboardPage() {
           </div>
           {loading ? (
             <div className="empty-state" style={{ padding: "24px 0" }}><span className="spinner" /></div>
-          ) : shares.length === 0 ? (
+          ) : recentFiles.length === 0 ? (
             <div className="dash-empty">
-              <p>No files uploaded yet</p>
-              <button className="btn-primary-sm" onClick={() => navigate("/upload")}>Upload files</button>
+              <p>No drive files yet</p>
+              <button className="btn-primary-sm" onClick={() => navigate("/drive")}>Upload files</button>
             </div>
           ) : (
             <div className="dash-file-list">
-              {shares.slice(0, 4).map(sh => (
-                <div key={sh.token} className="dash-file-row">
+              {recentFiles.slice(0, 4).map(f => (
+                <div key={f.id} className="dash-file-row">
                   <Files size={14} weight="duotone" className="dash-file-icon" />
-                  <span className="dash-file-name">{sh.files?.[0]?.name || "Untitled"}</span>
-                  <span className="dash-file-meta">{formatSize(totalShareSize(sh))}</span>
+                  <span className="dash-file-name">{f.name}</span>
+                  <span className="dash-file-meta">{f.file_size ? formatSize(f.file_size) : ""}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-
-        {/* ── Media card ── */}
-        <motion.div className="dash-widget" custom={1} variants={CARD_VARIANTS} initial="hidden" animate="visible">
-          <div className="dash-widget-head">
-            <VideoCamera size={18} weight="duotone" className="dash-widget-icon media" />
-            <span className="dash-widget-title">Media Projects</span>
-            <button className="btn-ghost dash-widget-link" onClick={() => navigate("/media")}>
-              View all <ArrowRight size={13} weight="bold" />
-            </button>
-          </div>
-          {loading ? (
-            <div className="empty-state" style={{ padding: "24px 0" }}><span className="spinner" /></div>
-          ) : projects.length === 0 ? (
-            <div className="dash-empty">
-              <p>No media projects yet</p>
-              <button className="btn-primary-sm" onClick={() => navigate("/media")}>New Project</button>
-            </div>
-          ) : (
-            <div className="dash-project-list">
-              {projects.slice(0, 4).map(p => (
-                <button
-                  key={p.id}
-                  className="dash-project-row"
-                  onClick={() => navigate(`/media/project/${p.id}`)}
-                >
-                  <span className="dash-project-dot" style={{ background: p.color || "#7c3aed" }} />
-                  <span className="dash-project-name">{p.name}</span>
-                  <ArrowRight size={12} className="dash-project-arrow" />
-                </button>
               ))}
             </div>
           )}
@@ -172,12 +177,6 @@ export default function DashboardPage() {
               <span>{formatSize(usedBytes)} used</span>
               <span>{formatSize(limitBytes)} total</span>
             </div>
-            {plan.drive_bytes > 0 || plan.media_bytes > 0 ? (
-              <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "var(--t3)", marginTop: "4px" }}>
-                <span>Drive: {formatSize(plan.drive_bytes ?? 0)}</span>
-                <span>Media: {formatSize(plan.media_bytes ?? 0)}</span>
-              </div>
-            ) : null}
           </div>
           {percentUsed >= 80 && (
             <div style={{ fontSize: "11px", color: percentUsed >= 90 ? "#f87171" : "#fbbf24", marginTop: "6px" }}>
@@ -195,35 +194,30 @@ export default function DashboardPage() {
             <CloudArrowUp size={18} weight="duotone" className="dash-widget-icon upload" />
             <span className="dash-widget-title">Quick Upload</span>
           </div>
-          <p className="dash-upload-desc">Share files instantly via secure links. Links expire after 7 days.</p>
+          <p className="dash-upload-desc">Share files instantly via secure links.</p>
           <button className="db-new-btn" style={{ marginTop: 12 }} onClick={() => navigate("/upload")}>
             <CloudArrowUp size={15} weight="bold" /> New Upload
           </button>
         </motion.div>
 
-        {/* ── Recent activity ── */}
+        {/* ── Recent Activity ── */}
         <motion.div className="dash-widget dash-activity" custom={4} variants={CARD_VARIANTS} initial="hidden" animate="visible">
           <div className="dash-widget-head">
             <Clock size={18} weight="duotone" className="dash-widget-icon" />
             <span className="dash-widget-title">Recent Activity</span>
-            <button className="btn-ghost dash-widget-link" onClick={() => navigate("/recent")}>
-              View all <ArrowRight size={13} weight="bold" />
-            </button>
           </div>
           {loading ? (
             <div className="empty-state" style={{ padding: "24px 0" }}><span className="spinner" /></div>
-          ) : shares.length === 0 ? (
+          ) : activity.length === 0 ? (
             <div className="dash-empty"><p>No recent activity</p></div>
           ) : (
             <div className="dash-activity-list">
-              {shares.slice(0, 5).map(sh => (
-                <div key={sh.token} className="dash-activity-row">
+              {activity.slice(0, 6).map(a => (
+                <div key={a.id} className="dash-activity-row">
                   <span className="dash-activity-dot" />
                   <div className="dash-activity-info">
-                    <span className="dash-activity-label">Uploaded "{sh.files?.[0]?.name || "file"}"</span>
-                    <span className="dash-activity-time">
-                      {sh.created_at ? timeAgo(sh.created_at) : ""}
-                    </span>
+                    <span className="dash-activity-label">{formatActivity(a)}</span>
+                    <span className="dash-activity-time">{a.created_at ? timeAgo(a.created_at) : ""}</span>
                   </div>
                 </div>
               ))}
@@ -231,16 +225,37 @@ export default function DashboardPage() {
           )}
         </motion.div>
 
-        {/* ── Team overview ── */}
+        {/* ── Recent Media ── */}
         <motion.div className="dash-widget" custom={5} variants={CARD_VARIANTS} initial="hidden" animate="visible">
           <div className="dash-widget-head">
-            <Users size={18} weight="duotone" className="dash-widget-icon" />
-            <span className="dash-widget-title">Team</span>
+            <VideoCamera size={18} weight="duotone" className="dash-widget-icon media" />
+            <span className="dash-widget-title">Recent Media</span>
+            <button className="btn-ghost dash-widget-link" onClick={() => navigate("/projects")}>
+              View all <ArrowRight size={13} weight="bold" />
+            </button>
           </div>
-          <div className="dash-empty">
-            <p>Invite team members in any Media project to collaborate.</p>
-            <button className="btn-primary-sm" onClick={() => navigate("/media")}>Go to Media</button>
-          </div>
+          {loading ? (
+            <div className="empty-state" style={{ padding: "24px 0" }}><span className="spinner" /></div>
+          ) : recentMedia.length === 0 ? (
+            <div className="dash-empty">
+              <p>No media uploads yet</p>
+              <button className="btn-primary-sm" onClick={() => navigate("/projects")}>Go to Projects</button>
+            </div>
+          ) : (
+            <div className="dash-project-list">
+              {recentMedia.slice(0, 5).map(m => (
+                <button
+                  key={m.id}
+                  className="dash-project-row"
+                  onClick={() => navigate(`/projects/${m.project_id}/media/${m.id}`)}
+                >
+                  <span className="dash-project-dot" style={{ background: m.projects?.color || "#6366f1" }} />
+                  <span className="dash-project-name">{m.name}</span>
+                  <span style={{ fontSize: 10, color: "var(--t3)", marginLeft: "auto" }}>{m.projects?.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </motion.div>
 
       </div>
@@ -249,9 +264,6 @@ export default function DashboardPage() {
 }
 
 /* ── helpers ── */
-function getToken() {
-  try { return JSON.parse(localStorage.getItem("ets_auth"))?.access_token; } catch { return null; }
-}
 function getTimeOfDay() {
   const h = new Date().getHours();
   if (h < 12) return "morning";
@@ -266,4 +278,9 @@ function timeAgo(iso) {
   const h = Math.floor(m / 60);
   if (h < 24)  return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+function formatActivity(a) {
+  const action = (a.action || "").replace(/_/g, " ");
+  if (a.entity_name) return `${action}: ${a.entity_name}`;
+  return action;
 }

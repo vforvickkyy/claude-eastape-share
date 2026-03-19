@@ -1,7 +1,8 @@
 import React, { lazy, Suspense, useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { PlanProvider } from "./context/PlanContext";
+import { ProjectProvider } from "./context/ProjectContext";
 import UploadPage          from "./UploadPage.jsx";
 import SharePage           from "./SharePage.jsx";
 import LoginPage           from "./LoginPage.jsx";
@@ -14,14 +15,12 @@ import RecentPage          from "./RecentPage.jsx";
 import TrashPage           from "./TrashPage.jsx";
 import ProfilePage         from "./ProfilePage.jsx";
 import PricingPage         from "./PricingPage.jsx";
-import MediaProjectsPage   from "./MediaProjectsPage.jsx";
-import MediaProjectView    from "./MediaProjectView.jsx";
-import MediaAssetPage      from "./MediaAssetPage.jsx";
 import MediaSharePage      from "./MediaSharePage.jsx";
 import AuthCallbackPage    from "./AuthCallbackPage.jsx";
-import MediaRecentPage     from "./MediaRecentPage.jsx";
-import MediaSharedPage     from "./MediaSharedPage.jsx";
 import MaintenancePage     from "./MaintenancePage.jsx";
+import ProjectsPage        from "./ProjectsPage.jsx";
+import ProjectPage         from "./ProjectPage.jsx";
+import ProjectMediaAssetPage from "./ProjectMediaAssetPage.jsx";
 
 const AdminApp = lazy(() => import("./adminpanel/AdminApp.jsx"));
 
@@ -68,30 +67,53 @@ export default function App() {
           <Route path="/"                         element={<DashboardPage />} />
           <Route path="/dashboard"                element={<Navigate to="/" replace />} />
 
-          {/* ── Drive (renamed My Files) ── */}
+          {/* ── Drive ── */}
           <Route path="/drive"                    element={<DrivePage />} />
           <Route path="/drive/folder/:id"         element={<DrivePage />} />
 
-          {/* ── Legacy redirects ── */}
+          {/* ── Projects ── */}
+          <Route path="/projects"                 element={<ProjectsPage />} />
+          <Route
+            path="/projects/:id/*"
+            element={
+              <ProjectProvider>
+                <ProjectPage />
+              </ProjectProvider>
+            }
+          />
+          <Route
+            path="/projects/:id/media/:mediaId"
+            element={
+              <ProjectProvider>
+                <ProjectMediaAssetPage />
+              </ProjectProvider>
+            }
+          />
+
+          {/* ── Legacy media redirects ── */}
+          <Route path="/media"                    element={<Navigate to="/projects" replace />} />
+          <Route path="/media/project/:id"        element={<LegacyProjectRedirect />} />
+          <Route path="/media/asset/:id"          element={<Navigate to="/projects" replace />} />
+          <Route path="/media/share/:token"       element={<MediaSharePage />} />
+          <Route path="/media/recent"             element={<Navigate to="/projects" replace />} />
+          <Route path="/media/shared"             element={<Navigate to="/projects" replace />} />
+
+          {/* ── Legacy my-files redirects ── */}
           <Route path="/my-files"                 element={<Navigate to="/drive" replace />} />
           <Route path="/my-files/folder/:id"      element={<Navigate to="/drive" replace />} />
 
           {/* ── Upload (still accessible) ── */}
           <Route path="/upload"                   element={<UploadPage />} />
 
-          {/* ── Media ── */}
-          <Route path="/media"                    element={<MediaProjectsPage />} />
-          <Route path="/media/project/:id"        element={<MediaProjectView />} />
-          <Route path="/media/project/:id/folder/:folderId" element={<MediaProjectView />} />
-          <Route path="/media/asset/:id"          element={<MediaAssetPage />} />
-          <Route path="/media/share/:token"       element={<MediaSharePage />} />
-          <Route path="/media/recent"             element={<MediaRecentPage />} />
-          <Route path="/media/shared"             element={<MediaSharedPage />} />
-
-          {/* ── Other ── */}
+          {/* ── Public share pages ── */}
           <Route path="/share/:token"             element={<SharePage />} />
+
+          {/* ── Auth ── */}
           <Route path="/login"                    element={<LoginPage />} />
           <Route path="/signup"                   element={<SignupPage />} />
+          <Route path="/auth/callback"            element={<AuthCallbackPage />} />
+
+          {/* ── Static / misc ── */}
           <Route path="/privacy"                  element={<PrivacyPolicyPage />} />
           <Route path="/terms"                    element={<TermsPage />} />
           <Route path="/recent"                   element={<RecentPage />} />
@@ -99,7 +121,6 @@ export default function App() {
           <Route path="/profile"                  element={<ProfilePage />} />
           <Route path="/pricing"                  element={<PricingPage />} />
           <Route path="/plans"                    element={<PricingPage inDashboard />} />
-          <Route path="/auth/callback"            element={<AuthCallbackPage />} />
 
           {/* ── Admin Panel ── */}
           <Route
@@ -115,4 +136,9 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
   );
+}
+
+function LegacyProjectRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/projects/${id}`} replace />
 }
