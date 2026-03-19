@@ -10,6 +10,41 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
+const enc = new TextEncoder()
+function hex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer> {
+  const raw = typeof key === 'string' ? enc.encode(key) : new Uint8Array(key)
+  const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return crypto.subtle.sign('HMAC', k, enc.encode(msg))
+}
+async function presignGetSimple(endpoint: string, bucket: string, key: string, accessKeyId: string, secretAccessKey: string, region: string, expiresIn = 3600): Promise<string> {
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const credentialScope = `${date}/${region}/s3/aws4_request`
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
+  qp.set('X-Amz-Date', datetime)
+  qp.set('X-Amz-Expires', String(expiresIn))
+  qp.set('X-Amz-SignedHeaders', 'host')
+  const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+  const kDate = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion = await hmac(kDate, region)
+  const kService = await hmac(kRegion, 's3')
+  const kSign = await hmac(kService, 'aws4_request')
+  const sig = hex(await hmac(kSign, stringToSign))
+  return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -26,6 +61,13 @@ Deno.serve(async (req) => {
     const projectId = url.searchParams.get('projectId')
     const folderId  = url.searchParams.get('folderId')
     const status    = url.searchParams.get('status')
+
+    const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
+    const BUCKET   = (Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? '')
+    const ACCESS   = (Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? '')
+    const SECRET   = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
+    const REGION   = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
+    const canPresign = !!(ENDPOINT && BUCKET && ACCESS && SECRET)
 
     // GET — list or single
     if (req.method === 'GET') {
@@ -56,7 +98,17 @@ Deno.serve(async (req) => {
 
       const { data: assets, error } = await q
       if (error) return json({ error: error.message }, 500)
-      return json({ assets: assets || [] })
+
+      // Add presigned thumbnail URLs
+      const enriched = canPresign
+        ? await Promise.all((assets || []).map(async (a: any) => {
+            if (!a.wasabi_thumbnail_key) return a
+            const thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, a.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 14400).catch(() => null)
+            return { ...a, thumbnailUrl }
+          }))
+        : (assets || [])
+
+      return json({ assets: enriched })
     }
 
     // PUT — update (status, name, etc.)

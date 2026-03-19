@@ -95,23 +95,21 @@ export default function ProjectFilesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Open preview — fetch presigned URL on demand
+  // Open preview — media items go to full asset page; others use inline modal
   async function openPreview(item) {
     const t = getType(item);
     if (t === "document") { handleDownload(item); return; }
+    // Media source items get the full VideoJS + comments page
+    if (item._source === "media") {
+      navigate(`/projects/${projectId}/media/${item.id}`);
+      return;
+    }
     setPreview(item);
     setPreviewUrl(null);
     setPreviewLoading(true);
     try {
-      let url;
-      if (item._source === "media") {
-        const d = await projectMediaApi.getViewUrl(item.id);
-        url = d.url;
-      } else {
-        const d = await projectFilesApi.getDownloadUrl(item.id);
-        url = d.url;
-      }
-      setPreviewUrl(url);
+      const d = await projectFilesApi.getDownloadUrl(item.id);
+      setPreviewUrl(d.url);
     } catch { setPreviewUrl(null); }
     setPreviewLoading(false);
   }

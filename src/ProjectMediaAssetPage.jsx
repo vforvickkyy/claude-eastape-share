@@ -166,7 +166,7 @@ export default function ProjectMediaAssetPage() {
     <DashboardLayout title={asset.name}>
       {/* Top bar */}
       <div className="asset-topbar">
-        <button className="btn-ghost" onClick={() => navigate(`/projects/${projectId}/media`)}>
+        <button className="btn-ghost" onClick={() => navigate(`/projects/${projectId}/files`)}>
           <ArrowLeft size={14} /> Back
         </button>
 
