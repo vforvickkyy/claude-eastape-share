@@ -6,11 +6,11 @@ import {
   File, FileVideo, FileImage, FileAudio, FolderOpen,
   Trash, PencilSimple, DownloadSimple, CheckCircle, X,
   CaretRight, House, Play, ArrowLeft, ArrowRight,
-  CheckSquare, Square, DotsThree,
+  CheckSquare, Square, Copy, Tag, CaretRight as ChevronRight,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
-import { projectMediaApi, projectFilesApi, projectFoldersApi, formatSize } from "./lib/api";
+import { projectMediaApi, projectFilesApi, projectFoldersApi, shareLinksApi, formatSize } from "./lib/api";
 import UploadPanel from "./components/media/UploadPanel";
 
 const STATUS_COLORS = {
@@ -18,6 +18,12 @@ const STATUS_COLORS = {
   approved:  { label: "Approved",  class: "badge-approved"  },
   revision:  { label: "Revision",  class: "badge-revision"  },
 };
+
+const STATUS_OPTS = [
+  { value: "in_review", label: "In Review" },
+  { value: "approved",  label: "Approved"  },
+  { value: "revision",  label: "Revision"  },
+];
 
 const TYPE_FILTERS = [
   { key: "all",      label: "All" },
@@ -37,10 +43,10 @@ function getType(item) {
 
 function TypeIcon({ item, size = 18 }) {
   const t = getType(item);
-  if (t === "video")    return <FileVideo  size={size} weight="duotone" style={{ color: "#a78bfa" }} />;
-  if (t === "image")    return <FileImage  size={size} weight="duotone" style={{ color: "#60a5fa" }} />;
-  if (t === "audio")    return <FileAudio  size={size} weight="duotone" style={{ color: "#34d399" }} />;
-  return                       <File       size={size} weight="duotone" style={{ color: "var(--t3)" }} />;
+  if (t === "video") return <FileVideo size={size} weight="duotone" style={{ color: "#a78bfa" }} />;
+  if (t === "image") return <FileImage size={size} weight="duotone" style={{ color: "#60a5fa" }} />;
+  if (t === "audio") return <FileAudio size={size} weight="duotone" style={{ color: "#34d399" }} />;
+  return <File size={size} weight="duotone" style={{ color: "var(--t3)" }} />;
 }
 
 export default function ProjectFilesPage() {
@@ -59,12 +65,17 @@ export default function ProjectFilesPage() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [selected,      setSelected]      = useState(new Set());
-  const [renameItem,    setRenameItem]    = useState(null);
+  const [renameItem,    setRenameItem]    = useState(null);   // { id, name, _type: 'file'|'folder' }
   const [renameVal,     setRenameVal]     = useState("");
-  const [menuOpen,      setMenuOpen]      = useState(null);
+  const [copied,        setCopied]        = useState(null);
+
+  // Context menu
+  const [ctxMenu, setCtxMenu] = useState(null); // { x, y, item, isFolder }
+  const [statusSub, setStatusSub] = useState(false);
+  const ctxRef = useRef(null);
 
   // Preview state
-  const [preview,        setPreview]        = useState(null);  // item
+  const [preview,        setPreview]        = useState(null);
   const [previewUrl,     setPreviewUrl]     = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const videoRef = useRef(null);
@@ -95,11 +106,32 @@ export default function ProjectFilesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Open preview — media items go to full asset page; others use inline modal
+  // Close context menu on outside click / scroll
+  useEffect(() => {
+    function close() { setCtxMenu(null); setStatusSub(false); }
+    document.addEventListener("click", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, []);
+
+  function openCtxMenu(e, item, isFolder = false) {
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 250);
+    setCtxMenu({ x, y, item, isFolder });
+    setStatusSub(false);
+  }
+
+  function closeCtx() { setCtxMenu(null); setStatusSub(false); }
+
+  // Preview
   async function openPreview(item) {
     const t = getType(item);
     if (t === "document") { handleDownload(item); return; }
-    // Media source items get the full VideoJS + comments page
     if (item._source === "media") {
       navigate(`/projects/${projectId}/media/${item.id}`);
       return;
@@ -123,12 +155,19 @@ export default function ProjectFilesPage() {
     if (next) openPreview(next);
   }
 
+  // File actions
   async function handleDelete(item) {
     if (!confirm(`Delete "${item.name}"?`)) return;
     if (item._source === "media") await projectMediaApi.delete(item.id).catch(() => {});
     else await projectFilesApi.delete(item.id).catch(() => {});
     setItems(prev => prev.filter(i => i.id !== item.id));
     if (preview?.id === item.id) closePreview();
+  }
+
+  async function handleFolderDelete(folder) {
+    if (!confirm(`Delete folder "${folder.name}" and all its contents?`)) return;
+    await projectFoldersApi.delete(folder.id).catch(() => {});
+    setFolders(prev => prev.filter(f => f.id !== folder.id));
   }
 
   async function handleDownload(item) {
@@ -149,11 +188,37 @@ export default function ProjectFilesPage() {
 
   async function handleRename() {
     const name = renameVal.trim();
-    if (!name || name === renameItem.name) { setRenameItem(null); return; }
-    if (renameItem._source === "media") await projectMediaApi.update(renameItem.id, { name }).catch(() => {});
-    else await projectFilesApi.update(renameItem.id, { name }).catch(() => {});
-    setItems(prev => prev.map(i => i.id === renameItem.id ? { ...i, name } : i));
+    if (!name) { setRenameItem(null); return; }
+    if (renameItem._type === "folder") {
+      if (name !== renameItem.name) {
+        await projectFoldersApi.update(renameItem.id, { name }).catch(() => {});
+        setFolders(prev => prev.map(f => f.id === renameItem.id ? { ...f, name } : f));
+      }
+    } else {
+      if (name !== renameItem.name) {
+        if (renameItem._source === "media") await projectMediaApi.update(renameItem.id, { name }).catch(() => {});
+        else await projectFilesApi.update(renameItem.id, { name }).catch(() => {});
+        setItems(prev => prev.map(i => i.id === renameItem.id ? { ...i, name } : i));
+      }
+    }
     setRenameItem(null);
+  }
+
+  async function handleStatusChange(item, status) {
+    await projectMediaApi.update(item.id, { status }).catch(() => {});
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, status } : i));
+    closeCtx();
+  }
+
+  async function handleCopyLink(item) {
+    try {
+      const data = await shareLinksApi.create({ project_media_id: item.id, allow_download: true, allow_comments: true });
+      const token = data.link?.token || data.share_link?.token;
+      await navigator.clipboard.writeText(`${window.location.origin}/media/share/${token}`);
+      setCopied(item.id);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {}
+    closeCtx();
   }
 
   async function createFolder() {
@@ -189,7 +254,7 @@ export default function ProjectFilesPage() {
   }
 
   return (
-    <div className="ufiles-page">
+    <div className="ufiles-page" onClick={closeCtx}>
       {/* Toolbar */}
       <div className="ufiles-toolbar">
         <div className="ufiles-search-wrap">
@@ -247,19 +312,7 @@ export default function ProjectFilesPage() {
         <div className="mpv-loading">Loading…</div>
       ) : (
         <>
-          {/* Folders row */}
-          {folders.length > 0 && (
-            <div className="mpv-folders-row">
-              {folders.map(f => (
-                <div key={f.id} className="mpv-folder-chip" onClick={() => navigate(`/projects/${projectId}/files/folder/${f.id}`)}>
-                  <FolderOpen size={15} weight="duotone" />
-                  <span>{f.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* New folder inline */}
+          {/* New folder inline input */}
           {showNewFolder && (
             <div className="mpv-new-folder-row">
               <FolderOpen size={15} weight="duotone" />
@@ -274,7 +327,7 @@ export default function ProjectFilesPage() {
           )}
 
           {/* Empty state */}
-          {filtered.length === 0 && (
+          {filtered.length === 0 && folders.length === 0 && (
             <div className="mpv-empty">
               <UploadSimple size={48} weight="duotone" style={{ opacity: 0.2 }} />
               <p>{search || typeFilter !== "all" ? "No files match your filters." : "No files yet. Upload your first file."}</p>
@@ -286,9 +339,44 @@ export default function ProjectFilesPage() {
             </div>
           )}
 
-          {/* Grid view */}
-          {view === "grid" && filtered.length > 0 && (
+          {/* Grid view — folders + files in one unified grid */}
+          {view === "grid" && (
             <div className="ufiles-grid">
+              {/* Folder cards */}
+              {folders.map(folder => (
+                <motion.div
+                  key={`folder-${folder.id}`}
+                  className="ufile-card ufile-folder-card"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  onClick={() => navigate(`/projects/${projectId}/files/folder/${folder.id}`)}
+                  onContextMenu={e => openCtxMenu(e, folder, true)}
+                >
+                  <div className="ufile-thumb ufile-folder-thumb">
+                    {renameItem?.id === folder.id && renameItem._type === "folder" ? (
+                      <input
+                        className="ufile-folder-rename"
+                        value={renameVal}
+                        onChange={e => setRenameVal(e.target.value)}
+                        onBlur={handleRename}
+                        onKeyDown={e => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setRenameItem(null); }}
+                        autoFocus
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <FolderOpen size={44} weight="duotone" style={{ color: "#f59e0b" }} />
+                    )}
+                  </div>
+                  <div className="ufile-footer">
+                    <div className="ufile-footer-top">
+                      <span className="ufile-name" title={folder.name}>{folder.name}</span>
+                    </div>
+                    <div className="ufile-meta">Folder</div>
+                  </div>
+                </motion.div>
+              ))}
+
+              {/* File cards */}
               {filtered.map(item => {
                 const t = getType(item);
                 const canPreview = t !== "document";
@@ -300,8 +388,8 @@ export default function ProjectFilesPage() {
                     className={`ufile-card ${isSelected ? "selected" : ""}`}
                     initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
+                    onContextMenu={e => openCtxMenu(e, item, false)}
                   >
-                    {/* Thumb */}
                     <div className="ufile-thumb" onClick={() => canPreview ? openPreview(item) : handleDownload(item)}>
                       {item.thumbnailUrl ? (
                         <img src={item.thumbnailUrl} alt={item.name} onError={e => { e.target.style.display = "none"; }} />
@@ -322,14 +410,12 @@ export default function ProjectFilesPage() {
                         <span className={`media-status-badge ${status.class}`}>{status.label}</span>
                       )}
                     </div>
-
-                    {/* Footer */}
                     <div className="ufile-footer">
                       <div className="ufile-footer-top">
                         <button className="ufile-select-btn" onClick={e => toggleSelect(item.id, e)}>
                           {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
                         </button>
-                        {renameItem?.id === item.id ? (
+                        {renameItem?.id === item.id && renameItem._type !== "folder" ? (
                           <input
                             className="mpv-rename-input"
                             value={renameVal}
@@ -341,29 +427,6 @@ export default function ProjectFilesPage() {
                         ) : (
                           <span className="ufile-name" title={item.name}>{item.name}</span>
                         )}
-                        <div className="ufile-menu-wrap">
-                          <button className="ufile-menu-btn" onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === item.id ? null : item.id); }}>
-                            <DotsThree size={16} weight="bold" />
-                          </button>
-                          {menuOpen === item.id && (
-                            <div className="ufile-menu" onClick={e => e.stopPropagation()}>
-                              {canPreview && (
-                                <button onClick={() => { setMenuOpen(null); openPreview(item); }}>
-                                  <Play size={13} /> Preview
-                                </button>
-                              )}
-                              <button onClick={() => { setMenuOpen(null); handleDownload(item); }}>
-                                <DownloadSimple size={13} /> Download
-                              </button>
-                              <button onClick={() => { setMenuOpen(null); setRenameItem(item); setRenameVal(item.name); }}>
-                                <PencilSimple size={13} /> Rename
-                              </button>
-                              <button className="danger" onClick={() => { setMenuOpen(null); handleDelete(item); }}>
-                                <Trash size={13} /> Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
                       </div>
                       <div className="ufile-meta">
                         {item.file_size ? formatSize(item.file_size) : ""}
@@ -378,16 +441,38 @@ export default function ProjectFilesPage() {
           )}
 
           {/* List view */}
-          {view === "list" && filtered.length > 0 && (
+          {view === "list" && (
             <div className="mpv-list">
               <div className="mpv-list-header">
                 <span>Name</span><span>Type</span><span>Size</span><span>Added</span><span />
               </div>
+              {folders.map(folder => (
+                <div
+                  key={`folder-${folder.id}`}
+                  className="mpv-list-row"
+                  onClick={() => navigate(`/projects/${projectId}/files/folder/${folder.id}`)}
+                  onContextMenu={e => openCtxMenu(e, folder, true)}
+                >
+                  <span className="mpv-list-name">
+                    <FolderOpen size={15} weight="duotone" style={{ color: "#f59e0b" }} />
+                    {folder.name}
+                  </span>
+                  <span>Folder</span>
+                  <span>—</span>
+                  <span>{folder.created_at ? new Date(folder.created_at).toLocaleDateString() : "—"}</span>
+                  <span />
+                </div>
+              ))}
               {filtered.map(item => {
                 const t = getType(item);
                 const status = item.status && STATUS_COLORS[item.status];
                 return (
-                  <div key={item.id} className="mpv-list-row" onClick={() => t !== "document" ? openPreview(item) : handleDownload(item)}>
+                  <div
+                    key={item.id}
+                    className="mpv-list-row"
+                    onClick={() => t !== "document" ? openPreview(item) : handleDownload(item)}
+                    onContextMenu={e => openCtxMenu(e, item, false)}
+                  >
                     <span className="mpv-list-name">
                       <TypeIcon item={item} size={15} />
                       {item.name}
@@ -397,9 +482,9 @@ export default function ProjectFilesPage() {
                     <span>{item.file_size ? formatSize(item.file_size) : "—"}</span>
                     <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : "—"}</span>
                     <span style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-                      <button title="Download" onClick={() => handleDownload(item)}><DownloadSimple size={14} /></button>
-                      <button title="Rename" onClick={() => { setRenameItem(item); setRenameVal(item.name); }}><PencilSimple size={14} /></button>
-                      <button title="Delete" onClick={() => handleDelete(item)}><Trash size={14} /></button>
+                      <button onClick={() => handleDownload(item)}><DownloadSimple size={14} /></button>
+                      <button onClick={() => { setRenameItem({ ...item, _type: "file" }); setRenameVal(item.name); }}><PencilSimple size={14} /></button>
+                      <button onClick={() => handleDelete(item)}><Trash size={14} /></button>
                     </span>
                   </div>
                 );
@@ -407,6 +492,84 @@ export default function ProjectFilesPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Context Menu ── */}
+      {ctxMenu && (
+        <div
+          ref={ctxRef}
+          className="ctx-menu"
+          style={{ top: ctxMenu.y, left: ctxMenu.x }}
+          onClick={e => e.stopPropagation()}
+          onContextMenu={e => e.preventDefault()}
+        >
+          {ctxMenu.isFolder ? (
+            <>
+              <button onClick={() => { navigate(`/projects/${projectId}/files/folder/${ctxMenu.item.id}`); closeCtx(); }}>
+                <FolderOpen size={13} /> Open
+              </button>
+              <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "folder" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
+                <PencilSimple size={13} /> Rename
+              </button>
+              <div className="ctx-divider" />
+              <button className="danger" onClick={() => { handleFolderDelete(ctxMenu.item); closeCtx(); }}>
+                <Trash size={13} /> Delete
+              </button>
+            </>
+          ) : (
+            <>
+              {getType(ctxMenu.item) !== "document" && (
+                <button onClick={() => { openPreview(ctxMenu.item); closeCtx(); }}>
+                  <Play size={13} /> Preview
+                </button>
+              )}
+              <button onClick={() => { handleDownload(ctxMenu.item); closeCtx(); }}>
+                <DownloadSimple size={13} /> Download
+              </button>
+              <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "file" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
+                <PencilSimple size={13} /> Rename
+              </button>
+              {ctxMenu.item._source === "media" && (
+                <>
+                  <button onClick={() => handleCopyLink(ctxMenu.item)}>
+                    {copied === ctxMenu.item.id ? <CheckCircle size={13} /> : <Copy size={13} />}
+                    {copied === ctxMenu.item.id ? "Copied!" : "Copy Link"}
+                  </button>
+                  <div className="ctx-divider" />
+                  <div
+                    className="ctx-submenu-wrap"
+                    onMouseEnter={() => setStatusSub(true)}
+                    onMouseLeave={() => setStatusSub(false)}
+                  >
+                    <button className="ctx-has-sub">
+                      <Tag size={13} /> Set Status
+                      <ChevronRight size={11} style={{ marginLeft: "auto" }} />
+                    </button>
+                    {statusSub && (
+                      <div className="ctx-submenu">
+                        {STATUS_OPTS.map(opt => (
+                          <button
+                            key={opt.value}
+                            className={ctxMenu.item.status === opt.value ? "active" : ""}
+                            onClick={() => handleStatusChange(ctxMenu.item, opt.value)}
+                          >
+                            <span className={`ctx-status-dot status-${opt.value}`} />
+                            {opt.label}
+                            {ctxMenu.item.status === opt.value && <CheckCircle size={11} style={{ marginLeft: "auto" }} />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              <div className="ctx-divider" />
+              <button className="danger" onClick={() => { handleDelete(ctxMenu.item); closeCtx(); }}>
+                <Trash size={13} /> Delete
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {/* Upload panel */}
@@ -436,26 +599,13 @@ export default function ProjectFilesPage() {
               exit={{ scale: 0.94, opacity: 0 }}
               onClick={e => e.stopPropagation()}
             >
-              {/* Close */}
               <button className="preview-close" onClick={closePreview}><X size={22} /></button>
-
-              {/* Media */}
               <div className="preview-media">
                 {previewLoading && <div className="preview-spinner" />}
                 {!previewLoading && previewUrl && (() => {
                   const t = getType(preview);
-                  if (t === "video") return (
-                    <video
-                      ref={videoRef}
-                      key={previewUrl}
-                      controls autoPlay
-                      className="preview-video"
-                      src={previewUrl}
-                    />
-                  );
-                  if (t === "image") return (
-                    <img className="preview-image" src={previewUrl} alt={preview.name} />
-                  );
+                  if (t === "video") return <video ref={videoRef} key={previewUrl} controls autoPlay className="preview-video" src={previewUrl} />;
+                  if (t === "image") return <img className="preview-image" src={previewUrl} alt={preview.name} />;
                   if (t === "audio") return (
                     <div className="preview-audio-wrap">
                       <FileAudio size={64} weight="duotone" style={{ color: "#34d399", opacity: 0.8 }} />
@@ -464,12 +614,8 @@ export default function ProjectFilesPage() {
                   );
                   return null;
                 })()}
-                {!previewLoading && !previewUrl && (
-                  <div className="preview-error">Failed to load preview</div>
-                )}
+                {!previewLoading && !previewUrl && <div className="preview-error">Failed to load preview</div>}
               </div>
-
-              {/* Info */}
               <div className="preview-info">
                 <span className="preview-name">{preview.name}</span>
                 {preview.file_size && <span className="preview-size">{formatSize(preview.file_size)}</span>}
@@ -477,8 +623,6 @@ export default function ProjectFilesPage() {
                   <DownloadSimple size={14} /> Download
                 </button>
               </div>
-
-              {/* Prev / Next */}
               {previewable.length > 1 && (
                 <>
                   <button className="preview-nav prev" onClick={() => previewNav(-1)}><ArrowLeft size={20} /></button>

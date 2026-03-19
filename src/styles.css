@@ -3762,6 +3762,67 @@ body { overflow-x: hidden; }
 .ufile-menu button.danger { color: var(--danger); }
 .ufile-menu button.danger:hover { background: rgba(239,68,68,0.1); }
 
+/* Folder card (same size as file card) */
+.ufile-folder-card { cursor: pointer; }
+.ufile-folder-thumb {
+  height: 140px; background: rgba(245,158,11,0.08);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.ufile-folder-card:hover .ufile-folder-thumb { background: rgba(245,158,11,0.14); }
+.ufile-folder-rename {
+  background: var(--bg2); border: 1px solid var(--purple);
+  border-radius: 6px; color: var(--t1); font-size: 12px;
+  padding: 4px 8px; outline: none; width: 80%;
+}
+
+/* Right-click context menu */
+.ctx-menu {
+  position: fixed; z-index: 1000;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 4px;
+  min-width: 170px; box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+  animation: ctxIn 0.1s ease;
+}
+@keyframes ctxIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.ctx-menu button {
+  display: flex; align-items: center; gap: 9px;
+  background: none; border: none; color: var(--t2);
+  font-size: 13px; padding: 7px 11px; border-radius: 6px;
+  cursor: pointer; width: 100%; text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.ctx-menu button:hover, .ctx-menu button.active { background: rgba(99,102,241,0.12); color: var(--t1); }
+.ctx-menu button.danger { color: #f87171; }
+.ctx-menu button.danger:hover { background: rgba(239,68,68,0.12); }
+.ctx-divider { height: 1px; background: var(--border); margin: 3px 0; }
+.ctx-has-sub { justify-content: flex-start; }
+.ctx-submenu-wrap { position: relative; }
+.ctx-submenu {
+  position: absolute; left: 100%; top: 0; margin-left: 4px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 4px;
+  min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 1001;
+}
+.ctx-submenu button {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; color: var(--t2);
+  font-size: 12px; padding: 6px 10px; border-radius: 5px;
+  cursor: pointer; width: 100%; text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.ctx-submenu button:hover, .ctx-submenu button.active { background: rgba(99,102,241,0.12); color: var(--t1); }
+.ctx-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.status-in_review { background: #f59e0b; }
+.status-approved   { background: #10b981; }
+.status-revision   { background: #ef4444; }
+
 /* Preview modal */
 .preview-backdrop {
   position: fixed; inset: 0; z-index: 500;
