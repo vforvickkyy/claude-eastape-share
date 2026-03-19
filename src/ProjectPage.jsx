@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { useNavigate, useParams, useLocation, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import {
-  FolderOpen, Users, ShareNetwork, Gear, ArrowLeft,
+  FolderOpen, Users, ShareNetwork, Gear, ArrowLeft, Kanban,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
@@ -10,9 +10,11 @@ import ProjectFilesPage    from "./ProjectFilesPage";
 import ProjectTeamPage     from "./ProjectTeamPage";
 import ProjectSharingPage  from "./ProjectSharingPage";
 import ProjectSettingsPage from "./ProjectSettingsPage";
+import ManageTab           from "./components/production/ManageTab";
 
 const TABS = [
   { path: "files",    label: "Files",    icon: <FolderOpen   size={15} weight="duotone" /> },
+  { path: "manage",   label: "Manage",   icon: <Kanban       size={15} weight="duotone" /> },
   { path: "team",     label: "Team",     icon: <Users        size={15} weight="duotone" /> },
   { path: "sharing",  label: "Sharing",  icon: <ShareNetwork size={15} weight="duotone" /> },
   { path: "settings", label: "Settings", icon: <Gear         size={15} weight="duotone" /> },
@@ -83,6 +85,7 @@ export default function ProjectPage() {
             <Route index                        element={<Navigate to="files" replace />} />
             <Route path="files"                 element={<ProjectFilesPage />} />
             <Route path="files/folder/:folderId" element={<ProjectFilesPage />} />
+            <Route path="manage"                element={<ManageTab />} />
             <Route path="team"                  element={<ProjectTeamPage />} />
             <Route path="sharing"               element={<ProjectSharingPage />} />
             <Route path="settings"              element={<ProjectSettingsPage />} />

@@ -50,6 +50,18 @@ async function put(url, params = {}, body = {}, auth = false) {
   return data
 }
 
+async function patch(url, params = {}, body = {}, auth = false) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (auth) Object.assign(headers, authHeaders())
+  const qs = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+  ).toString()
+  const res = await fetch(qs ? `${url}?${qs}` : url, { method: 'PATCH', headers, body: JSON.stringify(body) })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Request failed')
+  return data
+}
+
 async function del(url, params = {}, auth = false) {
   const headers = { 'Content-Type': 'application/json' }
   if (auth) Object.assign(headers, authHeaders())
@@ -203,6 +215,43 @@ export const mediaApi = {
   mediaGetViewUrl:     (id)   => projectMediaApi.getViewUrl(id),
   mediaGetDownloadUrl: (id)   => projectMediaApi.getDownloadUrl(id),
   mediaGetPublicUrl:   (id, shareToken, type) => projectMediaApi.getPublicUrl(id, shareToken, type),
+}
+
+// ── Production Management ──────────────────────────────────────────
+const PROD = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/production`
+export const productionApi = {
+  // Seed defaults for new project
+  seed:           (projectId)      => post(`${PROD}?resource=seed&project_id=${projectId}`, {}, true),
+
+  // Statuses
+  listStatuses:   (projectId)      => get(PROD, { resource: 'statuses', project_id: projectId }, true),
+  createStatus:   (projectId, body) => post(`${PROD}?resource=statuses&project_id=${projectId}`, body, true),
+  updateStatus:   (id, body)       => put(`${PROD}?resource=statuses&id=${id}`, {}, body, true),
+  deleteStatus:   (id)             => del(PROD, { resource: 'statuses', id }, true),
+
+  // Scenes
+  listScenes:     (projectId)      => get(PROD, { resource: 'scenes', project_id: projectId }, true),
+  createScene:    (projectId, body) => post(`${PROD}?resource=scenes&project_id=${projectId}`, body, true),
+  updateScene:    (id, body)       => put(`${PROD}?resource=scenes&id=${id}`, {}, body, true),
+  deleteScene:    (id)             => del(PROD, { resource: 'scenes', id }, true),
+
+  // Columns
+  listColumns:    (projectId)      => get(PROD, { resource: 'columns', project_id: projectId }, true),
+  createColumn:   (projectId, body) => post(`${PROD}?resource=columns&project_id=${projectId}`, body, true),
+  updateColumn:   (id, body)       => put(`${PROD}?resource=columns&id=${id}`, {}, body, true),
+  deleteColumn:   (id)             => del(PROD, { resource: 'columns', id }, true),
+
+  // Shots
+  listShots:      (projectId, params = {}) => get(PROD, { resource: 'shots', project_id: projectId, ...params }, true),
+  getShot:        (id)             => get(PROD, { resource: 'shots', id }, true),
+  createShot:     (projectId, body) => post(`${PROD}?resource=shots&project_id=${projectId}`, body, true),
+  updateShot:     (id, body)       => patch(`${PROD}?resource=shots&id=${id}`, {}, body, true),
+  deleteShot:     (id)             => del(PROD, { resource: 'shots', id }, true),
+
+  // Shot Comments
+  listComments:   (shotId)         => get(PROD, { resource: 'shot_comments', shot_id: shotId }, true),
+  createComment:  (shotId, body)   => post(`${PROD}?resource=shot_comments&shot_id=${shotId}`, body, true),
+  deleteComment:  (shotId, id)     => del(PROD, { resource: 'shot_comments', shot_id: shotId, id }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────

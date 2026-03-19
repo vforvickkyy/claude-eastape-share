@@ -1,0 +1,2 @@
+[functions.production]
+verify_jwt = false
