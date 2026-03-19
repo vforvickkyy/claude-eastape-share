@@ -22,6 +22,7 @@ export default function ProjectSettingsPage() {
   const [saving,      setSaving]      = useState(false);
   const [deleting,    setDeleting]    = useState(false);
   const [saved,       setSaved]       = useState(false);
+  const [saveError,   setSaveError]   = useState("");
 
   useEffect(() => {
     if (project) {
@@ -38,6 +39,7 @@ export default function ProjectSettingsPage() {
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true);
+    setSaveError("");
     try {
       await projectsApi.update(projectId, {
         name, description, client_name: clientName, client_email: clientEmail,
@@ -46,7 +48,9 @@ export default function ProjectSettingsPage() {
       setSaved(true);
       refetch();
       setTimeout(() => setSaved(false), 2000);
-    } catch {}
+    } catch (err) {
+      setSaveError(err?.message || "Save failed. Please try again.");
+    }
     finally { setSaving(false); }
   }
 
@@ -149,6 +153,9 @@ export default function ProjectSettingsPage() {
           </div>
         </div>
 
+        {saveError && (
+          <p style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>{saveError}</p>
+        )}
         <button type="submit" className="btn-primary" disabled={saving} style={{ marginTop: 4 }}>
           {saved ? <><Check size={14} weight="bold" /> Saved</> : saving ? "Saving…" : <><FloppyDisk size={14} weight="bold" /> Save Changes</>}
         </button>
