@@ -297,8 +297,10 @@ Deno.serve(async (req) => {
     // ── SEED ──────────────────────────────────────────────────────────
     if (resource === 'seed' && req.method === 'POST') {
       if (!projectId) return json({ error: 'project_id required' }, 400)
-      if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
-      await supabase.rpc('seed_production', { p_project_id: projectId })
+      const owner = await isOwner(projectId)
+      if (!owner) return json({ error: 'Forbidden — only the project owner can set up production' }, 403)
+      const { error: rpcErr } = await supabase.rpc('seed_production', { p_project_id: projectId })
+      if (rpcErr) return json({ error: rpcErr.message }, 500)
       return json({ ok: true })
     }
 
