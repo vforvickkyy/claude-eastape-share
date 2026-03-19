@@ -33,11 +33,7 @@ export default function ProjectPage() {
 
   const currentTab = TABS.find(t => location.pathname.includes(`/${t.path}`))?.path || "files";
 
-  const projectTitle = projLoading
-    ? "Loading…"
-    : project
-    ? (project.icon ? `${project.icon} ${project.name}` : project.name)
-    : "Project";
+  const projectTitle = projLoading ? "Loading…" : project?.name || "Project";
 
   return (
     <DashboardLayout title={projectTitle}>
@@ -59,9 +55,7 @@ export default function ProjectPage() {
         {/* Project header */}
         {project && (
           <div className="project-header" style={{ borderLeftColor: project.color || "#6366f1" }}>
-            <div className="project-header-icon" style={{ background: project.color || "#6366f1" }}>
-              {project.icon || "📁"}
-            </div>
+            <div className="project-header-color-bar" style={{ background: project.color || "#6366f1" }} />
             <div className="project-header-info">
               <h2 className="project-header-name">{project.name}</h2>
               {project.client_name && (

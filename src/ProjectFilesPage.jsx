@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  CloudArrowUp, FolderSimplePlus, MagnifyingGlass, Rows, SquaresFour,
+  UploadSimple, FolderSimplePlus, MagnifyingGlass, Rows, SquaresFour,
   File, FolderOpen, Trash, PencilSimple, DownloadSimple, CheckCircle,
   X, CaretRight, House,
 } from "@phosphor-icons/react";
@@ -145,7 +145,7 @@ export default function ProjectFilesPage() {
           <FolderSimplePlus size={17} weight="duotone" />
         </button>
         <label className="btn-primary" style={{ cursor: "pointer" }}>
-          <CloudArrowUp size={14} weight="bold" />
+          <UploadSimple size={14} weight="bold" />
           {uploading ? "Uploading…" : "Upload"}
           <input type="file" multiple style={{ display: "none" }} onChange={handleFileInput} />
         </label>
@@ -165,7 +165,7 @@ export default function ProjectFilesPage() {
       {/* Drag overlay */}
       {dragOver && (
         <div className="drag-overlay">
-          <CloudArrowUp size={36} weight="duotone" />
+          <UploadSimple size={36} weight="duotone" />
           <p>Drop files to upload</p>
         </div>
       )}

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CloudArrowUp, FolderSimplePlus, SquaresFour, Rows, MagnifyingGlass,
+  UploadSimple, FolderSimplePlus, SquaresFour, Rows, MagnifyingGlass,
   DotsThree, FolderOpen, VideoCamera, FileImage, File, FileAudio,
   Trash, PencilSimple, Copy, CheckCircle, X, DownloadSimple,
   CheckSquare, Square, CaretRight, House,
@@ -164,7 +164,7 @@ export default function ProjectMediaPage() {
           <FolderSimplePlus size={17} weight="duotone" />
         </button>
         <button className="btn-primary" onClick={() => setShowUpload(true)}>
-          <CloudArrowUp size={14} weight="bold" />
+          <UploadSimple size={14} weight="bold" />
           Upload
         </button>
       </div>
@@ -237,7 +237,7 @@ export default function ProjectMediaPage() {
               <p>{search || filterStatus !== "all" ? "No assets match your filters." : "No media yet. Upload your first file."}</p>
               {!search && filterStatus === "all" && (
                 <button className="btn-primary" onClick={() => setShowUpload(true)}>
-                  <CloudArrowUp size={14} weight="bold" /> Upload
+                  <UploadSimple size={14} weight="bold" /> Upload
                 </button>
               )}
             </div>
