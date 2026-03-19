@@ -3573,6 +3573,176 @@ body { overflow-x: hidden; }
 .btn-ghost-sm { display: inline-flex; align-items: center; gap: 4px; background: none; border: 1px solid var(--border); color: var(--t2); font-size: 12px; padding: 5px 10px; border-radius: var(--r-pill); cursor: pointer; }
 
 /* ═══════════════════════════════════════════════════════════════
+   UNIFIED FILES PAGE
+═══════════════════════════════════════════════════════════════ */
+.ufiles-page { display: flex; flex-direction: column; gap: 10px; position: relative; }
+
+/* Toolbar */
+.ufiles-toolbar { display: flex; align-items: center; gap: 8px; }
+.ufiles-search-wrap {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 7px 12px;
+  flex: 1; min-width: 140px; color: var(--t3);
+}
+.ufiles-search { background: none; border: none; outline: none; color: var(--t1); font-size: 13px; flex: 1; }
+.ufiles-search::placeholder { color: var(--t4); }
+.ufiles-toolbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.ufiles-upload-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--purple); color: #fff; border: none;
+  border-radius: var(--r-pill); padding: 8px 18px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  box-shadow: 0 2px 12px rgba(99,102,241,0.35);
+}
+.ufiles-upload-btn:hover { background: var(--purple-d); transform: translateY(-1px); box-shadow: 0 4px 18px rgba(99,102,241,0.45); }
+.ufiles-upload-btn:active { transform: translateY(0); }
+
+/* Type filter pills */
+.ufiles-type-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.ufiles-type-pill {
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--t3); font-size: 12px; font-weight: 500;
+  padding: 4px 12px; border-radius: var(--r-pill); cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ufiles-type-pill:hover { color: var(--t1); border-color: var(--border-hover); }
+.ufiles-type-pill.active { background: rgba(99,102,241,0.15); border-color: var(--purple); color: var(--purple-l); font-weight: 600; }
+
+/* Grid */
+.ufiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+
+/* Card */
+.ufile-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: visible; position: relative;
+  transition: box-shadow 0.18s, border-color 0.18s;
+  display: flex; flex-direction: column;
+}
+.ufile-card:hover { border-color: var(--border-hover); box-shadow: 0 6px 24px rgba(0,0,0,0.2); }
+.ufile-card.selected { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
+
+/* Thumb */
+.ufile-thumb {
+  height: 140px; background: var(--bg3); position: relative;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.ufile-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ufile-thumb-icon { display: flex; align-items: center; justify-content: center; }
+.ufile-play-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.18s;
+}
+.ufile-thumb:hover .ufile-play-overlay { opacity: 1; }
+.ufile-play-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(255,255,255,0.92);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--purple); box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+
+/* Footer */
+.ufile-footer { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.ufile-footer-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ufile-select-btn { background: none; border: none; color: var(--t3); cursor: pointer; padding: 0; flex-shrink: 0; display: flex; }
+.ufile-select-btn:hover { color: var(--t1); }
+.ufile-name { font-size: 12px; font-weight: 500; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.ufile-meta { font-size: 11px; color: var(--t4); }
+
+/* Card context menu */
+.ufile-menu-wrap { position: relative; flex-shrink: 0; }
+.ufile-menu-btn { background: none; border: none; color: var(--t3); cursor: pointer; padding: 2px; display: flex; border-radius: 4px; }
+.ufile-menu-btn:hover { background: var(--bg3); color: var(--t1); }
+.ufile-menu {
+  position: absolute; right: 0; top: 100%; margin-top: 4px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 4px; z-index: 30;
+  min-width: 130px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.ufile-menu button {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; color: var(--t2);
+  font-size: 13px; padding: 7px 10px; border-radius: 5px;
+  cursor: pointer; width: 100%; text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.ufile-menu button:hover { background: var(--bg2); color: var(--t1); }
+.ufile-menu button.danger { color: var(--danger); }
+.ufile-menu button.danger:hover { background: rgba(239,68,68,0.1); }
+
+/* Preview modal */
+.preview-backdrop {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.9);
+  display: flex; align-items: center; justify-content: center;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.preview-inner {
+  position: relative; display: flex; flex-direction: column;
+  align-items: center; gap: 12px;
+  max-width: 92vw; max-height: 92vh;
+}
+.preview-close {
+  position: absolute; top: -44px; right: 0;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+  color: #fff; cursor: pointer; border-radius: 50%;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.preview-close:hover { background: rgba(255,255,255,0.18); }
+.preview-media { display: flex; align-items: center; justify-content: center; }
+.preview-video {
+  max-width: 88vw; max-height: 72vh;
+  border-radius: var(--r-lg); background: #000;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.preview-image {
+  max-width: 88vw; max-height: 78vh;
+  border-radius: var(--r-lg); object-fit: contain;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.preview-audio-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  padding: 40px; background: var(--bg2); border-radius: var(--r-xl);
+  min-width: 340px;
+}
+.preview-spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--purple);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.preview-error { color: rgba(255,255,255,0.4); font-size: 14px; padding: 40px; }
+.preview-info {
+  display: flex; align-items: center; gap: 12px;
+  color: rgba(255,255,255,0.6); font-size: 13px;
+}
+.preview-name { font-weight: 500; color: rgba(255,255,255,0.85); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-size { font-size: 12px; }
+.preview-dl-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.8); font-size: 12px; padding: 5px 12px;
+  border-radius: var(--r-pill); cursor: pointer; transition: background 0.15s;
+  margin-left: 4px;
+}
+.preview-dl-btn:hover { background: rgba(255,255,255,0.14); }
+.preview-nav {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+  color: #fff; cursor: pointer; border-radius: 50%;
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.preview-nav:hover { background: rgba(255,255,255,0.16); }
+.preview-nav.prev { left: 20px; }
+.preview-nav.next { right: 20px; }
+
+/* ═══════════════════════════════════════════════════════════════
    MEDIA / FILES TAB EXTRAS
 ═══════════════════════════════════════════════════════════════ */
 .project-media-tab,

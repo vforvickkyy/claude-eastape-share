@@ -1,23 +1,21 @@
 import React, { useEffect } from "react";
 import { useNavigate, useParams, useLocation, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import {
-  FolderOpen, VideoCamera, Users, ShareNetwork, Gear, ArrowLeft, House,
+  FolderOpen, Users, ShareNetwork, Gear, ArrowLeft,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
 import DashboardLayout from "./DashboardLayout";
 import ProjectFilesPage    from "./ProjectFilesPage";
-import ProjectMediaPage    from "./ProjectMediaPage";
 import ProjectTeamPage     from "./ProjectTeamPage";
 import ProjectSharingPage  from "./ProjectSharingPage";
 import ProjectSettingsPage from "./ProjectSettingsPage";
 
 const TABS = [
-  { path: "files",    label: "Files",    icon: <FolderOpen    size={15} weight="duotone" /> },
-  { path: "media",    label: "Media",    icon: <VideoCamera   size={15} weight="duotone" /> },
-  { path: "team",     label: "Team",     icon: <Users         size={15} weight="duotone" /> },
-  { path: "sharing",  label: "Sharing",  icon: <ShareNetwork  size={15} weight="duotone" /> },
-  { path: "settings", label: "Settings", icon: <Gear          size={15} weight="duotone" /> },
+  { path: "files",    label: "Files",    icon: <FolderOpen   size={15} weight="duotone" /> },
+  { path: "team",     label: "Team",     icon: <Users        size={15} weight="duotone" /> },
+  { path: "sharing",  label: "Sharing",  icon: <ShareNetwork size={15} weight="duotone" /> },
+  { path: "settings", label: "Settings", icon: <Gear         size={15} weight="duotone" /> },
 ];
 
 export default function ProjectPage() {
@@ -82,14 +80,12 @@ export default function ProjectPage() {
         {/* Tab content */}
         <div className="project-tab-content">
           <Routes>
-            <Route index                element={<Navigate to="files" replace />} />
-            <Route path="files"         element={<ProjectFilesPage />} />
+            <Route index                        element={<Navigate to="files" replace />} />
+            <Route path="files"                 element={<ProjectFilesPage />} />
             <Route path="files/folder/:folderId" element={<ProjectFilesPage />} />
-            <Route path="media"         element={<ProjectMediaPage />} />
-            <Route path="media/folder/:folderId" element={<ProjectMediaPage />} />
-            <Route path="team"          element={<ProjectTeamPage />} />
-            <Route path="sharing"       element={<ProjectSharingPage />} />
-            <Route path="settings"      element={<ProjectSettingsPage />} />
+            <Route path="team"                  element={<ProjectTeamPage />} />
+            <Route path="sharing"               element={<ProjectSharingPage />} />
+            <Route path="settings"              element={<ProjectSettingsPage />} />
           </Routes>
         </div>
       </div>
