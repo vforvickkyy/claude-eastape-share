@@ -341,15 +341,14 @@ Deno.serve(async (req) => {
         let thumbnailUrl = null
         if (shot.thumbnail_media_id) {
           const { data: media } = await supabase.from('project_media')
-            .select('wasabi_key, thumbnail_url')
+            .select('wasabi_key, wasabi_thumbnail_key')
             .eq('id', shot.thumbnail_media_id).single()
-          if (media) {
-            // Prefer stored thumbnail_url (Bunny CDN), else presign wasabi_key
-            if (media.thumbnail_url) {
-              thumbnailUrl = media.thumbnail_url
-            } else if (media.wasabi_key && wasabiKey) {
+          if (media && wasabiKey) {
+            // Prefer wasabi_thumbnail_key (generated thumb), else wasabi_key (original)
+            const thumbKey = media.wasabi_thumbnail_key || media.wasabi_key
+            if (thumbKey) {
               try {
-                thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, media.wasabi_key as string, wasabiKey, wasabiSecret, wasabiRegion, 7200)
+                thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, thumbKey as string, wasabiKey, wasabiSecret, wasabiRegion, 7200)
               } catch {}
             }
           }
@@ -478,17 +477,16 @@ Deno.serve(async (req) => {
       let thumbnailUrl = null
       if (is_hero) {
         const { data: media } = await supabase.from('project_media')
-          .select('wasabi_key, thumbnail_url').eq('id', mid).single()
-        if (media?.thumbnail_url) {
-          thumbnailUrl = media.thumbnail_url
-        } else if (media?.wasabi_key) {
+          .select('wasabi_key, wasabi_thumbnail_key').eq('id', mid).single()
+        if (media) {
           const wasabiEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
           const wasabiBucket   = Deno.env.get('WASABI_BUCKET') || ''
           const wasabiKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
           const wasabiSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
           const wasabiRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
-          if (wasabiKey) {
-            try { thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, media.wasabi_key as string, wasabiKey, wasabiSecret, wasabiRegion, 7200) } catch {}
+          const thumbKey = media.wasabi_thumbnail_key || media.wasabi_key
+          if (thumbKey && wasabiKey) {
+            try { thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, thumbKey as string, wasabiKey, wasabiSecret, wasabiRegion, 7200) } catch {}
           }
         }
       }
@@ -593,12 +591,11 @@ Deno.serve(async (req) => {
 
       const { data: media, error: mediaErr } = await supabase
         .from('project_media')
-        .select('id, name, mime_type, file_size, wasabi_key, thumbnail_url, bunny_guid, duration')
+        .select('id, name, mime_type, type, file_size, wasabi_key, wasabi_thumbnail_key, duration')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
       if (mediaErr) return json({ error: mediaErr.message }, 500)
 
-      // Get all shots in project to find linked assets
       const { data: projectShots } = await supabase
         .from('production_shots').select('id, title').eq('project_id', projectId)
       const shotsById: Record<string, string> = {}
@@ -619,11 +616,25 @@ Deno.serve(async (req) => {
         }
       }
 
-      const result = (media || []).map(m => ({
-        ...m,
-        is_linked: !!linkedMap[m.id],
-        linked_shot_id: linkedMap[m.id]?.shot_id || null,
-        linked_shot_name: linkedMap[m.id]?.shot_name || null,
+      const wEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
+      const wBucket   = Deno.env.get('WASABI_BUCKET') || ''
+      const wKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
+      const wSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
+      const wRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
+
+      const result = await Promise.all((media || []).map(async m => {
+        let thumbnail_url = null
+        const thumbKey = m.wasabi_thumbnail_key || (m.type === 'image' || m.mime_type?.startsWith('image/') ? m.wasabi_key : null)
+        if (thumbKey && wKey) {
+          try { thumbnail_url = await presignGet(wEndpoint, wBucket, thumbKey as string, wKey, wSecret, wRegion, 7200) } catch {}
+        }
+        return {
+          ...m,
+          thumbnail_url,
+          is_linked: !!linkedMap[m.id],
+          linked_shot_id: linkedMap[m.id]?.shot_id || null,
+          linked_shot_name: linkedMap[m.id]?.shot_name || null,
+        }
       }))
 
       return json({ media: result })
