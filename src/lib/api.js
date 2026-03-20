@@ -252,6 +252,29 @@ export const productionApi = {
   listComments:   (shotId)         => get(PROD, { resource: 'shot_comments', shot_id: shotId }, true),
   createComment:  (shotId, body)   => post(`${PROD}?resource=shot_comments&shot_id=${shotId}`, body, true),
   deleteComment:  (shotId, id)     => del(PROD, { resource: 'shot_comments', shot_id: shotId, id }, true),
+
+  // Pipeline Stages
+  listPipelineStages:   (projectId)       => get(PROD, { resource: 'pipeline_stages', project_id: projectId }, true),
+  createPipelineStage:  (projectId, body) => post(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, body, true),
+  updatePipelineStage:  (id, body)        => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, body, true),
+  deletePipelineStage:  (id)              => del(PROD, { resource: 'pipeline_stages', id }, true),
+  reorderPipelineStages:(projectId, items) => patch(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, {}, { reorder: true, items }, true),
+
+  // Shots with media/thumbnails
+  listShotsWithMedia: (projectId, filters = {}) =>
+    get(PROD, { resource: 'shots_with_media', project_id: projectId, ...filters }, true),
+
+  // Update shot pipeline stage progress
+  updateShotPipeline: (shotId, stageName, progress) =>
+    patch(`${PROD}?resource=shot_pipeline&shot_id=${shotId}`, {}, { stage_name: stageName, progress }, true),
+
+  // Save default manage view for project
+  saveDefaultView: (projectId, view) =>
+    patch(`${PROD}?resource=project_view&project_id=${projectId}`, {}, { default_manage_view: view }, true),
+
+  // Shot assets (link media to shots)
+  linkAsset:   (shotId, body) => post(`${PROD}?resource=shot_assets&shot_id=${shotId}`, body, true),
+  unlinkAsset: (id)           => del(PROD, { resource: 'shot_assets', id }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────

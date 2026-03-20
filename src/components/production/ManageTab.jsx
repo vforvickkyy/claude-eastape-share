@@ -1,46 +1,72 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { ListBullets, CalendarBlank, ChartBar, SlidersHorizontal, SpinnerGap, Warning } from '@phosphor-icons/react'
+import {
+  ListBullets, CalendarBlank, ChartBar, SlidersHorizontal,
+  SpinnerGap, Warning, SquaresFour, Kanban, PlayCircle, Gear,
+} from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
-import ShotListView from './views/ShotListView'
-import CalendarView from './views/CalendarView'
-import ProgressDashboard from './views/ProgressDashboard'
-import ColumnManager from './ColumnManager'
+import { useProject } from '../../context/ProjectContext'
+
+import FirstTimeExperience    from './FirstTimeExperience'
+import ShotCardsView          from './views/ShotCardsView'
+import PipelineView           from './views/PipelineView'
+import ShotReviewMode         from './views/ShotReviewMode'
+import ShotListView           from './views/ShotListView'
+import CalendarView           from './views/CalendarView'
+import ProgressDashboard      from './views/ProgressDashboard'
+import ColumnManager          from './ColumnManager'
+import PipelineStageManager   from './PipelineStageManager'
 
 const VIEWS = [
-  { id: 'list',     label: 'Shot List', icon: <ListBullets   size={15} weight="duotone" /> },
-  { id: 'calendar', label: 'Calendar',  icon: <CalendarBlank size={15} weight="duotone" /> },
-  { id: 'progress', label: 'Progress',  icon: <ChartBar      size={15} weight="duotone" /> },
+  { id: 'cards',    label: 'Cards',    icon: <SquaresFour   size={14} weight="duotone" /> },
+  { id: 'pipeline', label: 'Pipeline', icon: <Kanban        size={14} weight="duotone" /> },
+  { id: 'review',   label: 'Review',   icon: <PlayCircle    size={14} weight="duotone" /> },
+  { id: 'list',     label: 'List',     icon: <ListBullets   size={14} weight="duotone" /> },
+  { id: 'calendar', label: 'Calendar', icon: <CalendarBlank size={14} weight="duotone" /> },
+  { id: 'progress', label: 'Progress', icon: <ChartBar      size={14} weight="duotone" /> },
 ]
 
 export default function ManageTab() {
-  const { id: projectId } = useParams()
-  const [view,       setView]       = useState('list')
+  const { id: projectId }         = useParams()
+  const { project, refetch }      = useProject()
+
+  const [view,       setView]       = useState(null)   // null = use project default
   const [statuses,   setStatuses]   = useState([])
   const [scenes,     setScenes]     = useState([])
   const [columns,    setColumns]    = useState([])
   const [shots,      setShots]      = useState([])
+  const [stages,     setStages]     = useState([])
   const [loading,    setLoading]    = useState(true)
   const [loadError,  setLoadError]  = useState(null)
   const [seeding,    setSeeding]    = useState(false)
   const [seedError,  setSeedError]  = useState(null)
   const [seeded,     setSeeded]     = useState(false)
   const [showColMgr, setShowColMgr] = useState(false)
+  const [showStageMgr, setShowStageMgr] = useState(false)
+
+  // Set initial view from project once loaded
+  useEffect(() => {
+    if (project?.default_manage_view && view === null) {
+      setView(project.default_manage_view)
+    }
+  }, [project?.default_manage_view])
 
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const [stsRes, scnRes, colRes, shotsRes] = await Promise.all([
+      const [stsRes, scnRes, colRes, shotsRes, stagesRes] = await Promise.all([
         productionApi.listStatuses(projectId),
         productionApi.listScenes(projectId),
         productionApi.listColumns(projectId),
-        productionApi.listShots(projectId),
+        productionApi.listShotsWithMedia(projectId),
+        productionApi.listPipelineStages(projectId),
       ])
-      setStatuses(stsRes.statuses || [])
-      setScenes(scnRes.scenes || [])
-      setColumns(colRes.columns || [])
-      setShots(shotsRes.shots || [])
+      setStatuses(stsRes.statuses  || [])
+      setScenes(scnRes.scenes      || [])
+      setColumns(colRes.columns    || [])
+      setShots(shotsRes.shots      || [])
+      setStages(stagesRes.stages   || [])
     } catch (err) {
       setLoadError(err?.message || 'Failed to load production data')
     }
@@ -62,18 +88,24 @@ export default function ManageTab() {
     setSeeding(false)
   }
 
-  // Shot CRUD helpers passed down to children
+  async function handleFTEChoose(chosenView) {
+    await productionApi.saveDefaultView(projectId, chosenView)
+    setView(chosenView)
+    await refetch()
+  }
+
+  // Shot CRUD helpers
   async function createShot(body) {
-    const res = await productionApi.createShot(projectId, body)
+    const res  = await productionApi.createShot(projectId, body)
     const shot = res.shot
-    setShots(prev => [...prev, shot])
+    setShots(prev => [...prev, { ...shot, thumbnailUrl: null, assetCount: 0 }])
     return shot
   }
 
   async function updateShot(id, body) {
-    const res = await productionApi.updateShot(id, body)
+    const res  = await productionApi.updateShot(id, body)
     const shot = res.shot
-    setShots(prev => prev.map(s => s.id === id ? shot : s))
+    setShots(prev => prev.map(s => s.id === id ? { ...s, ...shot } : s))
     return shot
   }
 
@@ -88,6 +120,7 @@ export default function ManageTab() {
     return res.scene
   }
 
+  // ── Loading ──────────────────────────────────────────────────────
   if (loading) return (
     <div className="manage-loading">
       <SpinnerGap size={28} className="spin" />
@@ -103,7 +136,7 @@ export default function ManageTab() {
     </div>
   )
 
-  // First-time: no statuses means unseeded
+  // ── Empty / first-time seed ──────────────────────────────────────
   const isEmpty = statuses.length === 0 && !seeded
   if (isEmpty) return (
     <div className="manage-empty">
@@ -114,20 +147,46 @@ export default function ManageTab() {
         <p style={{ color: '#f87171', fontSize: 13, marginBottom: 8 }}>{seedError}</p>
       )}
       <button className="btn-primary" onClick={handleSeed} disabled={seeding}>
-        {seeding ? (
-          <><SpinnerGap size={14} className="spin" /> Setting up…</>
-        ) : 'Get Started'}
+        {seeding ? <><SpinnerGap size={14} className="spin" /> Setting up…</> : 'Get Started'}
       </button>
     </div>
   )
 
+  // ── First Time Experience — choose default view ──────────────────
+  const activeView = view || project?.default_manage_view
+  if (!activeView) {
+    return (
+      <FirstTimeExperience onChoose={handleFTEChoose} />
+    )
+  }
+
+  // ── Review mode is full-overlay, rendered differently ────────────
   const sharedProps = {
-    projectId, statuses, scenes, columns, shots,
-    onShotCreate: createShot,
-    onShotUpdate: updateShot,
-    onShotDelete: deleteShot,
+    projectId, statuses, scenes, stages, columns, shots,
+    onShotCreate:  createShot,
+    onShotUpdate:  updateShot,
+    onShotDelete:  deleteShot,
     onSceneCreate: createScene,
-    onReload: load,
+    onReload:      load,
+  }
+
+  if (activeView === 'review') {
+    return (
+      <>
+        <ShotReviewMode
+          {...sharedProps}
+          onClose={() => setView('cards')}
+        />
+        {showStageMgr && (
+          <PipelineStageManager
+            projectId={projectId}
+            stages={stages}
+            onClose={() => setShowStageMgr(false)}
+            onSaved={updated => setStages(updated)}
+          />
+        )}
+      </>
+    )
   }
 
   return (
@@ -138,7 +197,7 @@ export default function ManageTab() {
           {VIEWS.map(v => (
             <button
               key={v.id}
-              className={`manage-view-btn ${view === v.id ? 'active' : ''}`}
+              className={`manage-view-btn ${activeView === v.id ? 'active' : ''}`}
               onClick={() => setView(v.id)}
             >
               {v.icon} {v.label}
@@ -146,16 +205,27 @@ export default function ManageTab() {
           ))}
         </div>
         <div className="manage-toolbar-right">
+          {(activeView === 'cards' || activeView === 'pipeline') && (
+            <button className="btn-ghost" onClick={() => setShowStageMgr(true)}>
+              <Gear size={14} /> Stages
+            </button>
+          )}
           <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
             <SlidersHorizontal size={14} /> Columns
           </button>
         </div>
       </div>
 
-      {/* View */}
-      {view === 'list'     && <ShotListView     {...sharedProps} />}
-      {view === 'calendar' && <CalendarView      {...sharedProps} />}
-      {view === 'progress' && <ProgressDashboard {...sharedProps} />}
+      {/* View content */}
+      {activeView === 'cards'    && (
+        <ShotCardsView {...sharedProps} />
+      )}
+      {activeView === 'pipeline' && (
+        <PipelineView  {...sharedProps} onManageStages={() => setShowStageMgr(true)} />
+      )}
+      {activeView === 'list'     && <ShotListView     {...sharedProps} />}
+      {activeView === 'calendar' && <CalendarView      {...sharedProps} />}
+      {activeView === 'progress' && <ProgressDashboard {...sharedProps} />}
 
       {showColMgr && (
         <ColumnManager
@@ -163,6 +233,15 @@ export default function ManageTab() {
           columns={columns}
           onClose={() => setShowColMgr(false)}
           onSaved={cols => setColumns(cols)}
+        />
+      )}
+
+      {showStageMgr && (
+        <PipelineStageManager
+          projectId={projectId}
+          stages={stages}
+          onClose={() => setShowStageMgr(false)}
+          onSaved={updated => setStages(updated)}
         />
       )}
     </div>
