@@ -289,6 +289,10 @@ export const productionApi = {
   // All project media with linking status (for MediaBrowserModal)
   getProjectMedia: (projectId) =>
     get(PROD, { resource: 'project_media_list', project_id: projectId }, true),
+
+  // Get presigned playback URL for a media file
+  getMediaUrl: (mediaId) =>
+    get(PROD, { resource: 'media_url', media_id: mediaId }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────

@@ -441,10 +441,10 @@ Deno.serve(async (req) => {
       if (!shot) return json({ error: 'Not found' }, 404)
       if (!(await canAccess(shot.project_id))) return json({ error: 'Forbidden' }, 403)
 
-      if (is_hero) {
-        // Reset all existing heroes for this shot
-        await supabase.from('shot_assets').update({ is_hero: false }).eq('shot_id', sid)
-        // Set thumbnail on shot
+      // Set thumbnail: always if shot has none, or when linking as hero
+      const shouldSetThumb = is_hero || !shot.thumbnail_media_id
+      if (shouldSetThumb) {
+        if (is_hero) await supabase.from('shot_assets').update({ is_hero: false }).eq('shot_id', sid)
         await supabase.from('production_shots').update({ thumbnail_media_id: mid }).eq('id', sid)
       }
 
@@ -473,28 +473,56 @@ Deno.serve(async (req) => {
         .select('*, production_scenes(*), production_statuses(*)')
         .eq('id', sid).single()
 
-      // Get thumbnail URL for the newly linked media
+      // Always fetch media info and generate thumbnailUrl when thumbnail was set
+      const { data: mediaRec } = await supabase.from('project_media')
+        .select('wasabi_key, wasabi_thumbnail_key, name, duration, mime_type').eq('id', mid).single()
+
+      const lmEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
+      const lmBucket   = Deno.env.get('WASABI_BUCKET') || ''
+      const lmKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
+      const lmSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
+      const lmRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
+
       let thumbnailUrl = null
-      if (is_hero) {
-        const { data: media } = await supabase.from('project_media')
-          .select('wasabi_key, wasabi_thumbnail_key').eq('id', mid).single()
-        if (media) {
-          const wasabiEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
-          const wasabiBucket   = Deno.env.get('WASABI_BUCKET') || ''
-          const wasabiKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
-          const wasabiSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
-          const wasabiRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
-          const thumbKey = media.wasabi_thumbnail_key || media.wasabi_key
-          if (thumbKey && wasabiKey) {
-            try { thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, thumbKey as string, wasabiKey, wasabiSecret, wasabiRegion, 7200) } catch {}
-          }
+      if (mediaRec && lmKey && shouldSetThumb) {
+        const thumbKey = mediaRec.wasabi_thumbnail_key ||
+          (mediaRec.mime_type?.startsWith('image/') ? mediaRec.wasabi_key : null)
+        if (thumbKey) {
+          try { thumbnailUrl = await presignGet(lmEndpoint, lmBucket, thumbKey as string, lmKey, lmSecret, lmRegion, 7200) } catch {}
         }
       }
 
       const { count: assetCount } = await supabase.from('shot_assets')
         .select('id', { count: 'exact', head: true }).eq('shot_id', sid)
 
-      return json({ shot: { ...updated, thumbnailUrl, assetCount: assetCount || 0 } })
+      return json({
+        shot: { ...updated, thumbnailUrl, assetCount: assetCount || 0 },
+        thumbnail_url: thumbnailUrl,
+        media_name: mediaRec?.name || null,
+        duration: mediaRec?.duration || null,
+        mime_type: mediaRec?.mime_type || null,
+      })
+    }
+
+    // MEDIA URL (presigned playback URL for a project_media file)
+    if (resource === 'media_url' && req.method === 'GET') {
+      const mediaId = url.searchParams.get('media_id')
+      if (!mediaId) return json({ error: 'media_id required' }, 400)
+      const { data: muMedia } = await supabase.from('project_media')
+        .select('wasabi_key, name, duration, mime_type, project_id')
+        .eq('id', mediaId).single()
+      if (!muMedia) return json({ error: 'Not found' }, 404)
+      if (!(await canAccess(muMedia.project_id))) return json({ error: 'Forbidden' }, 403)
+      const muEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
+      const muBucket   = Deno.env.get('WASABI_BUCKET') || ''
+      const muKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
+      const muSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
+      const muRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
+      let playUrl = null
+      if (muMedia.wasabi_key && muKey) {
+        try { playUrl = await presignGet(muEndpoint, muBucket, muMedia.wasabi_key as string, muKey, muSecret, muRegion, 3600) } catch {}
+      }
+      return json({ url: playUrl, mime_type: muMedia.mime_type, name: muMedia.name, duration: muMedia.duration })
     }
 
     // ── UNLINK MEDIA ──────────────────────────────────────────────────

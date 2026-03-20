@@ -304,7 +304,7 @@ function ShotCard({ shot, status, stages, onClick, onLink }) {
 // ── Main ShotCardsView ────────────────────────────────────────────────
 export default function ShotCardsView({
   projectId, statuses, scenes, stages, shots, columns,
-  onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
+  onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onShotMerge, onReload,
 }) {
   const collapseKey = `ets_scene_collapse_${projectId}`
 
@@ -375,8 +375,11 @@ export default function ShotCardsView({
   }
 
   function handleLinkUpdate(updatedShot) {
-    // Update the shot in local state with new thumbnail
-    onShotUpdate(updatedShot.id, updatedShot)
+    if (onShotMerge) {
+      onShotMerge(updatedShot.id, updatedShot)
+    } else {
+      onShotUpdate(updatedShot.id, updatedShot)
+    }
   }
 
   // Empty state

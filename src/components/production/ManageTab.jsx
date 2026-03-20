@@ -120,6 +120,10 @@ export default function ManageTab() {
     return res.scene
   }
 
+  function mergeShot(id, data) {
+    setShots(prev => prev.map(s => s.id === id ? { ...s, ...data } : s))
+  }
+
   // ── Loading ──────────────────────────────────────────────────────
   if (loading) return (
     <div className="manage-loading">
@@ -167,6 +171,7 @@ export default function ManageTab() {
     onShotUpdate:  updateShot,
     onShotDelete:  deleteShot,
     onSceneCreate: createScene,
+    onShotMerge:   mergeShot,
     onReload:      load,
   }
 

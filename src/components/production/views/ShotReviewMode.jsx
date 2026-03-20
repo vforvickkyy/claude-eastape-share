@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft, ArrowRight, FilmSlate, X, SpinnerGap, PaperPlaneTilt,
-  CheckCircle, ChatCircle,
+  CheckCircle, ChatCircle, Play,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../../lib/api'
 
@@ -132,6 +132,52 @@ function CommentsPanel({ shot }) {
   )
 }
 
+function ShotMedia({ shot }) {
+  const [mediaInfo, setMediaInfo] = useState(null)
+  const [loading, setLoading]     = useState(false)
+
+  useEffect(() => {
+    if (!shot?.thumbnail_media_id) { setMediaInfo(null); return }
+    setLoading(true)
+    productionApi.getMediaUrl(shot.thumbnail_media_id)
+      .then(r => setMediaInfo(r))
+      .catch(() => setMediaInfo(null))
+      .finally(() => setLoading(false))
+  }, [shot?.thumbnail_media_id])
+
+  if (loading) {
+    return (
+      <div className="srm-media-inner srm-no-thumb">
+        <SpinnerGap size={32} className="spin" />
+      </div>
+    )
+  }
+
+  if (mediaInfo?.url && mediaInfo?.mime_type?.startsWith('video/')) {
+    return (
+      <video
+        key={mediaInfo.url}
+        src={mediaInfo.url}
+        controls
+        poster={shot.thumbnailUrl || undefined}
+        className="srm-video"
+        style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+      />
+    )
+  }
+
+  if (shot.thumbnailUrl) {
+    return <img src={shot.thumbnailUrl} alt={shot.title} className="srm-thumb-img" />
+  }
+
+  return (
+    <div className="srm-media-inner srm-no-thumb">
+      <FilmSlate size={56} weight="duotone" />
+      <span>No thumbnail linked</span>
+    </div>
+  )
+}
+
 export default function ShotReviewMode({
   shots, statuses, scenes, stages,
   onShotUpdate, onShotDelete, onReload,
@@ -168,15 +214,7 @@ export default function ShotReviewMode({
       {/* Left — media */}
       <div className="srm-left">
         <div className="srm-media">
-          {shot.thumbnailUrl
-            ? <img src={shot.thumbnailUrl} alt={shot.title} className="srm-thumb-img" />
-            : (
-              <div className="srm-no-thumb">
-                <FilmSlate size={56} weight="duotone" />
-                <span>No thumbnail linked</span>
-              </div>
-            )
-          }
+          <ShotMedia shot={shot} />
         </div>
 
         <div className="srm-shot-info">
