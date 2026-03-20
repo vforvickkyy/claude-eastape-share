@@ -212,6 +212,8 @@ Deno.serve(async (req) => {
             title: body.title, description: body.description || null, shot_number: body.shot_number || null,
             due_date: body.due_date || null, assigned_to: body.assigned_to || null,
             position: body.position ?? 0, custom_data: body.custom_data || {},
+            thumbnail_media_id: body.thumbnail_media_id || null,
+            linked_media_ids: body.linked_media_ids || [],
           })
           .select('*, production_scenes(*), production_statuses(*)').single()
         if (error) return json({ error: error.message }, 500)
@@ -222,7 +224,7 @@ Deno.serve(async (req) => {
         if (!existing) return json({ error: 'Not found' }, 404)
         if (!(await canAccess(existing.project_id))) return json({ error: 'Forbidden' }, 403)
         const body = await req.json()
-        const allowed = ['scene_id', 'status_id', 'title', 'description', 'shot_number', 'due_date', 'assigned_to', 'position', 'custom_data', 'thumbnail_media_id', 'review_notes']
+        const allowed = ['scene_id', 'status_id', 'title', 'description', 'shot_number', 'due_date', 'assigned_to', 'position', 'custom_data', 'thumbnail_media_id', 'review_notes', 'linked_media_ids']
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
         for (const k of allowed) if (k in body) updates[k] = body[k]
         const { data, error } = await supabase.from('production_shots').update(updates).eq('id', id)
@@ -295,14 +297,12 @@ Deno.serve(async (req) => {
       }
       if (req.method === 'PATCH') {
         const body = await req.json()
-        // Reorder: bulk update order_index
         if (body.reorder && Array.isArray(body.items)) {
           for (const item of body.items) {
             await supabase.from('pipeline_stages').update({ order_index: item.order_index }).eq('id', item.id)
           }
           return json({ ok: true })
         }
-        // Single update
         if (id) {
           const allowed = ['name', 'color', 'order_index', 'is_final_stage']
           const updates: Record<string, unknown> = {}
@@ -325,13 +325,12 @@ Deno.serve(async (req) => {
 
       const { data: shots, error: shotsErr } = await supabase
         .from('production_shots')
-        .select('*, production_scenes(*), production_statuses(*), profiles:assigned_to(display_name, avatar_url)')
+        .select('*, production_scenes(*), production_statuses(*)')
         .eq('project_id', projectId).order('position')
       if (shotsErr) return json({ error: shotsErr.message }, 500)
 
       const { data: stages } = await supabase.from('pipeline_stages').select('*').eq('project_id', projectId).order('order_index')
 
-      // Generate presigned URLs for thumbnails
       const wasabiEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
       const wasabiBucket   = Deno.env.get('WASABI_BUCKET')   || ''
       const wasabiKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
@@ -341,14 +340,22 @@ Deno.serve(async (req) => {
       const enriched = await Promise.all((shots || []).map(async (shot: Record<string, unknown>) => {
         let thumbnailUrl = null
         if (shot.thumbnail_media_id) {
-          const { data: media } = await supabase.from('project_media').select('wasabi_key').eq('id', shot.thumbnail_media_id).single()
-          if (media?.wasabi_key && wasabiKey) {
-            try {
-              thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, media.wasabi_key as string, wasabiKey, wasabiSecret, wasabiRegion, 7200)
-            } catch {}
+          const { data: media } = await supabase.from('project_media')
+            .select('wasabi_key, thumbnail_url')
+            .eq('id', shot.thumbnail_media_id).single()
+          if (media) {
+            // Prefer stored thumbnail_url (Bunny CDN), else presign wasabi_key
+            if (media.thumbnail_url) {
+              thumbnailUrl = media.thumbnail_url
+            } else if (media.wasabi_key && wasabiKey) {
+              try {
+                thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, media.wasabi_key as string, wasabiKey, wasabiSecret, wasabiRegion, 7200)
+              } catch {}
+            }
           }
         }
-        const { count: assetCount } = await supabase.from('shot_assets').select('id', { count: 'exact', head: true }).eq('shot_id', shot.id)
+        const { count: assetCount } = await supabase.from('shot_assets')
+          .select('id', { count: 'exact', head: true }).eq('shot_id', shot.id)
         return { ...shot, thumbnailUrl, assetCount: assetCount || 0 }
       }))
 
@@ -393,7 +400,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── SHOT ASSETS (link media to shots) ────────────────────────────
+    // ── SHOT ASSETS (legacy link media to shots) ──────────────────────
     if (resource === 'shot_assets') {
       if (!shotId) return json({ error: 'shot_id required' }, 400)
       const { data: shot } = await supabase.from('production_shots').select('project_id').eq('id', shotId).single()
@@ -407,7 +414,7 @@ Deno.serve(async (req) => {
       if (req.method === 'POST') {
         const body = await req.json()
         const { data, error } = await supabase.from('shot_assets')
-          .insert({ shot_id: shotId, project_media_id: body.project_media_id, label: body.label || null })
+          .insert({ shot_id: shotId, project_media_id: body.project_media_id, label: body.label || null, is_hero: body.is_hero || false })
           .select('*, project_media(*)').single()
         if (error) return json({ error: error.message }, 500)
         // Auto-set thumbnail if none
@@ -421,6 +428,205 @@ Deno.serve(async (req) => {
         await supabase.from('shot_assets').delete().eq('id', id)
         return json({ ok: true })
       }
+    }
+
+    // ── LINK MEDIA (new: hero/take with immediate thumbnail update) ────
+    if (resource === 'link_media' && req.method === 'POST') {
+      const body = await req.json()
+      const { shot_id: sid, media_id: mid, is_hero, asset_type } = body
+      if (!sid || !mid) return json({ error: 'shot_id and media_id required' }, 400)
+
+      const { data: shot } = await supabase.from('production_shots')
+        .select('project_id, thumbnail_media_id, linked_media_ids')
+        .eq('id', sid).single()
+      if (!shot) return json({ error: 'Not found' }, 404)
+      if (!(await canAccess(shot.project_id))) return json({ error: 'Forbidden' }, 403)
+
+      if (is_hero) {
+        // Reset all existing heroes for this shot
+        await supabase.from('shot_assets').update({ is_hero: false }).eq('shot_id', sid)
+        // Set thumbnail on shot
+        await supabase.from('production_shots').update({ thumbnail_media_id: mid }).eq('id', sid)
+      }
+
+      // Insert or update shot_asset
+      const { data: existingAsset } = await supabase.from('shot_assets')
+        .select('id').eq('shot_id', sid).eq('project_media_id', mid).single()
+      if (existingAsset) {
+        await supabase.from('shot_assets').update({ is_hero: is_hero || false }).eq('id', existingAsset.id)
+      } else {
+        await supabase.from('shot_assets').insert({
+          shot_id: sid, project_media_id: mid,
+          is_hero: is_hero || false,
+          label: asset_type || 'take',
+        })
+      }
+
+      // Update linked_media_ids array
+      const currentIds = (shot.linked_media_ids || []) as string[]
+      if (!currentIds.includes(mid)) {
+        await supabase.from('production_shots')
+          .update({ linked_media_ids: [...currentIds, mid] })
+          .eq('id', sid)
+      }
+
+      const { data: updated } = await supabase.from('production_shots')
+        .select('*, production_scenes(*), production_statuses(*)')
+        .eq('id', sid).single()
+
+      // Get thumbnail URL for the newly linked media
+      let thumbnailUrl = null
+      if (is_hero) {
+        const { data: media } = await supabase.from('project_media')
+          .select('wasabi_key, thumbnail_url').eq('id', mid).single()
+        if (media?.thumbnail_url) {
+          thumbnailUrl = media.thumbnail_url
+        } else if (media?.wasabi_key) {
+          const wasabiEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
+          const wasabiBucket   = Deno.env.get('WASABI_BUCKET') || ''
+          const wasabiKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
+          const wasabiSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
+          const wasabiRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
+          if (wasabiKey) {
+            try { thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, media.wasabi_key as string, wasabiKey, wasabiSecret, wasabiRegion, 7200) } catch {}
+          }
+        }
+      }
+
+      const { count: assetCount } = await supabase.from('shot_assets')
+        .select('id', { count: 'exact', head: true }).eq('shot_id', sid)
+
+      return json({ shot: { ...updated, thumbnailUrl, assetCount: assetCount || 0 } })
+    }
+
+    // ── UNLINK MEDIA ──────────────────────────────────────────────────
+    if (resource === 'unlink_media' && req.method === 'DELETE') {
+      const sid = url.searchParams.get('shot_id')
+      const mid = url.searchParams.get('media_id')
+      if (!sid || !mid) return json({ error: 'shot_id and media_id required' }, 400)
+
+      const { data: shot } = await supabase.from('production_shots')
+        .select('project_id, thumbnail_media_id, linked_media_ids')
+        .eq('id', sid).single()
+      if (!shot) return json({ error: 'Not found' }, 404)
+      if (!(await canAccess(shot.project_id))) return json({ error: 'Forbidden' }, 403)
+
+      await supabase.from('shot_assets').delete().eq('shot_id', sid).eq('project_media_id', mid)
+
+      const currentIds = (shot.linked_media_ids || []) as string[]
+      const newIds = currentIds.filter((i: string) => i !== mid)
+
+      let newThumb = shot.thumbnail_media_id
+      if (shot.thumbnail_media_id === mid) {
+        newThumb = newIds.length > 0 ? newIds[0] : null
+      }
+
+      const { data: updated } = await supabase.from('production_shots')
+        .update({ linked_media_ids: newIds, thumbnail_media_id: newThumb, updated_at: new Date().toISOString() })
+        .eq('id', sid)
+        .select('*, production_scenes(*), production_statuses(*)')
+        .single()
+
+      return json({ shot: { ...updated, thumbnailUrl: null, assetCount: newIds.length } })
+    }
+
+    // ── BULK CREATE SHOTS ─────────────────────────────────────────────
+    if (resource === 'bulk_create_shots' && req.method === 'POST') {
+      if (!projectId) return json({ error: 'project_id required' }, 400)
+      if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+
+      const body = await req.json()
+      const { scene_id, shots: shotsList } = body
+      if (!Array.isArray(shotsList) || shotsList.length === 0) return json({ error: 'shots array required' }, 400)
+
+      // Get first status for project
+      const { data: firstStatus } = await supabase.from('production_statuses')
+        .select('id').eq('project_id', projectId).order('position').limit(1).single()
+
+      // Get max position in this project
+      const { data: maxRow } = await supabase.from('production_shots')
+        .select('position').eq('project_id', projectId)
+        .order('position', { ascending: false }).limit(1).single()
+      const maxPos = (maxRow?.position ?? -1) as number
+
+      const created = []
+      for (let i = 0; i < shotsList.length; i++) {
+        const s = shotsList[i] as Record<string, unknown>
+        const title = (s.name || s.title || 'New Shot') as string
+        const thumbId = (s.thumbnail_media_id || null) as string | null
+        const linkedIds = (s.linked_media_ids || []) as string[]
+
+        const { data: sh, error: insertErr } = await supabase.from('production_shots')
+          .insert({
+            project_id: projectId,
+            scene_id: scene_id || null,
+            title,
+            shot_number: (s.shot_number || null) as string | null,
+            status_id: firstStatus?.id || null,
+            thumbnail_media_id: thumbId,
+            linked_media_ids: linkedIds,
+            position: maxPos + i + 1,
+            custom_data: {},
+          })
+          .select('*, production_scenes(*), production_statuses(*)')
+          .single()
+
+        if (insertErr || !sh) continue
+
+        // Create shot_asset for hero media
+        if (thumbId) {
+          await supabase.from('shot_assets').insert({
+            shot_id: sh.id, project_media_id: thumbId, is_hero: true, label: 'hero',
+          }).catch(() => {})
+        }
+
+        created.push({ ...sh, thumbnailUrl: null, assetCount: thumbId ? 1 : 0 })
+      }
+
+      return json({ shots: created, count: created.length })
+    }
+
+    // ── PROJECT MEDIA LIST ────────────────────────────────────────────
+    if (resource === 'project_media_list' && req.method === 'GET') {
+      if (!projectId) return json({ error: 'project_id required' }, 400)
+      if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+
+      const { data: media, error: mediaErr } = await supabase
+        .from('project_media')
+        .select('id, name, mime_type, file_size, wasabi_key, thumbnail_url, bunny_guid, duration')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+      if (mediaErr) return json({ error: mediaErr.message }, 500)
+
+      // Get all shots in project to find linked assets
+      const { data: projectShots } = await supabase
+        .from('production_shots').select('id, title').eq('project_id', projectId)
+      const shotsById: Record<string, string> = {}
+      for (const s of (projectShots || [])) shotsById[s.id] = s.title
+
+      const shotIds = Object.keys(shotsById)
+      let assetsData: Array<{ project_media_id: string; shot_id: string }> = []
+      if (shotIds.length > 0) {
+        const { data: assets } = await supabase.from('shot_assets')
+          .select('project_media_id, shot_id').in('shot_id', shotIds)
+        assetsData = assets || []
+      }
+
+      const linkedMap: Record<string, { shot_id: string; shot_name: string }> = {}
+      for (const a of assetsData) {
+        if (!linkedMap[a.project_media_id]) {
+          linkedMap[a.project_media_id] = { shot_id: a.shot_id, shot_name: shotsById[a.shot_id] || '' }
+        }
+      }
+
+      const result = (media || []).map(m => ({
+        ...m,
+        is_linked: !!linkedMap[m.id],
+        linked_shot_id: linkedMap[m.id]?.shot_id || null,
+        linked_shot_name: linkedMap[m.id]?.shot_name || null,
+      }))
+
+      return json({ media: result })
     }
 
     // ── SEED ─────────────────────────────────────────────────────────

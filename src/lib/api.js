@@ -272,9 +272,23 @@ export const productionApi = {
   saveDefaultView: (projectId, view) =>
     patch(`${PROD}?resource=project_view&project_id=${projectId}`, {}, { default_manage_view: view }, true),
 
-  // Shot assets (link media to shots)
+  // Shot assets (legacy)
   linkAsset:   (shotId, body) => post(`${PROD}?resource=shot_assets&shot_id=${shotId}`, body, true),
   unlinkAsset: (id)           => del(PROD, { resource: 'shot_assets', id }, true),
+
+  // Bulk create shots (scene grouping)
+  bulkCreateShots: (projectId, sceneId, shots) =>
+    post(`${PROD}?resource=bulk_create_shots&project_id=${projectId}`, { scene_id: sceneId, shots }, true),
+
+  // Link / unlink media with hero support
+  linkMedia: (shotId, mediaId, isHero, assetType) =>
+    post(`${PROD}?resource=link_media`, { shot_id: shotId, media_id: mediaId, is_hero: isHero || false, asset_type: assetType || 'take' }, true),
+  unlinkMedia: (shotId, mediaId) =>
+    del(PROD, { resource: 'unlink_media', shot_id: shotId, media_id: mediaId }, true),
+
+  // All project media with linking status (for MediaBrowserModal)
+  getProjectMedia: (projectId) =>
+    get(PROD, { resource: 'project_media_list', project_id: projectId }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────
