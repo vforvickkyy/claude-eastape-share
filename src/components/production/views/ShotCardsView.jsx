@@ -1,13 +1,14 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   FilmSlate, Link, PlusCircle, CaretDown, CaretRight,
-  DotsThree, Pencil, Trash, ListBullets, ArrowsOut,
+  DotsThree, Pencil, Trash, ListBullets, Play, X as XIcon,
 } from '@phosphor-icons/react'
 import ShotDetailPanel from '../ShotDetailPanel'
 import MediaBrowserModal from '../MediaBrowserModal'
+import ShotMediaViewerModal from '../ShotMediaViewerModal'
 import BulkAddShotsModal from '../BulkAddShotsModal'
+import { productionApi } from '../../../lib/api'
 
-// Palette for scenes without explicit color
 const SCENE_COLORS = [
   '#6366f1','#3b82f6','#06b6d4','#10b981',
   '#84cc16','#f59e0b','#ef4444','#ec4899',
@@ -47,6 +48,13 @@ function nextShotNumber(groupShots, scene) {
   return `${initial}${String(groupShots.length + 1).padStart(2, '0')}`
 }
 
+function formatDuration(secs) {
+  if (!secs) return null
+  const m = Math.floor(secs / 60)
+  const s = String(Math.floor(secs % 60)).padStart(2, '0')
+  return `${m}:${s}`
+}
+
 // ── Scene Menu ───────────────────────────────────────────────────────
 function SceneMenu({ scene, onEdit, onBulkAdd, onDelete, onClose }) {
   const ref = useRef()
@@ -74,8 +82,8 @@ function SceneMenu({ scene, onEdit, onBulkAdd, onDelete, onClose }) {
 
 // ── Scene Group Header ────────────────────────────────────────────────
 function SceneGroupHeader({
-  scene, shots, stages, color, collapsed, colorIdx,
-  onToggle, onQuickAdd, onBulkAdd, onEdit, onDelete,
+  scene, shots, stages, color, collapsed,
+  onToggle, onBulkAdd, onEdit, onDelete,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing]   = useState(false)
@@ -97,13 +105,9 @@ function SceneGroupHeader({
     <div className="scg-header" style={{ '--scene-color': color }}>
       <div className="scg-header-left">
         <button className="scg-collapse-btn" onClick={onToggle}>
-          {collapsed
-            ? <CaretRight size={13} weight="bold" />
-            : <CaretDown  size={13} weight="bold" />
-          }
+          {collapsed ? <CaretRight size={13} weight="bold" /> : <CaretDown size={13} weight="bold" />}
         </button>
         <span className="scg-color-dot" style={{ background: color }} />
-
         {editing ? (
           <input
             ref={inputRef}
@@ -117,14 +121,10 @@ function SceneGroupHeader({
             }}
           />
         ) : (
-          <span
-            className="scg-name"
-            onDoubleClick={() => setEditing(true)}
-          >
+          <span className="scg-name" onDoubleClick={() => setEditing(true)}>
             {scene ? scene.name : 'Ungrouped'}
           </span>
         )}
-
         <span className="scg-shot-count">{shots.length} shot{shots.length !== 1 ? 's' : ''}</span>
       </div>
 
@@ -137,17 +137,14 @@ function SceneGroupHeader({
             <span className="scg-progress-pct" style={{ color: completionColor(pct) }}>{pct}%</span>
           </div>
         )}
-
-        <button className="btn-ghost btn-xs scg-quick-btn" onClick={onQuickAdd}>
+        <button className="btn-ghost btn-xs scg-quick-btn" onClick={() => {}}>
           + Quick Add
         </button>
-
         {scene && (
           <button className="btn-primary btn-xs scg-bulk-btn" onClick={onBulkAdd}>
             Bulk Add
           </button>
         )}
-
         {scene && (
           <div style={{ position: 'relative' }}>
             <button className="scg-menu-trigger" onClick={() => setMenuOpen(v => !v)}>
@@ -209,11 +206,7 @@ function QuickAddCard({ scene, sceneShots, onCreate }) {
           onKeyDown={handleKey}
         />
         <div className="scg-quick-hint">Enter to add · Esc to cancel</div>
-        <button
-          className="btn-primary btn-xs"
-          onClick={submit}
-          disabled={!value.trim() || adding}
-        >
+        <button className="btn-primary btn-xs" onClick={submit} disabled={!value.trim() || adding}>
           Add
         </button>
       </div>
@@ -229,27 +222,46 @@ function QuickAddCard({ scene, sceneShots, onCreate }) {
 }
 
 // ── Shot Card ─────────────────────────────────────────────────────────
-function ShotCard({ shot, status, stages, onClick, onLink }) {
+function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink }) {
+  const [hovering, setHovering] = useState(false)
   const pct = pipelineCompletion(shot, stages)
-  const hasThumb = !!shot.thumbnailUrl
+  const hasThumb = !!shot.thumbnail_media_id && !!shot.thumbnailUrl
+  const dur = formatDuration(shot.linkedMediaDuration)
 
   return (
-    <div className="shot-card" onClick={onClick}>
+    <div
+      className="shot-card"
+      onClick={onClick}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
       {/* Thumbnail area */}
       <div className={`sc-thumb ${!hasThumb ? 'sc-thumb--empty' : ''}`}>
         {hasThumb ? (
           <>
-            <img src={shot.thumbnailUrl} alt={shot.title} loading="lazy" />
-            <div className="sc-thumb-overlay" />
+            <img
+              src={shot.thumbnailUrl}
+              alt={shot.title}
+              loading="lazy"
+              onError={e => { e.target.style.display = 'none' }}
+            />
+            {/* Hover overlay with play button */}
+            <div className={`sc-play-overlay ${hovering ? 'sc-play-overlay--visible' : ''}`}>
+              <button
+                className="sc-play-btn"
+                onClick={e => { e.stopPropagation(); onReview() }}
+                title="Review"
+              >
+                <Play size={28} weight="fill" />
+              </button>
+            </div>
             {status && (
               <span className="sc-badge sc-badge--status" style={{ background: status.color }}>
                 {status.name}
               </span>
             )}
-            {shot.assetCount > 1 && (
-              <span className="sc-badge sc-badge--takes sc-badge--bl">
-                {shot.assetCount} takes
-              </span>
+            {dur && (
+              <span className="sc-badge sc-badge--dur sc-badge--bl">{dur}</span>
             )}
           </>
         ) : (
@@ -267,10 +279,10 @@ function ShotCard({ shot, status, stages, onClick, onLink }) {
         {shot.shot_number && (
           <span className="sc-shot-num">#{shot.shot_number}</span>
         )}
-        {hasThumb && (
+        {hasThumb && hovering && (
           <button
-            className="sc-link-btn"
-            title="Link media asset"
+            className="sc-relink-btn"
+            title="Change file"
             onClick={e => { e.stopPropagation(); onLink() }}
           >
             <Link size={12} />
@@ -296,6 +308,20 @@ function ShotCard({ shot, status, stages, onClick, onLink }) {
             <span className="sc-pipeline-pct">{pct}%</span>
           </div>
         )}
+        {/* Linked file row */}
+        {hasThumb && shot.linkedMediaName && (
+          <div className="sc-linked-row">
+            <Link size={10} style={{ flexShrink: 0, color: 'var(--t3)' }} />
+            <span className="sc-linked-name">{shot.linkedMediaName}</span>
+            <button
+              className="sc-unlink-btn"
+              title="Unlink file"
+              onClick={e => { e.stopPropagation(); onUnlink() }}
+            >
+              <XIcon size={11} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -304,16 +330,21 @@ function ShotCard({ shot, status, stages, onClick, onLink }) {
 // ── Main ShotCardsView ────────────────────────────────────────────────
 export default function ShotCardsView({
   projectId, statuses, scenes, stages, shots, columns,
-  onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onShotMerge, onReload,
+  onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
 }) {
   const collapseKey = `ets_scene_collapse_${projectId}`
 
-  const [collapsed, setCollapsed] = useState(() => {
+  const [collapsed,    setCollapsed]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(collapseKey)) || {} } catch { return {} }
   })
-  const [selectedShot,  setSelectedShot]  = useState(null)
-  const [linkingShot,   setLinkingShot]   = useState(null)
-  const [bulkAddScene,  setBulkAddScene]  = useState(null) // scene object | null for ungrouped
+  const [selectedShot, setSelectedShot] = useState(null)
+  const [linkingShot,  setLinkingShot]  = useState(null)
+  const [reviewModal,  setReviewModal]  = useState(null) // { mediaId, shotName, shotNumber }
+  const [bulkAddScene, setBulkAddScene] = useState(null)
+  const [localShots,   setLocalShots]   = useState(shots)
+
+  // Keep local shots in sync when parent updates
+  useEffect(() => { setLocalShots(shots) }, [shots])
 
   function toggleCollapse(sceneId) {
     setCollapsed(prev => {
@@ -325,13 +356,12 @@ export default function ShotCardsView({
 
   // Group shots by scene
   const shotsByScene = {}
-  for (const shot of shots) {
+  for (const shot of localShots) {
     const key = shot.scene_id || '__ungrouped__'
     if (!shotsByScene[key]) shotsByScene[key] = []
     shotsByScene[key].push(shot)
   }
 
-  // Build ordered groups
   const groups = [
     ...scenes.map((scene, idx) => ({
       scene, idx,
@@ -343,19 +373,12 @@ export default function ShotCardsView({
   if (ungrouped.length > 0) {
     groups.push({ scene: null, idx: groups.length, shots: ungrouped, color: 'var(--t4)' })
   }
-  // If no scenes at all, show one flat group
-  if (scenes.length === 0 && ungrouped.length > 0) {
-    // Already pushed above; skip
-  }
 
   async function handleQuickCreate({ title, shot_number, scene_id }) {
-    await onShotCreate({ title, shot_number, scene_id, position: shots.length })
+    await onShotCreate({ title, shot_number, scene_id, position: localShots.length })
   }
 
   async function handleEditScene(scene, newName) {
-    // Update scene name via API — reuse existing onSceneCreate as workaround
-    // We don't have an updateScene in props, so call productionApi directly
-    const { productionApi } = await import('../../../lib/api')
     await productionApi.updateScene(scene.id, { name: newName })
     onReload()
   }
@@ -366,7 +389,6 @@ export default function ShotCardsView({
       ? `Delete scene "${scene.name}" and its ${sceneShots.length} shot${sceneShots.length !== 1 ? 's' : ''}?`
       : `Delete scene "${scene.name}"?`
     if (!window.confirm(msg)) return
-    const { productionApi } = await import('../../../lib/api')
     if (sceneShots.length > 0) {
       for (const s of sceneShots) await onShotDelete(s.id)
     }
@@ -374,16 +396,41 @@ export default function ShotCardsView({
     onReload()
   }
 
-  function handleLinkUpdate(updatedShot) {
-    if (onShotMerge) {
-      onShotMerge(updatedShot.id, updatedShot)
-    } else {
-      onShotUpdate(updatedShot.id, updatedShot)
+  // Immediate local state update when media is linked
+  function handleMediaLinked(data) {
+    setLocalShots(prev => prev.map(shot =>
+      shot.id === data.shotId
+        ? {
+            ...shot,
+            thumbnail_media_id:  data.mediaId,
+            thumbnailUrl:        data.thumbnailUrl,
+            linkedMediaName:     data.linkedMediaName,
+            linkedMediaDuration: data.linkedMediaDuration,
+            linkedMediaMimeType: data.linkedMediaMimeType,
+            linkedMediaReady:    data.linkedMediaReady,
+          }
+        : shot
+    ))
+  }
+
+  // Immediate local state update when media is unlinked
+  async function handleUnlink(shot) {
+    const name = shot.linkedMediaName || 'this file'
+    if (!window.confirm(`Unlink "${name}" from "${shot.title}"?`)) return
+    try {
+      await productionApi.unlinkMedia(shot.id)
+      setLocalShots(prev => prev.map(s =>
+        s.id === shot.id
+          ? { ...s, thumbnail_media_id: null, thumbnailUrl: null, linkedMediaName: null, linkedMediaDuration: null, linkedMediaMimeType: null, linkedMediaReady: false }
+          : s
+      ))
+    } catch (e) {
+      alert('Unlink failed: ' + e.message)
     }
   }
 
   // Empty state
-  if (shots.length === 0 && scenes.length === 0) {
+  if (localShots.length === 0 && scenes.length === 0) {
     return (
       <div className="scg-empty">
         <FilmSlate size={40} weight="duotone" style={{ opacity: 0.2 }} />
@@ -409,10 +456,8 @@ export default function ShotCardsView({
                 shots={groupShots}
                 stages={stages}
                 color={color}
-                colorIdx={idx}
                 collapsed={isCollapsed}
                 onToggle={() => toggleCollapse(sceneId)}
-                onQuickAdd={() => {/* handled inline by QuickAddCard */}}
                 onBulkAdd={() => setBulkAddScene(scene)}
                 onEdit={newName => scene && handleEditScene(scene, newName)}
                 onDelete={() => scene && handleDeleteScene(scene)}
@@ -430,6 +475,12 @@ export default function ShotCardsView({
                         stages={stages}
                         onClick={() => setSelectedShot(shot)}
                         onLink={() => setLinkingShot(shot)}
+                        onReview={() => shot.thumbnail_media_id && setReviewModal({
+                          mediaId:    shot.thumbnail_media_id,
+                          shotName:   shot.title,
+                          shotNumber: shot.shot_number,
+                        })}
+                        onUnlink={() => handleUnlink(shot)}
                       />
                     )
                   })}
@@ -453,7 +504,6 @@ export default function ShotCardsView({
           )
         })}
 
-        {/* Add new scene button */}
         <button
           className="scg-add-scene-btn"
           onClick={() => {
@@ -479,13 +529,21 @@ export default function ShotCardsView({
       {linkingShot && (
         <MediaBrowserModal
           projectId={projectId}
-          shot={linkingShot}
-          onLinked={updatedShot => {
-            if (updatedShot) handleLinkUpdate(updatedShot)
-            else onReload()
-            setLinkingShot(null)
-          }}
+          shotId={linkingShot.id}
+          shotName={linkingShot.title}
+          currentLinkedMediaId={linkingShot.thumbnail_media_id || null}
+          onLinked={handleMediaLinked}
           onClose={() => setLinkingShot(null)}
+        />
+      )}
+
+      {reviewModal && (
+        <ShotMediaViewerModal
+          projectId={projectId}
+          mediaId={reviewModal.mediaId}
+          shotName={reviewModal.shotName}
+          shotNumber={reviewModal.shotNumber}
+          onClose={() => setReviewModal(null)}
         />
       )}
 
@@ -494,7 +552,7 @@ export default function ShotCardsView({
           projectId={projectId}
           scene={bulkAddScene}
           scenes={scenes}
-          shots={shots}
+          shots={localShots}
           onCreated={newShots => {
             for (const s of newShots) onShotUpdate(s.id, s)
             onReload()

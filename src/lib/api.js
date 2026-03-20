@@ -280,19 +280,15 @@ export const productionApi = {
   bulkCreateShots: (projectId, sceneId, shots) =>
     post(`${PROD}?resource=bulk_create_shots&project_id=${projectId}`, { scene_id: sceneId, shots }, true),
 
-  // Link / unlink media with hero support
-  linkMedia: (shotId, mediaId, isHero, assetType) =>
-    post(`${PROD}?resource=link_media`, { shot_id: shotId, media_id: mediaId, is_hero: isHero || false, asset_type: assetType || 'take' }, true),
-  unlinkMedia: (shotId, mediaId) =>
-    del(PROD, { resource: 'unlink_media', shot_id: shotId, media_id: mediaId }, true),
+  // Link / unlink media (one file per shot)
+  linkMedia: (shotId, mediaId) =>
+    post(`${PROD}?resource=link_media`, { shot_id: shotId, media_id: mediaId }, true),
+  unlinkMedia: (shotId) =>
+    post(`${PROD}?resource=unlink_media`, { shot_id: shotId }, true),
 
   // All project media with linking status (for MediaBrowserModal)
   getProjectMedia: (projectId) =>
     get(PROD, { resource: 'project_media_list', project_id: projectId }, true),
-
-  // Get presigned playback URL for a media file
-  getMediaUrl: (mediaId) =>
-    get(PROD, { resource: 'media_url', media_id: mediaId }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────

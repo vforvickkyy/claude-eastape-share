@@ -1,15 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import {
-  X, Image, FilmSlate, File, MagnifyingGlass, SpinnerGap,
-  Check, LinkBreak, Star,
-} from '@phosphor-icons/react'
-import { productionApi } from '../../lib/api'
+import { X, Image, FilmSlate, File, MagnifyingGlass, SpinnerGap, Check, Warning } from '@phosphor-icons/react'
+import { productionApi, formatSize } from '../../lib/api'
 
 const TYPE_FILTERS = [
-  { id: 'all',      label: 'All' },
-  { id: 'video',    label: 'Video' },
-  { id: 'image',    label: 'Image' },
-  { id: 'audio',    label: 'Audio' },
+  { id: 'all',      label: 'All'      },
+  { id: 'video',    label: 'Video'    },
+  { id: 'image',    label: 'Image'    },
+  { id: 'audio',    label: 'Audio'    },
   { id: 'document', label: 'Document' },
 ]
 
@@ -21,10 +18,10 @@ function mimeToType(mime) {
   return 'document'
 }
 
-function MediaIcon({ mime, size = 20 }) {
+function MediaIcon({ mime, size = 22 }) {
   const t = mimeToType(mime)
   if (t === 'video') return <FilmSlate size={size} weight="duotone" />
-  if (t === 'image') return <Image     size={size} weight="duotone" />
+  if (t === 'image') return <Image size={size} weight="duotone" />
   return <File size={size} weight="duotone" />
 }
 
@@ -35,15 +32,22 @@ function formatDuration(secs) {
   return `${m}:${s}`
 }
 
-export default function MediaBrowserModal({ projectId, shot, onLinked, onClose }) {
-  const [media,       setMedia]       = useState([])
-  const [loading,     setLoading]     = useState(true)
-  const [search,      setSearch]      = useState('')
-  const [typeFilter,  setTypeFilter]  = useState('all')
+export default function MediaBrowserModal({
+  projectId,
+  shotId,
+  shotName,
+  currentLinkedMediaId,
+  onClose,
+  onLinked,
+}) {
+  const [media,        setMedia]        = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [typeFilter,   setTypeFilter]   = useState('all')
   const [unlinkedOnly, setUnlinkedOnly] = useState(false)
-  const [selected,    setSelected]    = useState([]) // array of media ids
-  const [linking,     setLinking]     = useState(false)
-  const [error,       setError]       = useState(null)
+  const [selectedId,   setSelectedId]   = useState(null)
+  const [linking,      setLinking]      = useState(false)
+  const [error,        setError]        = useState(null)
 
   useEffect(() => {
     productionApi.getProjectMedia(projectId)
@@ -56,46 +60,42 @@ export default function MediaBrowserModal({ projectId, shot, onLinked, onClose }
     return media.filter(m => {
       if (search && !m.name?.toLowerCase().includes(search.toLowerCase())) return false
       if (typeFilter !== 'all' && mimeToType(m.mime_type) !== typeFilter) return false
-      if (unlinkedOnly && m.is_linked && m.linked_shot_id !== shot.id) return false
+      if (unlinkedOnly && m.is_linked && m.id !== currentLinkedMediaId) return false
       return true
     })
-  }, [media, search, typeFilter, unlinkedOnly, shot.id])
+  }, [media, search, typeFilter, unlinkedOnly, currentLinkedMediaId])
 
-  function toggleSelect(id) {
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
-
-  function isLinkedToThisShot(m) {
-    return (shot.linked_media_ids || []).includes(m.id)
-  }
-
-  async function handleLink(isHero) {
-    if (!selected.length || linking) return
+  async function handleLink() {
+    if (!selectedId || linking) return
     setLinking(true)
     setError(null)
     try {
-      let lastUpdated = null
-      for (let i = 0; i < selected.length; i++) {
-        const mediaId = selected[i]
-        const hero = isHero && i === 0 // first selected = hero if hero mode
-        const res = await productionApi.linkMedia(shot.id, mediaId, hero, 'take')
-        if (res?.shot) lastUpdated = res.shot
-      }
-      onLinked(lastUpdated)
+      const res = await productionApi.linkMedia(shotId, selectedId)
+      if (res.error) throw new Error(res.error)
+      onLinked({
+        shotId,
+        mediaId: selectedId,
+        thumbnailUrl:       res.thumbnailUrl,
+        linkedMediaName:    res.linkedMediaName,
+        linkedMediaDuration: res.linkedMediaDuration,
+        linkedMediaMimeType: res.linkedMediaMimeType,
+        linkedMediaReady:   res.linkedMediaReady,
+      })
+      onClose()
     } catch (e) {
       setError(e.message)
       setLinking(false)
     }
   }
 
+  const selectedItem = media.find(m => m.id === selectedId)
+
   return (
     <div className="mbm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="mbm-panel">
         {/* Header */}
         <div className="mbm-header">
-          <span className="mbm-title">
-            Link File to <em>{shot.title}</em>
-          </span>
+          <span className="mbm-title">Link File to <em>{shotName}</em></span>
           <button className="icon-btn" onClick={onClose}><X size={18} /></button>
         </div>
 
@@ -137,9 +137,7 @@ export default function MediaBrowserModal({ projectId, shot, onLinked, onClose }
         {/* Grid */}
         <div className="mbm-grid">
           {loading && (
-            <div className="mbm-loading">
-              <SpinnerGap size={22} className="spin" />
-            </div>
+            <div className="mbm-loading"><SpinnerGap size={22} className="spin" /></div>
           )}
           {!loading && filtered.length === 0 && (
             <div className="mbm-empty">
@@ -147,20 +145,24 @@ export default function MediaBrowserModal({ projectId, shot, onLinked, onClose }
             </div>
           )}
           {filtered.map(m => {
-            const linkedHere = isLinkedToThisShot(m)
-            const linkedElsewhere = m.is_linked && m.linked_shot_id !== shot.id
-            const isSelected = selected.includes(m.id)
+            const isCurrentlyLinked = m.id === currentLinkedMediaId
+            const isLinkedElsewhere = m.is_linked && !isCurrentlyLinked
+            const isSelected = m.id === selectedId
             const dur = formatDuration(m.duration)
 
             return (
               <button
                 key={m.id}
-                className={`mbm-item
-                  ${isSelected ? 'mbm-item--selected' : ''}
-                  ${linkedHere ? 'mbm-item--linked-here' : ''}
-                  ${linkedElsewhere ? 'mbm-item--linked-other' : ''}
-                `}
-                onClick={() => toggleSelect(m.id)}
+                className={[
+                  'mbm-item',
+                  isSelected         ? 'mbm-item--selected'     : '',
+                  isCurrentlyLinked  ? 'mbm-item--linked-here'  : '',
+                  isLinkedElsewhere  ? 'mbm-item--linked-other' : '',
+                ].join(' ')}
+                onClick={() => {
+                  if (isCurrentlyLinked) return
+                  setSelectedId(prev => prev === m.id ? null : m.id)
+                }}
               >
                 <div className="mbm-thumb-wrap">
                   {m.thumbnail_url
@@ -175,16 +177,21 @@ export default function MediaBrowserModal({ projectId, shot, onLinked, onClose }
                   {isSelected && (
                     <div className="mbm-check"><Check size={13} weight="bold" /></div>
                   )}
-                  {linkedHere && !isSelected && (
-                    <div className="mbm-check mbm-check--linked"><Star size={12} weight="fill" /></div>
+                  {isCurrentlyLinked && !isSelected && (
+                    <div className="mbm-check mbm-check--linked"><Check size={12} weight="bold" /></div>
+                  )}
+                  {isLinkedElsewhere && (
+                    <div className="mbm-linked-overlay">
+                      <span className="mbm-linked-badge">→ {m.linked_shot_name || 'other shot'}</span>
+                    </div>
                   )}
                 </div>
                 <div className="mbm-item-name">{m.name}</div>
-                {linkedElsewhere && (
-                  <div className="mbm-linked-badge">→ {m.linked_shot_name || 'other shot'}</div>
+                {m.file_size && (
+                  <div className="mbm-item-size">{formatSize(m.file_size)}</div>
                 )}
-                {linkedHere && (
-                  <div className="mbm-linked-badge mbm-linked-badge--here">Already linked</div>
+                {isCurrentlyLinked && (
+                  <div className="mbm-linked-badge mbm-linked-badge--here">Currently linked</div>
                 )}
               </button>
             )
@@ -193,27 +200,17 @@ export default function MediaBrowserModal({ projectId, shot, onLinked, onClose }
 
         {/* Footer */}
         <div className="mbm-footer">
-          {error && <span className="mbm-error">{error}</span>}
+          {error && <span className="mbm-error"><Warning size={13} /> {error}</span>}
           <span className="mbm-sel-count">
-            {selected.length > 0 ? `${selected.length} selected` : ''}
+            {selectedItem ? selectedItem.name : 'Select a file to link'}
           </span>
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button
-            className="btn-ghost"
-            onClick={() => handleLink(false)}
-            disabled={!selected.length || linking}
-          >
-            {linking ? <SpinnerGap size={12} className="spin" /> : 'Link as Take'}
-          </button>
-          <button
             className="btn-primary"
-            onClick={() => handleLink(true)}
-            disabled={!selected.length || linking}
+            onClick={handleLink}
+            disabled={!selectedId || linking}
           >
-            {linking
-              ? <><SpinnerGap size={13} className="spin" /> Linking…</>
-              : <><Star size={13} weight="fill" /> Link as Hero</>
-            }
+            {linking ? <><SpinnerGap size={13} className="spin" /> Linking…</> : 'Link File'}
           </button>
         </div>
       </div>

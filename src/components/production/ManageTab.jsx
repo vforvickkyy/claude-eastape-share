@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ListBullets, CalendarBlank, ChartBar, SlidersHorizontal,
-  SpinnerGap, Warning, SquaresFour, Kanban, PlayCircle, Gear,
+  SpinnerGap, Warning, SquaresFour, Kanban, Gear,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 import { useProject } from '../../context/ProjectContext'
@@ -10,7 +10,6 @@ import { useProject } from '../../context/ProjectContext'
 import FirstTimeExperience    from './FirstTimeExperience'
 import ShotCardsView          from './views/ShotCardsView'
 import PipelineView           from './views/PipelineView'
-import ShotReviewMode         from './views/ShotReviewMode'
 import ShotListView           from './views/ShotListView'
 import CalendarView           from './views/CalendarView'
 import ProgressDashboard      from './views/ProgressDashboard'
@@ -20,7 +19,6 @@ import PipelineStageManager   from './PipelineStageManager'
 const VIEWS = [
   { id: 'cards',    label: 'Cards',    icon: <SquaresFour   size={14} weight="duotone" /> },
   { id: 'pipeline', label: 'Pipeline', icon: <Kanban        size={14} weight="duotone" /> },
-  { id: 'review',   label: 'Review',   icon: <PlayCircle    size={14} weight="duotone" /> },
   { id: 'list',     label: 'List',     icon: <ListBullets   size={14} weight="duotone" /> },
   { id: 'calendar', label: 'Calendar', icon: <CalendarBlank size={14} weight="duotone" /> },
   { id: 'progress', label: 'Progress', icon: <ChartBar      size={14} weight="duotone" /> },
@@ -120,10 +118,6 @@ export default function ManageTab() {
     return res.scene
   }
 
-  function mergeShot(id, data) {
-    setShots(prev => prev.map(s => s.id === id ? { ...s, ...data } : s))
-  }
-
   // ── Loading ──────────────────────────────────────────────────────
   if (loading) return (
     <div className="manage-loading">
@@ -171,28 +165,11 @@ export default function ManageTab() {
     onShotUpdate:  updateShot,
     onShotDelete:  deleteShot,
     onSceneCreate: createScene,
-    onShotMerge:   mergeShot,
     onReload:      load,
   }
 
-  if (activeView === 'review') {
-    return (
-      <>
-        <ShotReviewMode
-          {...sharedProps}
-          onClose={() => setView('cards')}
-        />
-        {showStageMgr && (
-          <PipelineStageManager
-            projectId={projectId}
-            stages={stages}
-            onClose={() => setShowStageMgr(false)}
-            onSaved={updated => setStages(updated)}
-          />
-        )}
-      </>
-    )
-  }
+  // If stored view is the old 'review' tab (now removed), fall back to cards
+  const resolvedView = activeView === 'review' ? 'cards' : activeView
 
   return (
     <div className="manage-tab">
@@ -202,7 +179,7 @@ export default function ManageTab() {
           {VIEWS.map(v => (
             <button
               key={v.id}
-              className={`manage-view-btn ${activeView === v.id ? 'active' : ''}`}
+              className={`manage-view-btn ${resolvedView === v.id ? 'active' : ''}`}
               onClick={() => setView(v.id)}
             >
               {v.icon} {v.label}
@@ -222,15 +199,11 @@ export default function ManageTab() {
       </div>
 
       {/* View content */}
-      {activeView === 'cards'    && (
-        <ShotCardsView {...sharedProps} />
-      )}
-      {activeView === 'pipeline' && (
-        <PipelineView  {...sharedProps} onManageStages={() => setShowStageMgr(true)} />
-      )}
-      {activeView === 'list'     && <ShotListView     {...sharedProps} />}
-      {activeView === 'calendar' && <CalendarView      {...sharedProps} />}
-      {activeView === 'progress' && <ProgressDashboard {...sharedProps} />}
+      {resolvedView === 'cards'    && <ShotCardsView {...sharedProps} />}
+      {resolvedView === 'pipeline' && <PipelineView  {...sharedProps} onManageStages={() => setShowStageMgr(true)} />}
+      {resolvedView === 'list'     && <ShotListView     {...sharedProps} />}
+      {resolvedView === 'calendar' && <CalendarView      {...sharedProps} />}
+      {resolvedView === 'progress' && <ProgressDashboard {...sharedProps} />}
 
       {showColMgr && (
         <ColumnManager
