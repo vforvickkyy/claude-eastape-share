@@ -4826,6 +4826,17 @@ body { overflow-x: hidden; }
 .shot-card:hover .sc-unlink-btn { opacity: 1; }
 .sc-unlink-btn:hover { color: #f87171; }
 
+/* Linked but no thumbnail generated yet */
+.sc-linked-no-thumb {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: #111827; color: var(--t3);
+}
+.sc-linked-no-thumb-name {
+  font-size: 10px; color: var(--t4); max-width: 88%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+}
+
 /* ═══════════════════════════════════════════════════════════
    SHOT MEDIA VIEWER MODAL
 ═══════════════════════════════════════════════════════════ */

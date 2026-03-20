@@ -224,8 +224,9 @@ function QuickAddCard({ scene, sceneShots, onCreate }) {
 // ── Shot Card ─────────────────────────────────────────────────────────
 function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink }) {
   const [hovering, setHovering] = useState(false)
-  const pct = pipelineCompletion(shot, stages)
-  const hasThumb = !!shot.thumbnail_media_id && !!shot.thumbnailUrl
+  const pct      = pipelineCompletion(shot, stages)
+  const hasLinked = !!shot.thumbnail_media_id          // file is linked (may have no thumb yet)
+  const hasThumb  = hasLinked && !!shot.thumbnailUrl   // has actual image to display
   const dur = formatDuration(shot.linkedMediaDuration)
 
   return (
@@ -236,7 +237,7 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
       onMouseLeave={() => setHovering(false)}
     >
       {/* Thumbnail area */}
-      <div className={`sc-thumb ${!hasThumb ? 'sc-thumb--empty' : ''}`}>
+      <div className={`sc-thumb ${!hasLinked ? 'sc-thumb--empty' : ''}`}>
         {hasThumb ? (
           <>
             <img
@@ -245,7 +246,6 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
               loading="lazy"
               onError={e => { e.target.style.display = 'none' }}
             />
-            {/* Hover overlay with play button */}
             <div className={`sc-play-overlay ${hovering ? 'sc-play-overlay--visible' : ''}`}>
               <button
                 className="sc-play-btn"
@@ -260,8 +260,30 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
                 {status.name}
               </span>
             )}
-            {dur && (
-              <span className="sc-badge sc-badge--dur sc-badge--bl">{dur}</span>
+            {dur && <span className="sc-badge sc-badge--dur sc-badge--bl">{dur}</span>}
+          </>
+        ) : hasLinked ? (
+          // File linked but no thumbnail generated yet
+          <>
+            <div className="sc-linked-no-thumb">
+              <FilmSlate size={32} weight="duotone" />
+              {shot.linkedMediaName && (
+                <span className="sc-linked-no-thumb-name">{shot.linkedMediaName}</span>
+              )}
+            </div>
+            <div className={`sc-play-overlay ${hovering ? 'sc-play-overlay--visible' : ''}`}>
+              <button
+                className="sc-play-btn"
+                onClick={e => { e.stopPropagation(); onReview() }}
+                title="Review"
+              >
+                <Play size={28} weight="fill" />
+              </button>
+            </div>
+            {status && (
+              <span className="sc-badge sc-badge--status" style={{ background: status.color }}>
+                {status.name}
+              </span>
             )}
           </>
         ) : (
@@ -279,7 +301,7 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
         {shot.shot_number && (
           <span className="sc-shot-num">#{shot.shot_number}</span>
         )}
-        {hasThumb && hovering && (
+        {hasLinked && hovering && (
           <button
             className="sc-relink-btn"
             title="Change file"
@@ -293,7 +315,7 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
       {/* Body */}
       <div className="sc-body">
         <div className="sc-title">{shot.title}</div>
-        {!hasThumb && status && (
+        {!hasLinked && status && (
           <div className="sc-meta">
             <span className="sc-status" style={{ background: status.color + '22', color: status.color, borderColor: status.color + '55' }}>
               {status.name}
@@ -309,7 +331,7 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
           </div>
         )}
         {/* Linked file row */}
-        {hasThumb && shot.linkedMediaName && (
+        {hasLinked && shot.linkedMediaName && (
           <div className="sc-linked-row">
             <Link size={10} style={{ flexShrink: 0, color: 'var(--t3)' }} />
             <span className="sc-linked-name">{shot.linkedMediaName}</span>
