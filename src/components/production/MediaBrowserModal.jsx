@@ -70,16 +70,13 @@ export default function MediaBrowserModal({
     setLinking(true)
     setError(null)
     try {
-      const res = await productionApi.linkMedia(shotId, selectedId)
+      const res = await productionApi.linkMedia(shotId, selectedId, projectId)
       if (res.error) throw new Error(res.error)
+      const mediaItem = media.find(m => m.id === selectedId)
       onLinked({
         shotId,
-        mediaId: selectedId,
-        thumbnailUrl:       res.thumbnailUrl,
-        linkedMediaName:    res.linkedMediaName,
-        linkedMediaDuration: res.linkedMediaDuration,
-        linkedMediaMimeType: res.linkedMediaMimeType,
-        linkedMediaReady:   res.linkedMediaReady,
+        mediaId:   selectedId,
+        mediaName: mediaItem?.name || res.media_name || 'Linked file',
       })
       onClose()
     } catch (e) {

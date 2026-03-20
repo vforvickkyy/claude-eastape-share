@@ -317,7 +317,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── SHOTS WITH MEDIA (thumbnails + joined data) ───────────────────
+    // ── SHOTS WITH MEDIA (name-only join, no presigned URLs) ─────────
     if (resource === 'shots_with_media') {
       if (!projectId) return json({ error: 'project_id required' }, 400)
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
@@ -328,45 +328,26 @@ Deno.serve(async (req) => {
         .eq('project_id', projectId).order('position')
       if (shotsErr) return json({ error: shotsErr.message }, 500)
 
-      const { data: stages } = await supabase.from('pipeline_stages').select('*').eq('project_id', projectId).order('order_index')
+      const { data: stages } = await supabase.from('pipeline_stages')
+        .select('*').eq('project_id', projectId).order('order_index')
 
-      const wasabiEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
-      const wasabiBucket   = Deno.env.get('WASABI_BUCKET')   || ''
-      const wasabiKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
-      const wasabiSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
-      const wasabiRegion   = Deno.env.get('WASABI_REGION')   || 'ap-southeast-1'
+      // Single batch query for all linked media names — no N+1, no presigning
+      const linkedIds = (shots || []).map((s: any) => s.thumbnail_media_id).filter(Boolean)
+      const mediaNameMap: Record<string, string> = {}
+      if (linkedIds.length > 0) {
+        const { data: mediaRows } = await supabase
+          .from('project_media').select('id, name').in('id', linkedIds)
+        for (const m of (mediaRows || [])) mediaNameMap[m.id] = m.name
+      }
 
-      const enriched = await Promise.all((shots || []).map(async (shot: Record<string, unknown>) => {
-        let thumbnailUrl = null
-        let linkedMediaName = null
-        let linkedMediaDuration = null
-        let linkedMediaMimeType = null
-        let linkedMediaReady = false
-        if (shot.thumbnail_media_id) {
-          const { data: media } = await supabase.from('project_media')
-            .select('wasabi_key, wasabi_thumbnail_key, name, duration, mime_type, wasabi_status')
-            .eq('id', shot.thumbnail_media_id).single()
-          if (media) {
-            linkedMediaName = media.name
-            linkedMediaDuration = media.duration
-            linkedMediaMimeType = media.mime_type
-            linkedMediaReady = media.wasabi_status === 'ready'
-            if (wasabiKey) {
-              const thumbKey = media.wasabi_thumbnail_key || media.wasabi_key
-              if (thumbKey) {
-                try {
-                  thumbnailUrl = await presignGet(wasabiEndpoint, wasabiBucket, thumbKey as string, wasabiKey, wasabiSecret, wasabiRegion, 7200)
-                } catch {}
-              }
-            }
-          }
-        }
-        const { count: assetCount } = await supabase.from('shot_assets')
-          .select('id', { count: 'exact', head: true }).eq('shot_id', shot.id)
-        return { ...shot, thumbnailUrl, assetCount: assetCount || 0, linkedMediaName, linkedMediaDuration, linkedMediaMimeType, linkedMediaReady }
-      }))
-
-      return json({ shots: enriched, stages: stages || [] })
+      return json({
+        shots: (shots || []).map((shot: any) => ({
+          ...shot,
+          linked_media_id:   shot.thumbnail_media_id || null,
+          linked_media_name: shot.thumbnail_media_id ? (mediaNameMap[shot.thumbnail_media_id] || null) : null,
+        })),
+        stages: stages || [],
+      })
     }
 
     // ── SHOT PIPELINE (update pipeline_stages JSONB on a shot) ────────
@@ -444,54 +425,20 @@ Deno.serve(async (req) => {
       if (!sid || !mid) return json({ error: 'shot_id and media_id required' }, 400)
 
       const { data: shot } = await supabase.from('production_shots')
-        .select('project_id, thumbnail_media_id')
-        .eq('id', sid).single()
+        .select('project_id').eq('id', sid).single()
       if (!shot) return json({ error: 'Not found' }, 404)
       if (!(await canAccess(shot.project_id))) return json({ error: 'Forbidden' }, 403)
 
+      // Verify media belongs to the same project
       const { data: mediaRec } = await supabase.from('project_media')
-        .select('wasabi_key, wasabi_thumbnail_key, name, duration, mime_type, wasabi_status')
-        .eq('id', mid).single()
-      if (!mediaRec) return json({ error: 'Media not found' }, 404)
+        .select('id, name').eq('id', mid).eq('project_id', shot.project_id).single()
+      if (!mediaRec) return json({ error: 'Media not found in this project' }, 404)
 
       await supabase.from('production_shots')
         .update({ thumbnail_media_id: mid, updated_at: new Date().toISOString() })
         .eq('id', sid)
 
-      // Upsert shot_asset record
-      const { data: existingAsset } = await supabase.from('shot_assets')
-        .select('id').eq('shot_id', sid).eq('project_media_id', mid).single()
-      if (existingAsset) {
-        await supabase.from('shot_assets').update({ is_hero: true }).eq('id', existingAsset.id)
-      } else {
-        await supabase.from('shot_assets').insert({
-          shot_id: sid, project_media_id: mid, is_hero: true, label: 'take',
-        })
-      }
-
-      const lmEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
-      const lmBucket   = Deno.env.get('WASABI_BUCKET') || ''
-      const lmKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
-      const lmSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
-      const lmRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
-
-      let thumbnailUrl = null
-      const thumbKey = mediaRec.wasabi_thumbnail_key ||
-        (mediaRec.mime_type?.startsWith('image/') ? mediaRec.wasabi_key : null)
-      if (thumbKey && lmKey) {
-        try { thumbnailUrl = await presignGet(lmEndpoint, lmBucket, thumbKey as string, lmKey, lmSecret, lmRegion, 3600) } catch {}
-      }
-
-      return json({
-        success: true,
-        shot_id: sid,
-        media_id: mid,
-        thumbnailUrl,
-        linkedMediaName: mediaRec.name,
-        linkedMediaDuration: mediaRec.duration,
-        linkedMediaMimeType: mediaRec.mime_type,
-        linkedMediaReady: mediaRec.wasabi_status === 'ready',
-      })
+      return json({ success: true, shot_id: sid, media_id: mid, media_name: mediaRec.name })
     }
 
     // ── UNLINK MEDIA ──────────────────────────────────────────────────
@@ -584,24 +531,15 @@ Deno.serve(async (req) => {
         .order('created_at', { ascending: false })
       if (mediaErr) return json({ error: mediaErr.message }, 500)
 
-      const { data: projectShots } = await supabase
-        .from('production_shots').select('id, title').eq('project_id', projectId)
-      const shotsById: Record<string, string> = {}
-      for (const s of (projectShots || [])) shotsById[s.id] = s.title
-
-      const shotIds = Object.keys(shotsById)
-      let assetsData: Array<{ project_media_id: string; shot_id: string }> = []
-      if (shotIds.length > 0) {
-        const { data: assets } = await supabase.from('shot_assets')
-          .select('project_media_id, shot_id').in('shot_id', shotIds)
-        assetsData = assets || []
-      }
-
-      const linkedMap: Record<string, { shot_id: string; shot_name: string }> = {}
-      for (const a of assetsData) {
-        if (!linkedMap[a.project_media_id]) {
-          linkedMap[a.project_media_id] = { shot_id: a.shot_id, shot_name: shotsById[a.shot_id] || '' }
-        }
+      // Check which media items are linked via thumbnail_media_id (source of truth)
+      const { data: linkedShots } = await supabase
+        .from('production_shots')
+        .select('thumbnail_media_id, title')
+        .eq('project_id', projectId)
+        .not('thumbnail_media_id', 'is', null)
+      const linkedMap: Record<string, string> = {}
+      for (const s of (linkedShots || [])) {
+        if (s.thumbnail_media_id) linkedMap[s.thumbnail_media_id] = s.title
       }
 
       const wEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
@@ -620,8 +558,7 @@ Deno.serve(async (req) => {
           ...m,
           thumbnail_url,
           is_linked: !!linkedMap[m.id],
-          linked_shot_id: linkedMap[m.id]?.shot_id || null,
-          linked_shot_name: linkedMap[m.id]?.shot_name || null,
+          linked_shot_name: linkedMap[m.id] || null,
         }
       }))
 

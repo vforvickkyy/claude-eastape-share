@@ -96,7 +96,7 @@ export default function ManageTab() {
   async function createShot(body) {
     const res  = await productionApi.createShot(projectId, body)
     const shot = res.shot
-    setShots(prev => [...prev, { ...shot, thumbnailUrl: null, assetCount: 0 }])
+    setShots(prev => [...prev, { ...shot, linked_media_id: null, linked_media_name: null }])
     return shot
   }
 

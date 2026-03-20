@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, DownloadSimple, Trash, Copy, CheckCircle,
@@ -26,8 +26,12 @@ const STATUS_OPTIONS = [
 
 export default function ProjectMediaAssetPage() {
   const { user, loading: authLoading } = useAuth()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const location  = useLocation()
   const { id: projectId, mediaId } = useParams()
+  const backPath  = location.state?.from === 'manage'
+    ? `/projects/${projectId}/manage`
+    : `/projects/${projectId}/files`
 
   const [asset,       setAsset]      = useState(null)
   const [loading,     setLoading]    = useState(true)
@@ -166,8 +170,8 @@ export default function ProjectMediaAssetPage() {
     <DashboardLayout title={asset.name}>
       {/* Top bar */}
       <div className="asset-topbar">
-        <button className="btn-ghost" onClick={() => navigate(`/projects/${projectId}/files`)}>
-          <ArrowLeft size={14} /> Back
+        <button className="btn-ghost" onClick={() => navigate(backPath)}>
+          <ArrowLeft size={14} /> {location.state?.from === 'manage' ? '← Back to Manage' : 'Back'}
         </button>
 
         {editName ? (

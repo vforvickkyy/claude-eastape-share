@@ -281,8 +281,8 @@ export const productionApi = {
     post(`${PROD}?resource=bulk_create_shots&project_id=${projectId}`, { scene_id: sceneId, shots }, true),
 
   // Link / unlink media (one file per shot)
-  linkMedia: (shotId, mediaId) =>
-    post(`${PROD}?resource=link_media`, { shot_id: shotId, media_id: mediaId }, true),
+  linkMedia: (shotId, mediaId, projectId) =>
+    post(`${PROD}?resource=link_media`, { shot_id: shotId, media_id: mediaId, project_id: projectId }, true),
   unlinkMedia: (shotId) =>
     post(`${PROD}?resource=unlink_media`, { shot_id: shotId }, true),
 

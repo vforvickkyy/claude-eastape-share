@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   FilmSlate, Link, PlusCircle, CaretDown, CaretRight,
   DotsThree, Pencil, Trash, ListBullets, Play, X as XIcon,
 } from '@phosphor-icons/react'
 import ShotDetailPanel from '../ShotDetailPanel'
 import MediaBrowserModal from '../MediaBrowserModal'
-import ShotMediaViewerModal from '../ShotMediaViewerModal'
 import BulkAddShotsModal from '../BulkAddShotsModal'
 import { productionApi } from '../../../lib/api'
 
@@ -46,13 +46,6 @@ function nextShotNumber(groupShots, scene) {
   }
   const initial = (scene?.name || 'S').charAt(0).toUpperCase()
   return `${initial}${String(groupShots.length + 1).padStart(2, '0')}`
-}
-
-function formatDuration(secs) {
-  if (!secs) return null
-  const m = Math.floor(secs / 60)
-  const s = String(Math.floor(secs % 60)).padStart(2, '0')
-  return `${m}:${s}`
 }
 
 // ── Scene Menu ───────────────────────────────────────────────────────
@@ -221,94 +214,113 @@ function QuickAddCard({ scene, sceneShots, onCreate }) {
   )
 }
 
+// ── Shot Card Context Menu ─────────────────────────────────────────────
+function ShotCardMenu({ hasLinked, onOpen, onLink, onUnlink, onEdit, onDelete, onClose }) {
+  const ref = useRef()
+  useEffect(() => {
+    function h(e) { if (!ref.current?.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  return (
+    <div className="sc-card-menu" ref={ref}>
+      {hasLinked && (
+        <>
+          <button className="sc-card-menu-item" onClick={() => { onOpen(); onClose() }}>
+            <Play size={12} weight="fill" /> Open Video
+          </button>
+          <button className="sc-card-menu-item" onClick={() => { onLink(); onClose() }}>
+            <Link size={12} /> Change File
+          </button>
+          <button className="sc-card-menu-item sc-card-menu-item--danger" onClick={() => { onUnlink(); onClose() }}>
+            <XIcon size={12} /> Unlink File
+          </button>
+          <div className="sc-card-menu-sep" />
+        </>
+      )}
+      {!hasLinked && (
+        <>
+          <button className="sc-card-menu-item" onClick={() => { onLink(); onClose() }}>
+            <Link size={12} /> Link File
+          </button>
+          <div className="sc-card-menu-sep" />
+        </>
+      )}
+      <button className="sc-card-menu-item" onClick={() => { onEdit(); onClose() }}>
+        <Pencil size={12} /> Edit Shot
+      </button>
+      <button className="sc-card-menu-item sc-card-menu-item--danger" onClick={() => { onDelete(); onClose() }}>
+        <Trash size={12} /> Delete Shot
+      </button>
+    </div>
+  )
+}
+
 // ── Shot Card ─────────────────────────────────────────────────────────
-function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink }) {
+function ShotCard({ shot, status, stages, onOpen, onLink, onUnlink, onEdit, onDelete }) {
   const [hovering, setHovering] = useState(false)
-  const pct      = pipelineCompletion(shot, stages)
-  const hasLinked = !!shot.thumbnail_media_id          // file is linked (may have no thumb yet)
-  const hasThumb  = hasLinked && !!shot.thumbnailUrl   // has actual image to display
-  const dur = formatDuration(shot.linkedMediaDuration)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const pct       = pipelineCompletion(shot, stages)
+  const hasLinked = !!(shot.linked_media_id || shot.thumbnail_media_id)
+  const mediaName = shot.linked_media_name
+  const displayName = mediaName
+    ? (mediaName.length > 22 ? mediaName.slice(0, 22) + '…' : mediaName)
+    : ''
 
   return (
     <div
-      className="shot-card"
-      onClick={onClick}
+      className={`shot-card ${hasLinked ? 'shot-card--linked' : ''}`}
+      onClick={hasLinked ? onOpen : onLink}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {/* Thumbnail area */}
-      <div className={`sc-thumb ${!hasLinked ? 'sc-thumb--empty' : ''}`}>
-        {hasThumb ? (
-          <>
-            <img
-              src={shot.thumbnailUrl}
-              alt={shot.title}
-              loading="lazy"
-              onError={e => { e.target.style.display = 'none' }}
-            />
-            <div className={`sc-play-overlay ${hovering ? 'sc-play-overlay--visible' : ''}`}>
+      {/* Always dark placeholder — no image loading */}
+      <div className="sc-thumb sc-thumb--empty">
+        <div className="sc-placeholder">
+          <FilmSlate size={36} weight="duotone" style={{ color: '#404050', opacity: 0.7 }} />
+          {hasLinked ? (
+            <span className="sc-filename">{displayName}</span>
+          ) : (
+            <>
+              <span className="sc-no-file">No file linked</span>
               <button
-                className="sc-play-btn"
-                onClick={e => { e.stopPropagation(); onReview() }}
-                title="Review"
+                className="sc-link-file-btn"
+                onClick={e => { e.stopPropagation(); onLink() }}
               >
-                <Play size={28} weight="fill" />
+                <Link size={11} /> Link File
               </button>
-            </div>
-            {status && (
-              <span className="sc-badge sc-badge--status" style={{ background: status.color }}>
-                {status.name}
-              </span>
-            )}
-            {dur && <span className="sc-badge sc-badge--dur sc-badge--bl">{dur}</span>}
-          </>
-        ) : hasLinked ? (
-          // File linked but no thumbnail generated yet
-          <>
-            <div className="sc-linked-no-thumb">
-              <FilmSlate size={32} weight="duotone" />
-              {shot.linkedMediaName && (
-                <span className="sc-linked-no-thumb-name">{shot.linkedMediaName}</span>
-              )}
-            </div>
-            <div className={`sc-play-overlay ${hovering ? 'sc-play-overlay--visible' : ''}`}>
-              <button
-                className="sc-play-btn"
-                onClick={e => { e.stopPropagation(); onReview() }}
-                title="Review"
-              >
-                <Play size={28} weight="fill" />
-              </button>
-            </div>
-            {status && (
-              <span className="sc-badge sc-badge--status" style={{ background: status.color }}>
-                {status.name}
-              </span>
-            )}
-          </>
-        ) : (
-          <div className="sc-no-thumb">
-            <FilmSlate size={36} weight="duotone" />
-            <span>No file linked</span>
-            <button
-              className="sc-link-file-btn"
-              onClick={e => { e.stopPropagation(); onLink() }}
-            >
-              <Link size={11} /> Link File
-            </button>
-          </div>
+            </>
+          )}
+        </div>
+        {hasLinked && hovering && <div className="sc-open-badge">▶ Open</div>}
+        {shot.shot_number && <span className="sc-shot-num">#{shot.shot_number}</span>}
+        {status && hasLinked && (
+          <span className="sc-badge sc-badge--status" style={{ background: status.color }}>
+            {status.name}
+          </span>
         )}
-        {shot.shot_number && (
-          <span className="sc-shot-num">#{shot.shot_number}</span>
-        )}
-        {hasLinked && hovering && (
-          <button
-            className="sc-relink-btn"
-            title="Change file"
-            onClick={e => { e.stopPropagation(); onLink() }}
-          >
-            <Link size={12} />
-          </button>
+      </div>
+
+      {/* Three-dot context menu */}
+      <div className="sc-card-menu-wrap">
+        <button
+          className="sc-card-menu-btn"
+          onClick={e => { e.stopPropagation(); setMenuOpen(v => !v) }}
+          title="Options"
+        >
+          <DotsThree size={15} weight="bold" />
+        </button>
+        {menuOpen && (
+          <ShotCardMenu
+            hasLinked={hasLinked}
+            onOpen={onOpen}
+            onLink={onLink}
+            onUnlink={onUnlink}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onClose={() => setMenuOpen(false)}
+          />
         )}
       </div>
 
@@ -330,11 +342,10 @@ function ShotCard({ shot, status, stages, onClick, onLink, onReview, onUnlink })
             <span className="sc-pipeline-pct">{pct}%</span>
           </div>
         )}
-        {/* Linked file row */}
-        {hasLinked && shot.linkedMediaName && (
+        {hasLinked && mediaName && (
           <div className="sc-linked-row">
             <Link size={10} style={{ flexShrink: 0, color: 'var(--t3)' }} />
-            <span className="sc-linked-name">{shot.linkedMediaName}</span>
+            <span className="sc-linked-name">{mediaName}</span>
             <button
               className="sc-unlink-btn"
               title="Unlink file"
@@ -354,6 +365,7 @@ export default function ShotCardsView({
   projectId, statuses, scenes, stages, shots, columns,
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
 }) {
+  const navigate   = useNavigate()
   const collapseKey = `ets_scene_collapse_${projectId}`
 
   const [collapsed,    setCollapsed]    = useState(() => {
@@ -361,7 +373,6 @@ export default function ShotCardsView({
   })
   const [selectedShot, setSelectedShot] = useState(null)
   const [linkingShot,  setLinkingShot]  = useState(null)
-  const [reviewModal,  setReviewModal]  = useState(null) // { mediaId, shotName, shotNumber }
   const [bulkAddScene, setBulkAddScene] = useState(null)
   const [localShots,   setLocalShots]   = useState(shots)
 
@@ -418,37 +429,39 @@ export default function ShotCardsView({
     onReload()
   }
 
-  // Immediate local state update when media is linked
+  // Optimistic update after linking — only mediaId and mediaName needed
   function handleMediaLinked(data) {
     setLocalShots(prev => prev.map(shot =>
       shot.id === data.shotId
         ? {
             ...shot,
-            thumbnail_media_id:  data.mediaId,
-            thumbnailUrl:        data.thumbnailUrl,
-            linkedMediaName:     data.linkedMediaName,
-            linkedMediaDuration: data.linkedMediaDuration,
-            linkedMediaMimeType: data.linkedMediaMimeType,
-            linkedMediaReady:    data.linkedMediaReady,
+            thumbnail_media_id: data.mediaId,
+            linked_media_id:    data.mediaId,
+            linked_media_name:  data.mediaName,
           }
         : shot
     ))
   }
 
-  // Immediate local state update when media is unlinked
+  // Optimistic update after unlinking
   async function handleUnlink(shot) {
-    const name = shot.linkedMediaName || 'this file'
+    const name = shot.linked_media_name || 'this file'
     if (!window.confirm(`Unlink "${name}" from "${shot.title}"?`)) return
     try {
       await productionApi.unlinkMedia(shot.id)
       setLocalShots(prev => prev.map(s =>
         s.id === shot.id
-          ? { ...s, thumbnail_media_id: null, thumbnailUrl: null, linkedMediaName: null, linkedMediaDuration: null, linkedMediaMimeType: null, linkedMediaReady: false }
+          ? { ...s, thumbnail_media_id: null, linked_media_id: null, linked_media_name: null }
           : s
       ))
     } catch (e) {
       alert('Unlink failed: ' + e.message)
     }
+  }
+
+  async function handleDeleteShot(shot) {
+    if (!window.confirm(`Delete shot "${shot.title}"?`)) return
+    await onShotDelete(shot.id)
   }
 
   // Empty state
@@ -489,20 +502,21 @@ export default function ShotCardsView({
                 <div className="shot-cards-grid">
                   {groupShots.map(shot => {
                     const status = statuses.find(s => s.id === shot.status_id)
+                    const linkedId = shot.linked_media_id || shot.thumbnail_media_id
                     return (
                       <ShotCard
                         key={shot.id}
                         shot={shot}
                         status={status}
                         stages={stages}
-                        onClick={() => setSelectedShot(shot)}
+                        onOpen={() => navigate(
+                          `/projects/${projectId}/media/${linkedId}`,
+                          { state: { from: 'manage' } }
+                        )}
                         onLink={() => setLinkingShot(shot)}
-                        onReview={() => shot.thumbnail_media_id && setReviewModal({
-                          mediaId:    shot.thumbnail_media_id,
-                          shotName:   shot.title,
-                          shotNumber: shot.shot_number,
-                        })}
                         onUnlink={() => handleUnlink(shot)}
+                        onEdit={() => setSelectedShot(shot)}
+                        onDelete={() => handleDeleteShot(shot)}
                       />
                     )
                   })}
@@ -553,19 +567,9 @@ export default function ShotCardsView({
           projectId={projectId}
           shotId={linkingShot.id}
           shotName={linkingShot.title}
-          currentLinkedMediaId={linkingShot.thumbnail_media_id || null}
+          currentLinkedMediaId={linkingShot.linked_media_id || linkingShot.thumbnail_media_id || null}
           onLinked={handleMediaLinked}
           onClose={() => setLinkingShot(null)}
-        />
-      )}
-
-      {reviewModal && (
-        <ShotMediaViewerModal
-          projectId={projectId}
-          mediaId={reviewModal.mediaId}
-          shotName={reviewModal.shotName}
-          shotNumber={reviewModal.shotNumber}
-          onClose={() => setReviewModal(null)}
         />
       )}
 
