@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
     setUser(session?.user ?? null);
     saveSession(session ?? null);
     // Sync to Supabase native so supabase.auth.getSession() works for all users.
-    // This is critical for email/password users whose session was created server-side.
+    // Critical for email/password users whose session was created server-side.
     if (session?.access_token && session?.refresh_token) {
       supabase.auth.setSession({
         access_token: session.access_token,
@@ -60,26 +60,40 @@ export function AuthProvider({ children }) {
 
   // Restore session on mount + proactive auto-refresh
   useEffect(() => {
-    const session = loadSession();
-    if (!session) { setLoading(false); return; }
+    let cancelled = false;
 
-    if (!isExpired(session)) {
-      setUser(session.user);
-      // Sync existing valid session to Supabase native
-      if (session.access_token && session.refresh_token) {
-        supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        }).catch(() => {});
+    async function init() {
+      const session = loadSession();
+      if (!session) {
+        if (!cancelled) setLoading(false);
+        return;
       }
-      setLoading(false);
-    } else {
-      // Session expired on load — try to refresh silently
-      apiPost("/api/auth/refresh", { refreshToken: session.refresh_token })
-        .then(({ session: newSession }) => applySession(newSession))
-        .catch(() => { saveSession(null); setUser(null); })
-        .finally(() => setLoading(false));
+
+      if (!isExpired(session)) {
+        if (!cancelled) setUser(session.user);
+        // AWAIT setSession so supabase.auth.getSession() is populated before
+        // any child component mounts and calls getToken(). Without awaiting,
+        // components mount immediately and getSession() returns null → 401.
+        try {
+          await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+        } catch {}
+        if (!cancelled) setLoading(false);
+      } else {
+        // Session expired on load — try to refresh silently
+        try {
+          const { session: newSession } = await apiPost("/api/auth/refresh", { refreshToken: session.refresh_token });
+          if (!cancelled) applySession(newSession);
+        } catch {
+          if (!cancelled) { saveSession(null); setUser(null); }
+        }
+        if (!cancelled) setLoading(false);
+      }
     }
+
+    init();
 
     // Check every 4 minutes; refresh if token expires within 5 minutes
     const interval = setInterval(() => {
@@ -93,7 +107,7 @@ export function AuthProvider({ children }) {
       }
     }, 4 * 60 * 1000);
 
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   async function login(email, password) {
