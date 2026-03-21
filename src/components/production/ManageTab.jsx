@@ -190,23 +190,21 @@ export default function ManageTab() {
           ))}
         </div>
         <div className="manage-toolbar-right">
-          {(activeView === 'cards' || activeView === 'pipeline' || activeView === 'list') && (
+          {(activeView === 'cards' || activeView === 'pipeline') && (
             <button className="btn-ghost" onClick={() => setShowStageMgr(true)}>
               <Gear size={14} /> Stages
             </button>
           )}
-          {activeView !== 'list' && (
-            <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
-              <SlidersHorizontal size={14} /> Columns
-            </button>
-          )}
+          <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
+            <SlidersHorizontal size={14} /> Columns
+          </button>
         </div>
       </div>
 
       {/* View content */}
       {resolvedView === 'cards'    && <ShotCardsView {...sharedProps} />}
       {resolvedView === 'pipeline' && <PipelineView  {...sharedProps} onManageStages={() => setShowStageMgr(true)} />}
-      {resolvedView === 'list'     && <ShotListView     {...sharedProps} onManageStages={() => setShowStageMgr(true)} />}
+      {resolvedView === 'list'     && <ShotListView     {...sharedProps} onManageColumns={() => setShowColMgr(true)} />}
       {resolvedView === 'calendar' && <CalendarView      {...sharedProps} />}
       {resolvedView === 'progress' && <ProgressDashboard {...sharedProps} />}
 
