@@ -511,16 +511,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── PROJECT VIEW (save default_manage_view) ───────────────────────
+    // ── PROJECT VIEW (save default_manage_view / hidden_builtin_cols) ──
     if (resource === 'project_view') {
       if (!projectId) return json({ error: 'project_id required' }, 400)
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
       if (req.method === 'PATCH' || req.method === 'PUT') {
         const body = await req.json()
-        if (!body.default_manage_view) return json({ error: 'default_manage_view required' }, 400)
-        const { error } = await supabase.from('projects')
-          .update({ default_manage_view: body.default_manage_view })
-          .eq('id', projectId)
+        const patch: Record<string, unknown> = {}
+        if (body.default_manage_view) patch.default_manage_view = body.default_manage_view
+        if (body.hidden_builtin_cols !== undefined) patch.hidden_builtin_cols = body.hidden_builtin_cols
+        if (Object.keys(patch).length === 0) return json({ error: 'Nothing to update' }, 400)
+        const { error } = await supabase.from('projects').update(patch).eq('id', projectId)
         if (error) return json({ error: error.message }, 500)
         return json({ ok: true })
       }

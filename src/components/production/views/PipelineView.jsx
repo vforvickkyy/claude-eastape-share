@@ -443,6 +443,7 @@ function AssigneeCell({ shot, teamMembers, onAssign }) {
 export default function PipelineView({
   projectId, statuses, scenes, stages: initialStages, shots, columns,
   teamMembers = [],
+  hiddenBuiltinCols = [],
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
   onManageStages,
 }) {
@@ -488,6 +489,10 @@ export default function PipelineView({
     catch { await onReload() }
   }
 
+  const showShot       = !hiddenBuiltinCols.includes('shot')
+  const showStatus     = !hiddenBuiltinCols.includes('status')
+  const showAssignedTo = !hiddenBuiltinCols.includes('assigned_to')
+
   const groupedShots = scenes.length
     ? scenes.map(scene => ({ scene, shots: localShots.filter(s => s.scene_id === scene.id) })).filter(g => g.shots.length > 0)
     : [{ scene: null, shots: localShots }]
@@ -518,13 +523,17 @@ export default function PipelineView({
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               {/* Shot */}
-              <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, minWidth: 200 }}>
-                Shot
-              </th>
+              {showShot && (
+                <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, minWidth: 200 }}>
+                  Shot
+                </th>
+              )}
               {/* Status */}
-              <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, width: 120 }}>
-                Status
-              </th>
+              {showStatus && (
+                <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, width: 120 }}>
+                  Status
+                </th>
+              )}
               {/* Stage columns */}
               {stages.map(s => (
                 <StageHeader
@@ -535,9 +544,11 @@ export default function PipelineView({
                 />
               ))}
               {/* Assigned To */}
-              <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, width: 140 }}>
-                Assigned To
-              </th>
+              {showAssignedTo && (
+                <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, width: 140 }}>
+                  Assigned To
+                </th>
+              )}
               {/* Add stage ghost */}
               <th style={{ width: 40, padding: 0 }}>
                 <button
@@ -556,7 +567,7 @@ export default function PipelineView({
                 {scene && (
                   <tr>
                     <td
-                      colSpan={3 + stages.length + 1}
+                      colSpan={(showShot ? 1 : 0) + (showStatus ? 1 : 0) + stages.length + (showAssignedTo ? 1 : 0) + 1}
                       style={{ padding: '6px 14px', fontSize: 11, color: 'var(--t4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, background: 'rgba(255,255,255,0.03)', borderTop: '1px solid rgba(255,255,255,0.05)' }}
                     >
                       {scene.name}
@@ -573,31 +584,35 @@ export default function PipelineView({
                       onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     >
                       {/* Shot title */}
-                      <td
-                        style={{ padding: '0 14px', cursor: 'pointer', minHeight: 44, height: 44, verticalAlign: 'middle' }}
-                        onClick={() => setSelectedShot(shot)}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {shot.shot_number && (
-                            <span style={{ fontSize: 10, color: 'var(--t4)', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
-                          )}
-                          <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shot.title}</span>
-                        </div>
-                      </td>
+                      {showShot && (
+                        <td
+                          style={{ padding: '0 14px', cursor: 'pointer', minHeight: 44, height: 44, verticalAlign: 'middle' }}
+                          onClick={() => setSelectedShot(shot)}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {shot.shot_number && (
+                              <span style={{ fontSize: 10, color: 'var(--t4)', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
+                            )}
+                            <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shot.title}</span>
+                          </div>
+                        </td>
+                      )}
                       {/* Shot status */}
-                      <td style={{ padding: '0 6px', verticalAlign: 'middle', width: 120 }}>
-                        {status && (
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            background: status.color + '22', color: status.color,
-                            border: `1px solid ${status.color}55`,
-                            borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap',
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: status.color }} />
-                            {status.name}
-                          </span>
-                        )}
-                      </td>
+                      {showStatus && (
+                        <td style={{ padding: '0 6px', verticalAlign: 'middle', width: 120 }}>
+                          {status && (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                              background: status.color + '22', color: status.color,
+                              border: `1px solid ${status.color}55`,
+                              borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap',
+                            }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: status.color }} />
+                              {status.name}
+                            </span>
+                          )}
+                        </td>
+                      )}
                       {/* Stage cells */}
                       {stages.map(stage => (
                         <StageCell
@@ -607,10 +622,12 @@ export default function PipelineView({
                         />
                       ))}
                       {/* Assignee */}
-                      <AssigneeCell
-                        shot={shot} teamMembers={teamMembers}
-                        onAssign={assignedTo => handleAssign(shot.id, assignedTo)}
-                      />
+                      {showAssignedTo && (
+                        <AssigneeCell
+                          shot={shot} teamMembers={teamMembers}
+                          onAssign={assignedTo => handleAssign(shot.id, assignedTo)}
+                        />
+                      )}
                       <td />
                     </tr>
                   )

@@ -290,6 +290,10 @@ export const productionApi = {
   saveDefaultView: (projectId, view) =>
     patch(`${PROD}?resource=project_view&project_id=${projectId}`, {}, { default_manage_view: view }, true),
 
+  // Save which built-in columns (shot, status, assigned_to) are hidden
+  saveBuiltinColVisibility: (projectId, hiddenCols) =>
+    patch(`${PROD}?resource=project_view&project_id=${projectId}`, {}, { hidden_builtin_cols: hiddenCols }, true),
+
   // Shot assets (legacy)
   linkAsset:   (shotId, body) => post(`${PROD}?resource=shot_assets&shot_id=${shotId}`, body, true),
   unlinkAsset: (id)           => del(PROD, { resource: 'shot_assets', id }, true),

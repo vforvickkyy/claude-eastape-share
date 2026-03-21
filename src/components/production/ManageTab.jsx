@@ -42,13 +42,17 @@ export default function ManageTab() {
   const [seeded,     setSeeded]     = useState(false)
   const [showColMgr, setShowColMgr] = useState(false)
   const [showStageMgr, setShowStageMgr] = useState(false)
+  const [hiddenBuiltinCols, setHiddenBuiltinCols] = useState(null) // null = not yet loaded
 
-  // Set initial view from project once loaded
+  // Set initial view + builtin col visibility from project once loaded
   useEffect(() => {
     if (project?.default_manage_view && view === null) {
       setView(project.default_manage_view)
     }
-  }, [project?.default_manage_view])
+    if (hiddenBuiltinCols === null && project) {
+      setHiddenBuiltinCols(project.hidden_builtin_cols || [])
+    }
+  }, [project?.default_manage_view, project?.hidden_builtin_cols])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -115,6 +119,11 @@ export default function ManageTab() {
     setShots(prev => prev.filter(s => s.id !== id))
   }
 
+  async function handleBuiltinColChange(hiddenCols) {
+    setHiddenBuiltinCols(hiddenCols)
+    await productionApi.saveBuiltinColVisibility(projectId, hiddenCols).catch(() => {})
+  }
+
   async function createScene(name) {
     const res = await productionApi.createScene(projectId, { name, position: scenes.length })
     setScenes(prev => [...prev, res.scene])
@@ -162,9 +171,12 @@ export default function ManageTab() {
   }
 
   // ── Review mode is full-overlay, rendered differently ────────────
+  const resolvedHiddenCols = hiddenBuiltinCols || []
+
   const sharedProps = {
     projectId, statuses, scenes, stages, columns, shots,
     teamMembers,
+    hiddenBuiltinCols: resolvedHiddenCols,
     onShotCreate:  createShot,
     onShotUpdate:  updateShot,
     onShotDelete:  deleteShot,
@@ -222,6 +234,8 @@ export default function ManageTab() {
         <PipelineStageManager
           projectId={projectId}
           stages={stages}
+          hiddenBuiltinCols={resolvedHiddenCols}
+          onBuiltinColChange={handleBuiltinColChange}
           onClose={() => setShowStageMgr(false)}
           onSaved={updated => setStages(updated)}
         />

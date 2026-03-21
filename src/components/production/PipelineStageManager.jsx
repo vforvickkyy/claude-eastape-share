@@ -320,8 +320,50 @@ function AddStageRow({ onAdd }) {
   )
 }
 
+// ── Built-in column row (Shot / Status / Assigned To) ────────────────
+const BUILTIN_COLS = [
+  { id: 'shot',        label: 'Shot',        icon: '🎬', desc: 'Shot number & title' },
+  { id: 'status',      label: 'Status',      icon: '🔵', desc: 'Production status badge' },
+  { id: 'assigned_to', label: 'Assigned To', icon: '👤', desc: 'Team member assignment' },
+]
+
+function BuiltinColRow({ col, hidden, onHide, onShow }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+      background: hidden ? '#111120' : '#16162a',
+      border: `1px solid ${hidden ? '#1e1e2e' : '#2a2a3a'}`,
+      borderRadius: 8, margin: '3px 0',
+      opacity: hidden ? 0.6 : 1,
+      transition: 'opacity 0.15s',
+    }}>
+      <span style={{ fontSize: 14, flexShrink: 0 }}>{col.icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: hidden ? '#888' : '#e8e8ff' }}>{col.label}</div>
+        <div style={{ fontSize: 11, color: 'var(--t4)' }}>{col.desc}</div>
+      </div>
+      <span style={{ fontSize: 10, color: 'var(--t4)', background: '#1e1e30', borderRadius: 4, padding: '2px 7px', flexShrink: 0 }}>
+        built-in
+      </span>
+      {hidden ? (
+        <button type="button" title="Show column" onClick={() => onShow(col.id)}
+          style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5 }}
+          onMouseEnter={e => e.currentTarget.style.color = '#10b981'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+        ><Eye size={14} /></button>
+      ) : (
+        <button type="button" title="Hide column" onClick={() => onHide(col.id)}
+          style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5 }}
+          onMouseEnter={e => e.currentTarget.style.color = '#e2e8f0'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+        ><EyeSlash size={14} /></button>
+      )}
+    </div>
+  )
+}
+
 // ── Main modal ───────────────────────────────────────────────────────
-export default function PipelineStageManager({ projectId, stages: initialStages, onClose, onSaved }) {
+export default function PipelineStageManager({ projectId, stages: initialStages, hiddenBuiltinCols = [], onBuiltinColChange, onClose, onSaved }) {
   const [allStages,      setAllStages]      = useState([])
   const [loading,        setLoading]        = useState(true)
   const [hiddenExpanded, setHiddenExpanded] = useState(false)
@@ -408,6 +450,15 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
     }
   }
 
+  function handleBuiltinHide(colId) {
+    const updated = hiddenBuiltinCols.includes(colId) ? hiddenBuiltinCols : [...hiddenBuiltinCols, colId]
+    onBuiltinColChange?.(updated)
+  }
+  function handleBuiltinShow(colId) {
+    const updated = hiddenBuiltinCols.filter(c => c !== colId)
+    onBuiltinColChange?.(updated)
+  }
+
   async function applyPreset(preset) {
     if (!window.confirm(`Apply "${preset.name}" preset? This will add ${preset.stages.length} stages.`)) return
     for (let i = 0; i < preset.stages.length; i++) {
@@ -448,9 +499,23 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
             </div>
           ) : (
             <>
-              {/* Active columns label */}
+              {/* Built-in columns */}
               <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-                Active Columns
+                Built-in Columns
+              </div>
+              {BUILTIN_COLS.map(col => (
+                <BuiltinColRow
+                  key={col.id}
+                  col={col}
+                  hidden={hiddenBuiltinCols.includes(col.id)}
+                  onHide={handleBuiltinHide}
+                  onShow={handleBuiltinShow}
+                />
+              ))}
+
+              {/* Active stage columns label */}
+              <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 20 }}>
+                Stage Columns
               </div>
 
               {active.length === 0 && (
