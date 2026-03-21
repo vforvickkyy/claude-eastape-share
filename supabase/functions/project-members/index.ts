@@ -83,10 +83,12 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500)
 
       if (!is_manual) {
-        await supabase.from('project_activity').insert({
-          project_id, user_id: user.id, action: 'added_member',
-          entity_type: 'member', entity_name: email,
-        }).catch(() => {})
+        try {
+          await supabase.from('project_activity').insert({
+            project_id, user_id: user.id, action: 'added_member',
+            entity_type: 'member', entity_name: email,
+          })
+        } catch {}
       }
 
       return json({ member }, 201)
