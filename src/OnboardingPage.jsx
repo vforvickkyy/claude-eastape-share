@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, CaretDown } from "@phosphor-icons/react";
+import { Check, CaretDown, FilmSlate, CloudArrowUp, UserPlus, SquaresFour } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { userApi } from "./lib/api";
 
@@ -34,26 +34,30 @@ function CustomSelect({ value, onChange, options, placeholder }) {
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            initial={{ opacity: 0, y: -6, scaleY: 0.95 }} animate={{ opacity: 1, y: 0, scaleY: 1 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
             style={{
-              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
-              background: "#1c1c2e", border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 50,
+              background: "#16162a", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 12, overflow: "hidden auto", maxHeight: 280,
+              boxShadow: "0 16px 40px rgba(0,0,0,0.6)", transformOrigin: "top",
             }}
           >
-            {options.map(opt => (
+            {options.map((opt, i) => (
               <button
                 key={opt} type="button"
                 onClick={() => { onChange(opt); setOpen(false); }}
                 style={{
-                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 14,
-                  background: value === opt ? "rgba(124,58,237,0.2)" : "none",
-                  color: value === opt ? "#c4b5fd" : "var(--t1)",
-                  border: "none", cursor: "pointer", display: "block",
+                  width: "100%", textAlign: "left", padding: "11px 16px", fontSize: 14,
+                  background: value === opt ? "rgba(124,58,237,0.25)" : "transparent",
+                  color: value === opt ? "#c4b5fd" : "var(--t2)",
+                  borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                  border: "none", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                  cursor: "pointer", display: "block", transition: "background 0.1s",
+                  fontWeight: value === opt ? 600 : 400,
                 }}
-                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = "none"; }}
+                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = "transparent"; }}
               >
                 {opt}
               </button>
@@ -138,7 +142,7 @@ function StepIndicator({ current }) {
 }
 
 /* ── Action Card ── */
-function ActionCard({ emoji, title, description, onClick }) {
+function ActionCard({ icon, title, description, onClick, accent }) {
   return (
     <motion.button
       onClick={onClick}
@@ -146,13 +150,18 @@ function ActionCard({ emoji, title, description, onClick }) {
       whileTap={{ scale: 0.98 }}
       style={{
         background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14, padding: 20, cursor: "pointer", textAlign: "left",
-        display: "flex", flexDirection: "column", gap: 8, width: "100%",
+        borderRadius: 14, padding: "20px 18px", cursor: "pointer", textAlign: "left",
+        display: "flex", flexDirection: "column", gap: 10, width: "100%",
       }}
     >
-      <span style={{ fontSize: 32 }}>{emoji}</span>
+      <div style={{
+        width: 40, height: 40, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
+        background: accent || "rgba(124,58,237,0.15)",
+      }}>
+        {icon}
+      </div>
       <span style={{ fontSize: 14, fontWeight: 700, color: "var(--t1)" }}>{title}</span>
-      <span style={{ fontSize: 11, color: "var(--t3)" }}>{description}</span>
+      <span style={{ fontSize: 12, color: "var(--t3)", lineHeight: 1.4 }}>{description}</span>
     </motion.button>
   );
 }
@@ -440,10 +449,30 @@ export default function OnboardingPage() {
                 <p style={{ fontSize: 14, color: "var(--t3)", marginBottom: 28 }}>What would you like to do first?</p>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <ActionCard emoji="🎬" title="Create a Project" description="Start organizing your work" onClick={() => markDone("/projects?new=1")} />
-                  <ActionCard emoji="📁" title="Upload Files" description="Add your footage to Drive" onClick={() => markDone("/drive")} />
-                  <ActionCard emoji="👥" title="Invite Team" description="Collaborate with others" onClick={() => markDone("/projects")} />
-                  <ActionCard emoji="🏠" title="Explore Dashboard" description="See everything in one place" onClick={() => markDone("/")} />
+                  <ActionCard
+                    icon={<FilmSlate size={22} weight="duotone" color="#a78bfa" />}
+                    accent="rgba(124,58,237,0.18)"
+                    title="Create a Project" description="Start organizing your work"
+                    onClick={() => markDone("/projects?new=1")}
+                  />
+                  <ActionCard
+                    icon={<CloudArrowUp size={22} weight="duotone" color="#60a5fa" />}
+                    accent="rgba(59,130,246,0.18)"
+                    title="Upload Files" description="Add your footage to Drive"
+                    onClick={() => markDone("/drive")}
+                  />
+                  <ActionCard
+                    icon={<UserPlus size={22} weight="duotone" color="#34d399" />}
+                    accent="rgba(16,185,129,0.18)"
+                    title="Invite Team" description="Collaborate with others"
+                    onClick={() => markDone("/projects")}
+                  />
+                  <ActionCard
+                    icon={<SquaresFour size={22} weight="duotone" color="#fb923c" />}
+                    accent="rgba(249,115,22,0.18)"
+                    title="Explore Dashboard" description="See everything in one place"
+                    onClick={() => markDone("/")}
+                  />
                 </div>
               </motion.div>
             )}

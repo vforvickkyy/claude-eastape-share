@@ -51,7 +51,7 @@ function Toast({ type, message, onDone }) {
 
 /* ════════════════════════════════════════════ */
 export default function ProfilePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, profile: authProfile } = useAuth();
   const plan = usePlan();
   const navigate = useNavigate();
 
@@ -73,10 +73,10 @@ export default function ProfilePage() {
     setUsernameBannerDismissed(true);
   }
 
-  // Load fresh profile data from server
+  // Load fresh profile data from server (userApi uses proper async token)
   useEffect(() => {
     if (!user) return;
-    userApiFetch("/api/user/profile")
+    userApi.getProfile()
       .then(d => setProfile(d))
       .catch(() => setProfile({
         email: user.email,
@@ -94,7 +94,7 @@ export default function ProfilePage() {
     </DashboardLayout>
   );
 
-  const showUsernameBanner = profile && !profile.username && !usernameBannerDismissed;
+  const showUsernameBanner = profile && !profile.username && !usernameBannerDismissed && !authProfile?.username;
 
   return (
     <DashboardLayout title="Profile Settings">
