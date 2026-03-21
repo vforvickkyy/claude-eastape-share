@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { X, Trash, DotsSixVertical, Plus, SpinnerGap, Eye, EyeSlash, CaretDown, CaretRight } from '@phosphor-icons/react'
+import { X, Trash, DotsSixVertical, Plus, SpinnerGap, Eye, EyeSlash, Lock } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 
 const PRESET_COLORS = [
@@ -10,6 +10,7 @@ const CELL_TYPES = [
   { id: 'checkbox',   label: 'Checkbox'   },
   { id: 'percentage', label: 'Percentage' },
   { id: 'status',     label: 'Status'     },
+  { id: 'team',       label: 'Team'       },
 ]
 const DEFAULT_STATUS_OPTIONS = [
   { label: 'Done',        color: '#10b981' },
@@ -100,8 +101,11 @@ function StatusOptsEditor({ options, onChange }) {
   )
 }
 
-// ── Active Stage Row ────────────────────────────────────────────────
-function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver, dragHandleProps }) {
+// ── Stage Row (used for all columns incl. builtins) ─────────────────
+function StageRow({ stage, onHide, onShow, onDelete, onUpdate, isDragging, isOver }) {
+  const isBuiltin = !!stage.builtin_key
+  const isHidden  = !!stage.is_hidden
+
   const [name,    setName]    = useState(stage.name)
   const [color,   setColor]   = useState(stage.color || '#6366f1')
   const [type,    setType]    = useState(stage.cell_type || 'checkbox')
@@ -112,7 +116,7 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
   const [saving,     setSaving]     = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
 
-  const orig = useRef({ name: stage.name, color: stage.color || '#6366f1', type: stage.cell_type || 'checkbox' })
+  const orig  = useRef({ name: stage.name, color: stage.color || '#6366f1', type: stage.cell_type || 'checkbox' })
   const dirty = name !== orig.current.name || color !== orig.current.color || type !== orig.current.type
 
   async function save(overrides = {}) {
@@ -130,8 +134,12 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
 
   async function handleTypeChange(newType) {
     setType(newType)
-    // auto-save immediately so the change persists without needing to click Save
     await save({ type: newType })
+  }
+
+  async function handleColorChange(newColor) {
+    setColor(newColor)
+    await save({ color: newColor })
   }
 
   if (confirmDel) return (
@@ -155,19 +163,19 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
 
   return (
     <div style={{
-      background: isDragging ? '#2a2a4a' : isOver ? '#1a2a3a' : '#16162a',
-      border: `1px solid ${isOver ? '#6366f1' : '#2a2a3a'}`,
+      background: isDragging ? '#2a2a4a' : isOver ? '#1a2a3a' : isHidden ? '#111120' : '#16162a',
+      border: `1px solid ${isOver ? '#6366f1' : isHidden ? '#1e1e2e' : '#2a2a3a'}`,
       borderRadius: 10, margin: '3px 0',
-      opacity: isDragging ? 0.5 : 1,
+      opacity: isDragging ? 0.5 : isHidden ? 0.65 : 1,
       transition: 'border-color 0.15s, background 0.15s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px' }}>
         {/* Drag handle */}
-        <span {...dragHandleProps} style={{ color: 'var(--t4)', cursor: 'grab', display: 'flex', flexShrink: 0 }}>
+        <span style={{ color: 'var(--t4)', cursor: 'grab', display: 'flex', flexShrink: 0 }}>
           <DotsSixVertical size={15} weight="bold" />
         </span>
 
-        <ColorDot color={color} onChange={c => { setColor(c) }} />
+        <ColorDot color={color} onChange={handleColorChange} />
 
         <input
           value={name}
@@ -175,23 +183,34 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
           onKeyDown={e => { if (e.key === 'Enter') save() }}
           onBlur={() => { if (dirty) save() }}
           style={{
-            flex: 1, background: 'transparent', border: 'none', color: '#e8e8ff',
+            flex: 1, background: 'transparent', border: 'none', color: isHidden ? '#888' : '#e8e8ff',
             fontSize: 13, fontWeight: 500, outline: 'none', minWidth: 60,
           }}
         />
 
-        <select
-          value={type}
-          onChange={e => handleTypeChange(e.target.value)}
-          style={{
-            background: '#1e1e30', border: '1px solid #333', borderRadius: 6,
-            color: '#aaa', fontSize: 11, padding: '3px 6px', cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          {CELL_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select>
+        {/* Type badge/select — builtins show a locked badge */}
+        {isBuiltin ? (
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 10, color: 'var(--t4)', background: '#1e1e30',
+            border: '1px solid #2a2a3a', borderRadius: 5, padding: '3px 8px', flexShrink: 0,
+          }}>
+            <Lock size={9} /> {stage.builtin_key === 'shot' ? 'Shot column' : 'Status column'}
+          </span>
+        ) : (
+          <select
+            value={type}
+            onChange={e => handleTypeChange(e.target.value)}
+            style={{
+              background: '#1e1e30', border: '1px solid #333', borderRadius: 6,
+              color: '#aaa', fontSize: 11, padding: '3px 6px', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            {CELL_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        )}
 
-        {dirty && (
+        {dirty && !isBuiltin && (
           <button
             onClick={save} disabled={saving}
             style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>
@@ -199,66 +218,34 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
           </button>
         )}
 
-        <button
-          type="button" title="Hide column"
-          onClick={() => onHide(stage.id)}
-          style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#e2e8f0'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-        >
-          <EyeSlash size={14} />
-        </button>
+        {/* Hide / Show */}
+        {isHidden ? (
+          <button type="button" title="Restore column" onClick={() => onShow(stage.id)}
+            style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = '#10b981'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+          ><Eye size={14} /></button>
+        ) : (
+          <button type="button" title="Hide column" onClick={() => onHide(stage.id)}
+            style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = '#e2e8f0'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+          ><EyeSlash size={14} /></button>
+        )}
 
-        <button
-          type="button" title="Delete stage"
-          onClick={() => setConfirmDel(true)}
-          style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-        >
-          <Trash size={13} />
-        </button>
+        {/* Delete — hidden for builtins */}
+        {!isBuiltin && (
+          <button type="button" title="Delete column" onClick={() => setConfirmDel(true)}
+            style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+          ><Trash size={13} /></button>
+        )}
       </div>
 
-      {type === 'status' && (
+      {type === 'status' && !isBuiltin && (
         <StatusOptsEditor options={sopts} onChange={o => { setSopts(o) }} />
       )}
-    </div>
-  )
-}
-
-// ── Hidden Stage Row ─────────────────────────────────────────────────
-function HiddenStageRow({ stage, onShow, onDelete }) {
-  const [confirmDel, setConfirmDel] = useState(false)
-  const typeLabel = CELL_TYPES.find(t => t.id === (stage.cell_type || 'checkbox'))?.label || 'Checkbox'
-
-  if (confirmDel) return (
-    <div style={{ background: '#1e1225', border: '1px solid #ef444455', borderRadius: 8, padding: '8px 12px', margin: '2px 0' }}>
-      <div style={{ fontSize: 12, color: '#f87171', marginBottom: 6 }}>Delete <strong>{stage.name}</strong>?</div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn-ghost btn-xs" onClick={() => setConfirmDel(false)}>Cancel</button>
-        <button onClick={() => onDelete(stage.id)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 5, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}>
-          Delete
-        </button>
-      </div>
-    </div>
-  )
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 8, background: '#111120', margin: '2px 0', opacity: 0.7 }}>
-      <span style={{ width: 10, height: 10, borderRadius: '50%', background: stage.color || '#64748b', flexShrink: 0 }} />
-      <span style={{ flex: 1, fontSize: 13, color: '#aaa' }}>{stage.name}</span>
-      <span style={{ fontSize: 10, color: 'var(--t4)', background: '#1e1e30', borderRadius: 4, padding: '2px 6px' }}>{typeLabel}</span>
-      <button type="button" title="Restore" onClick={() => onShow(stage.id)}
-        style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex' }}
-        onMouseEnter={e => e.currentTarget.style.color = '#10b981'}
-        onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-      ><Eye size={14} /></button>
-      <button type="button" title="Delete" onClick={() => setConfirmDel(true)}
-        style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex' }}
-        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-        onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-      ><Trash size={13} /></button>
     </div>
   )
 }
@@ -291,7 +278,7 @@ function AddStageRow({ onAdd }) {
       onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#a5b4fc' }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = 'var(--t4)' }}
     >
-      <Plus size={13} /> Add Stage
+      <Plus size={13} /> Add Column
     </button>
   )
 
@@ -299,7 +286,7 @@ function AddStageRow({ onAdd }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#16162a', border: '1px solid #6366f1', borderRadius: 10, margin: '4px 0' }}>
       <ColorDot color={color} onChange={setColor} />
       <input
-        autoFocus value={name} placeholder="Stage name…"
+        autoFocus value={name} placeholder="Column name…"
         onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setOpen(false) }}
         style={{ flex: 1, background: 'transparent', border: 'none', color: '#e8e8ff', fontSize: 13, outline: 'none' }}
@@ -320,55 +307,11 @@ function AddStageRow({ onAdd }) {
   )
 }
 
-// ── Built-in column row (Shot / Status / Assigned To) ────────────────
-const BUILTIN_COLS = [
-  { id: 'shot',        label: 'Shot',        icon: '🎬', desc: 'Shot number & title' },
-  { id: 'status',      label: 'Status',      icon: '🔵', desc: 'Production status badge' },
-  { id: 'assigned_to', label: 'Assigned To', icon: '👤', desc: 'Team member assignment' },
-]
-
-function BuiltinColRow({ col, hidden, onHide, onShow }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-      background: hidden ? '#111120' : '#16162a',
-      border: `1px solid ${hidden ? '#1e1e2e' : '#2a2a3a'}`,
-      borderRadius: 8, margin: '3px 0',
-      opacity: hidden ? 0.6 : 1,
-      transition: 'opacity 0.15s',
-    }}>
-      <span style={{ fontSize: 14, flexShrink: 0 }}>{col.icon}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: hidden ? '#888' : '#e8e8ff' }}>{col.label}</div>
-        <div style={{ fontSize: 11, color: 'var(--t4)' }}>{col.desc}</div>
-      </div>
-      <span style={{ fontSize: 10, color: 'var(--t4)', background: '#1e1e30', borderRadius: 4, padding: '2px 7px', flexShrink: 0 }}>
-        built-in
-      </span>
-      {hidden ? (
-        <button type="button" title="Show column" onClick={() => onShow(col.id)}
-          style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#10b981'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-        ><Eye size={14} /></button>
-      ) : (
-        <button type="button" title="Hide column" onClick={() => onHide(col.id)}
-          style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#e2e8f0'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-        ><EyeSlash size={14} /></button>
-      )}
-    </div>
-  )
-}
-
 // ── Main modal ───────────────────────────────────────────────────────
-export default function PipelineStageManager({ projectId, stages: initialStages, hiddenBuiltinCols = [], onBuiltinColChange, onClose, onSaved }) {
-  const [allStages,      setAllStages]      = useState([])
-  const [loading,        setLoading]        = useState(true)
-  const [hiddenExpanded, setHiddenExpanded] = useState(false)
+export default function PipelineStageManager({ projectId, stages: initialStages, onClose, onSaved }) {
+  const [allStages, setAllStages] = useState([])
+  const [loading,   setLoading]   = useState(true)
 
-  // Drag state
   const dragIdx  = useRef(null)
   const [overIdx, setOverIdx] = useState(null)
 
@@ -379,8 +322,8 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
       .finally(() => setLoading(false))
   }, [projectId])
 
-  const active = allStages.filter(s => !s.is_hidden)
-  const hidden = allStages.filter(s => s.is_hidden)
+  // Sort by order_index for display
+  const sorted = [...allStages].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
 
   function notify(stages) { onSaved(stages.filter(s => !s.is_hidden)) }
 
@@ -391,7 +334,6 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
   }
 
   async function handleHide(id) {
-    // Optimistic
     const updated = allStages.map(s => s.id === id ? { ...s, is_hidden: true } : s)
     setAllStages(updated); notify(updated)
     try { await productionApi.hideStage(id) }
@@ -413,7 +355,7 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
   }
 
   async function handleAdd(body) {
-    const r = await productionApi.createPipelineStage(projectId, { ...body, order_index: active.length })
+    const r = await productionApi.createPipelineStage(projectId, { ...body, order_index: allStages.length })
     const updated = [...allStages, r.stage]
     setAllStages(updated); notify(updated)
   }
@@ -428,35 +370,18 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
     dragIdx.current = null; setOverIdx(null)
     if (from === null || from === dropIdx) return
 
-    // Reorder active array
-    const reordered = [...active]
+    const reordered = [...sorted]
     const [moved] = reordered.splice(from, 1)
     reordered.splice(dropIdx, 0, moved)
-
-    // Assign new order_index values
     const withNewOrder = reordered.map((s, i) => ({ ...s, order_index: i }))
 
-    // Merge back into allStages (preserve hidden)
-    const hiddenStages = allStages.filter(s => s.is_hidden)
-    const updated = [...withNewOrder, ...hiddenStages]
-    setAllStages(updated); notify(updated)
-
-    // Save to DB
+    setAllStages(withNewOrder); notify(withNewOrder)
     try {
       await productionApi.reorderPipelineStages(projectId, withNewOrder.map((s, i) => ({ id: s.id, order_index: i })))
     } catch {
       const r = await productionApi.listAllPipelineStages(projectId)
       setAllStages(r.stages || [])
     }
-  }
-
-  function handleBuiltinHide(colId) {
-    const updated = hiddenBuiltinCols.includes(colId) ? hiddenBuiltinCols : [...hiddenBuiltinCols, colId]
-    onBuiltinColChange?.(updated)
-  }
-  function handleBuiltinShow(colId) {
-    const updated = hiddenBuiltinCols.filter(c => c !== colId)
-    onBuiltinColChange?.(updated)
   }
 
   async function applyPreset(preset) {
@@ -485,7 +410,7 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #1e1e2e' }}>
-          <span style={{ fontWeight: 600, fontSize: 15, color: '#e8e8ff' }}>Pipeline Stages</span>
+          <span style={{ fontWeight: 600, fontSize: 15, color: '#e8e8ff' }}>Pipeline Columns</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 4, display: 'flex', borderRadius: 6 }}>
             <X size={18} />
           </button>
@@ -499,28 +424,13 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
             </div>
           ) : (
             <>
-              {/* Built-in columns */}
               <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-                Built-in Columns
-              </div>
-              {BUILTIN_COLS.map(col => (
-                <BuiltinColRow
-                  key={col.id}
-                  col={col}
-                  hidden={hiddenBuiltinCols.includes(col.id)}
-                  onHide={handleBuiltinHide}
-                  onShow={handleBuiltinShow}
-                />
-              ))}
-
-              {/* Active stage columns label */}
-              <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 20 }}>
-                Stage Columns
+                Columns — drag to reorder
               </div>
 
-              {active.length === 0 && (
+              {sorted.length === 0 && (
                 <div style={{ color: 'var(--t3)', fontSize: 13, marginBottom: 12 }}>
-                  No active stages. Add one below or use a preset:
+                  No columns yet. Add one below or use a preset:
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     {PRESETS.map(p => (
                       <button key={p.name} onClick={() => applyPreset(p)}
@@ -532,9 +442,9 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
                 </div>
               )}
 
-              {/* Draggable active list */}
+              {/* Single unified draggable list */}
               <div>
-                {active.map((s, idx) => (
+                {sorted.map((s, idx) => (
                   <div
                     key={s.id}
                     draggable
@@ -543,14 +453,14 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
                     onDragLeave={onDragLeave}
                     onDrop={() => onDrop(idx)}
                   >
-                    <ActiveStageRow
+                    <StageRow
                       stage={s}
                       onHide={handleHide}
+                      onShow={handleShow}
                       onDelete={handleDelete}
                       onUpdate={handleUpdate}
                       isDragging={dragIdx.current === idx}
                       isOver={overIdx === idx && dragIdx.current !== idx}
-                      dragHandleProps={{}}
                     />
                   </div>
                 ))}
@@ -558,7 +468,7 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
 
               <AddStageRow onAdd={handleAdd} />
 
-              {active.length > 0 && (
+              {sorted.length > 0 && (
                 <details style={{ marginTop: 8 }}>
                   <summary style={{ fontSize: 11, color: 'var(--t4)', cursor: 'pointer', marginBottom: 6, userSelect: 'none' }}>
                     Apply a preset
@@ -572,22 +482,6 @@ export default function PipelineStageManager({ projectId, stages: initialStages,
                     ))}
                   </div>
                 </details>
-              )}
-
-              {/* Hidden columns */}
-              {hidden.length > 0 && (
-                <div style={{ marginTop: 16, borderTop: '1px solid #1e1e2e', paddingTop: 12 }}>
-                  <button
-                    onClick={() => setHiddenExpanded(v => !v)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}
-                  >
-                    {hiddenExpanded ? <CaretDown size={10} /> : <CaretRight size={10} />}
-                    Hidden Columns ({hidden.length})
-                  </button>
-                  {hiddenExpanded && hidden.map(s => (
-                    <HiddenStageRow key={s.id} stage={s} onShow={handleShow} onDelete={handleDelete} />
-                  ))}
-                </div>
               )}
             </>
           )}

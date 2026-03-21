@@ -3,7 +3,7 @@ import { CheckCircle, Check, MagnifyingGlass, Plus, X as XIcon } from '@phosphor
 import { productionApi } from '../../../lib/api'
 import ShotDetailPanel from '../ShotDetailPanel'
 
-// ─── shared inline dropdown wrapper ──────────────────────────────────
+// ─── shared click-outside hook ────────────────────────────────────────
 function useClickOutside(ref, close) {
   useEffect(() => {
     const h = e => { if (!ref.current?.contains(e.target)) close() }
@@ -21,7 +21,7 @@ function PercentageCell({ shot, stage, onUpdate, width }) {
   useClickOutside(ref, () => setOpen(false))
 
   async function save() { await onUpdate(shot.id, stage.name, Number(val)); setOpen(false) }
-  const pct = Number(shot.pipeline_stages?.[stage.name] ?? 0)
+  const pct   = Number(shot.pipeline_stages?.[stage.name] ?? 0)
   const color = stage.color || '#6366f1'
 
   return (
@@ -36,7 +36,6 @@ function PercentageCell({ shot, stage, onUpdate, width }) {
         <span style={{ fontSize: 11, color: pct >= 100 ? '#22c55e' : 'var(--t3)', flexShrink: 0, minWidth: 30, textAlign: 'right' }}>{pct}%</span>
         {pct >= 100 && <CheckCircle size={12} weight="fill" style={{ color: '#22c55e', flexShrink: 0 }} />}
       </button>
-
       {open && (
         <div ref={ref} style={{
           position: 'absolute', top: '100%', left: 0, zIndex: 200,
@@ -44,16 +43,12 @@ function PercentageCell({ shot, stage, onUpdate, width }) {
           padding: 14, minWidth: 180, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         }}>
           <div style={{ fontSize: 11, color: 'var(--t4)', marginBottom: 10, fontWeight: 600 }}>{stage.name}</div>
-          <input
-            type="range" min={0} max={100} step={5} value={val}
+          <input type="range" min={0} max={100} step={5} value={val}
             onChange={e => setVal(e.target.value)}
-            style={{ width: '100%', accentColor: color }}
-          />
+            style={{ width: '100%', accentColor: color }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
             <span style={{ fontSize: 13, color: '#e8e8ff', fontWeight: 600 }}>{val}%</span>
-            <button onClick={save} style={{ background: color, color: '#fff', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-              Save
-            </button>
+            <button onClick={save} style={{ background: color, color: '#fff', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Save</button>
           </div>
         </div>
       )}
@@ -89,8 +84,8 @@ function CheckboxCell({ shot, stage, onUpdate, width }) {
   )
 }
 
-// ── Status Cell ───────────────────────────────────────────────────────
-function StatusCell({ shot, stage, onUpdate, width }) {
+// ── Status Cell (pipeline stage with status options) ──────────────────
+function PipelineStatusCell({ shot, stage, onUpdate, width }) {
   const [open, setOpen] = useState(false)
   const ref   = useRef()
   const opts  = Array.isArray(stage.status_options) ? stage.status_options : []
@@ -102,7 +97,6 @@ function StatusCell({ shot, stage, onUpdate, width }) {
 
   return (
     <td style={{ width, minWidth: width, padding: '0 6px', verticalAlign: 'middle', position: 'relative' }}>
-      {/* Trigger pill */}
       <button
         onClick={() => setOpen(v => !v)}
         style={{
@@ -123,28 +117,20 @@ function StatusCell({ shot, stage, onUpdate, width }) {
           <span style={{ marginLeft: 4 }}>—</span>
         )}
       </button>
-
-      {/* Dropdown */}
       {open && (
         <div ref={ref} style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 6, zIndex: 300,
           background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10,
-          minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', overflow: 'hidden',
-          padding: 4,
+          minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', overflow: 'hidden', padding: 4,
         }}>
-          {opts.length === 0 && (
-            <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--t4)' }}>No options configured</div>
-          )}
+          {opts.length === 0 && <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--t4)' }}>No options configured</div>}
           {opts.map(opt => (
-            <button
-              key={opt.label}
-              onClick={() => pick(opt.label)}
+            <button key={opt.label} onClick={() => pick(opt.label)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                 background: cur === opt.label ? opt.color + '18' : 'none',
                 border: 'none', borderRadius: 7, padding: '8px 10px', cursor: 'pointer',
-                color: cur === opt.label ? opt.color : '#d0d0f0', fontSize: 13,
-                textAlign: 'left', transition: 'background 0.1s',
+                color: cur === opt.label ? opt.color : '#d0d0f0', fontSize: 13, textAlign: 'left',
               }}
               onMouseEnter={e => { if (cur !== opt.label) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
               onMouseLeave={e => { if (cur !== opt.label) e.currentTarget.style.background = 'none' }}
@@ -157,14 +143,8 @@ function StatusCell({ shot, stage, onUpdate, width }) {
           {cur && (
             <>
               <div style={{ height: 1, background: '#2e2e4a', margin: '4px 0' }} />
-              <button
-                onClick={() => pick(null)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                  background: 'none', border: 'none', borderRadius: 7, padding: '7px 10px',
-                  cursor: 'pointer', color: 'var(--t4)', fontSize: 12,
-                }}
-              >
+              <button onClick={() => pick(null)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', color: 'var(--t4)', fontSize: 12 }}>
                 <XIcon size={11} /> Clear
               </button>
             </>
@@ -175,16 +155,187 @@ function StatusCell({ shot, stage, onUpdate, width }) {
   )
 }
 
-function StageCell({ shot, stage, onUpdate, width }) {
+// ── Built-in: Shot title cell ─────────────────────────────────────────
+function ShotTitleCell({ shot, onClick, width }) {
+  return (
+    <td
+      style={{ width, minWidth: width, padding: '0 14px', cursor: 'pointer', height: 44, verticalAlign: 'middle' }}
+      onClick={onClick}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {shot.shot_number && (
+          <span style={{ fontSize: 10, color: 'var(--t4)', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
+        )}
+        <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shot.title}</span>
+      </div>
+    </td>
+  )
+}
+
+// ── Built-in: Status badge cell ───────────────────────────────────────
+function StatusBadgeCell({ shot, statuses, width }) {
+  const status = statuses.find(s => s.id === shot.status_id)
+  return (
+    <td style={{ width, minWidth: width, padding: '0 6px', verticalAlign: 'middle' }}>
+      {status && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          background: status.color + '22', color: status.color,
+          border: `1px solid ${status.color}55`,
+          borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap',
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: status.color }} />
+          {status.name}
+        </span>
+      )}
+    </td>
+  )
+}
+
+// ── Team Cell (assignee picker, stores user_id in pipeline_stages JSONB) ─
+function TeamMemberPicker({ shot, stage, teamMembers, onAssign, onClose }) {
+  const [search, setSearch] = useState('')
+  const ref = useRef()
+  useClickOutside(ref, onClose)
+
+  const q        = search.toLowerCase()
+  const filtered = teamMembers.filter(m => (m.full_name || '').toLowerCase().includes(q))
+  const cur      = shot.pipeline_stages?.[stage.name] || null
+
+  function initials(name) {
+    if (!name) return '?'
+    const p = name.trim().split(' ')
+    return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase()
+  }
+
+  return (
+    <div ref={ref} style={{
+      position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 300,
+      background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10,
+      minWidth: 220, boxShadow: '0 12px 40px rgba(0,0,0,0.6)', overflow: 'hidden',
+    }}>
+      <div style={{ padding: '10px 12px 6px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>
+        {stage.name}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 8px' }}>
+        <MagnifyingGlass size={12} style={{ color: 'var(--t4)', flexShrink: 0 }} />
+        <input
+          autoFocus value={search} placeholder="Search team…"
+          onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#e8e8ff', fontSize: 13 }}
+        />
+      </div>
+      <div style={{ maxHeight: 220, overflowY: 'auto', padding: '0 4px 4px' }}>
+        {filtered.length === 0 && (
+          <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--t4)', textAlign: 'center' }}>
+            {teamMembers.length === 0 ? 'No team members yet' : 'No results'}
+          </div>
+        )}
+        {filtered.map(m => {
+          const active = cur === m.user_id
+          return (
+            <button key={m.user_id}
+              onClick={() => { onAssign(m.user_id); onClose() }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                background: active ? 'rgba(99,102,241,0.15)' : 'none',
+                border: 'none', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}
+            >
+              {m.avatar_url
+                ? <img src={m.avatar_url} alt={m.full_name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: 28, height: 28, borderRadius: '50%', background: stage.color || '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 600, flexShrink: 0 }}>{initials(m.full_name)}</div>
+              }
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div style={{ fontSize: 13, color: active ? '#a5b4fc' : '#e8e8ff', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.full_name || 'Unnamed'}</div>
+                {m.role && <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'capitalize' }}>{m.role}</div>}
+              </div>
+              {active && <Check size={13} style={{ color: '#6366f1', flexShrink: 0 }} />}
+            </button>
+          )
+        })}
+      </div>
+      {cur && (
+        <>
+          <div style={{ height: 1, background: '#2e2e4a', margin: '0 8px' }} />
+          <button
+            onClick={() => { onAssign(null); onClose() }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '9px 14px', cursor: 'pointer', color: 'var(--t4)', fontSize: 12 }}
+            onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+          >
+            <XIcon size={11} /> Unassign
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+function TeamCell({ shot, stage, teamMembers, onUpdate, width }) {
+  const [open, setOpen] = useState(false)
+  const ref    = useRef()
+  const userId = shot.pipeline_stages?.[stage.name] || null
+  const member = teamMembers.find(m => m.user_id === userId)
+  const color  = stage.color || '#6366f1'
+
+  function initials(n) {
+    if (!n) return '?'
+    const p = n.trim().split(' ')
+    return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : n.slice(0, 2).toUpperCase()
+  }
+
+  return (
+    <td style={{ width, minWidth: width, padding: '0 8px', verticalAlign: 'middle', position: 'relative' }}>
+      <button
+        ref={ref}
+        onClick={() => setOpen(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, width: '100%' }}
+      >
+        {member ? (
+          <>
+            {member.avatar_url
+              ? <img src={member.avatar_url} alt={member.full_name} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              : <div style={{ width: 26, height: 26, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 600, flexShrink: 0 }}>{initials(member.full_name)}</div>
+            }
+            <span style={{ fontSize: 12, color: '#d0d0f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {member.full_name?.split(' ')[0] || 'Member'}
+            </span>
+          </>
+        ) : (
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginLeft: 4 }}>—</span>
+        )}
+      </button>
+      {open && (
+        <TeamMemberPicker
+          shot={shot} stage={stage} teamMembers={teamMembers}
+          onAssign={uid => onUpdate(shot.id, stage.name, uid)}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </td>
+  )
+}
+
+// ── Dispatch to correct cell renderer ────────────────────────────────
+function StageCell({ shot, stage, statuses, teamMembers, onUpdate, onShotClick, width }) {
+  const bk = stage.builtin_key
+  if (bk === 'shot')   return <ShotTitleCell   shot={shot} onClick={onShotClick} width={width} />
+  if (bk === 'status') return <StatusBadgeCell  shot={shot} statuses={statuses} width={width} />
+
   const type = stage.cell_type || 'checkbox'
-  if (type === 'percentage') return <PercentageCell shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
-  if (type === 'status')     return <StatusCell     shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
+  if (type === 'team')       return <TeamCell          shot={shot} stage={stage} teamMembers={teamMembers} onUpdate={onUpdate} width={width} />
+  if (type === 'percentage') return <PercentageCell    shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
+  if (type === 'status')     return <PipelineStatusCell shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
   return <CheckboxCell shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
 }
 
 // ── Column aggregate stat ─────────────────────────────────────────────
 function stageStat(stage, shots) {
   const type = stage.cell_type || 'checkbox'
+  if (stage.builtin_key) return null
   const vals = shots.map(s => s.pipeline_stages?.[stage.name])
   if (type === 'checkbox') {
     const done = vals.filter(v => v === true || v === 1 || v === 100).length
@@ -197,28 +348,26 @@ function stageStat(stage, shots) {
   return null
 }
 
-// ── Stage column header ───────────────────────────────────────────────
+// ── Column header ─────────────────────────────────────────────────────
 function StageHeader({ stage, shots, widths, onWidthChange, onWidthSave, onContextMenu, onRename }) {
   const [hoverResize, setHoverResize] = useState(false)
   const [renaming,    setRenaming]    = useState(false)
   const [draftName,   setDraftName]   = useState(stage.name)
   const startX     = useRef(null)
   const startWidth = useRef(null)
-  const w          = widths[stage.id] || stage.width || 120
-  const color      = stage.color || '#6366f1'
-  const stat       = stageStat(stage, shots)
+  const w     = widths[stage.id] || stage.width || 120
+  const color = stage.color || '#6366f1'
+  const stat  = stageStat(stage, shots)
 
   function onResizeDown(e) {
-    e.preventDefault()
-    e.stopPropagation()
-    startX.current = e.clientX
-    startWidth.current = w
+    e.preventDefault(); e.stopPropagation()
+    startX.current = e.clientX; startWidth.current = w
     function onMove(e2) {
-      const next = Math.min(300, Math.max(80, startWidth.current + e2.clientX - startX.current))
+      const next = Math.min(400, Math.max(80, startWidth.current + e2.clientX - startX.current))
       onWidthChange(stage.id, next)
     }
     function onUp(e2) {
-      const next = Math.min(300, Math.max(80, startWidth.current + e2.clientX - startX.current))
+      const next = Math.min(400, Math.max(80, startWidth.current + e2.clientX - startX.current))
       onWidthSave(stage.id, next)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
@@ -237,11 +386,7 @@ function StageHeader({ stage, shots, widths, onWidthChange, onWidthSave, onConte
 
   return (
     <th
-      style={{
-        width: w, minWidth: w, maxWidth: w, position: 'relative',
-        background: color + '14', padding: 0, userSelect: 'none',
-        borderLeft: '1px solid rgba(255,255,255,0.05)',
-      }}
+      style={{ width: w, minWidth: w, maxWidth: w, position: 'relative', background: color + '14', padding: 0, userSelect: 'none', borderLeft: '1px solid rgba(255,255,255,0.05)' }}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, stage, () => setRenaming(true)) }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px 6px', overflow: 'hidden' }}>
@@ -259,24 +404,16 @@ function StageHeader({ stage, shots, widths, onWidthChange, onWidthSave, onConte
             <div style={{ fontSize: 11, fontWeight: 600, color: '#c8c8e8', textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {stage.name}
             </div>
-            {stat && (
-              <div style={{ fontSize: 10, color: color, marginTop: 1, fontWeight: 500 }}>{stat}</div>
-            )}
+            {stat && <div style={{ fontSize: 10, color, marginTop: 1, fontWeight: 500 }}>{stat}</div>}
           </div>
         )}
       </div>
-
       {/* Resize handle */}
       <div
         onMouseDown={onResizeDown}
         onMouseEnter={() => setHoverResize(true)}
         onMouseLeave={() => setHoverResize(false)}
-        style={{
-          position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
-          cursor: 'col-resize', zIndex: 10,
-          background: hoverResize ? color + '99' : 'transparent',
-          transition: 'background 0.15s',
-        }}
+        style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 10, background: hoverResize ? color + '99' : 'transparent', transition: 'background 0.15s' }}
         title="Drag to resize"
       />
     </th>
@@ -287,155 +424,25 @@ function StageHeader({ stage, shots, widths, onWidthChange, onWidthSave, onConte
 function ContextMenu({ x, y, stage, onHide, onRename, onDelete, onClose }) {
   const ref = useRef()
   useClickOutside(ref, onClose)
-
   const item = (label, onClick, danger) => (
     <button
       onClick={() => { onClick(); onClose() }}
-      style={{
-        display: 'block', width: '100%', textAlign: 'left', background: 'none',
-        border: 'none', padding: '8px 14px', cursor: 'pointer', fontSize: 13,
-        color: danger ? '#f87171' : '#d0d0f0', borderRadius: 6,
-      }}
+      style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 14px', cursor: 'pointer', fontSize: 13, color: danger ? '#f87171' : '#d0d0f0', borderRadius: 6 }}
       onMouseEnter={e => e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.07)'}
       onMouseLeave={e => e.currentTarget.style.background = 'none'}
     >{label}</button>
   )
-
   return (
-    <div ref={ref} style={{
-      position: 'fixed', left: x, top: y, zIndex: 9999,
-      background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10,
-      padding: 4, minWidth: 180, boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
-    }}>
+    <div ref={ref} style={{ position: 'fixed', left: x, top: y, zIndex: 9999, background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10, padding: 4, minWidth: 180, boxShadow: '0 12px 40px rgba(0,0,0,0.7)' }}>
       {item('✏️  Rename', onRename)}
       {item('👁  Hide Column', () => onHide(stage.id))}
-      <div style={{ height: 1, background: '#2e2e4a', margin: '4px 0' }} />
-      {item('🗑  Delete Column', () => onDelete(stage.id, stage.name), true)}
-    </div>
-  )
-}
-
-// ── Assignee Dropdown ─────────────────────────────────────────────────
-function AssigneeDropdown({ shot, teamMembers, onAssign, onClose }) {
-  const [search, setSearch] = useState('')
-  const ref = useRef()
-  useClickOutside(ref, onClose)
-
-  const q        = search.toLowerCase()
-  const filtered = teamMembers.filter(m => (m.full_name || '').toLowerCase().includes(q))
-
-  function initials(name) {
-    if (!name) return '?'
-    const p = name.trim().split(' ')
-    return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase()
-  }
-
-  return (
-    <div ref={ref} style={{
-      position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 300,
-      background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10,
-      minWidth: 220, boxShadow: '0 12px 40px rgba(0,0,0,0.6)', overflow: 'hidden',
-    }}>
-      <div style={{ padding: '10px 12px 6px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>
-        Assign To
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 8px' }}>
-        <MagnifyingGlass size={12} style={{ color: 'var(--t4)', flexShrink: 0 }} />
-        <input
-          autoFocus value={search} placeholder="Search team…"
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#e8e8ff', fontSize: 13 }}
-        />
-      </div>
-      <div style={{ maxHeight: 220, overflowY: 'auto', padding: '0 4px 4px' }}>
-        {filtered.length === 0 && (
-          <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--t4)', textAlign: 'center' }}>
-            {teamMembers.length === 0 ? 'No team members yet' : 'No results'}
-          </div>
-        )}
-        {filtered.map(m => {
-          const active = shot.assigned_to === m.user_id
-          return (
-            <button
-              key={m.user_id}
-              onClick={() => { onAssign(m.user_id); onClose() }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                background: active ? 'rgba(99,102,241,0.15)' : 'none',
-                border: 'none', borderRadius: 7, padding: '7px 10px',
-                cursor: 'pointer', textAlign: 'left',
-              }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}
-            >
-              {m.avatar_url
-                ? <img src={m.avatar_url} alt={m.full_name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                : <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 600, flexShrink: 0 }}>{initials(m.full_name)}</div>
-              }
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontSize: 13, color: active ? '#a5b4fc' : '#e8e8ff', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.full_name || 'Unnamed'}</div>
-                {m.role && <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'capitalize' }}>{m.role}</div>}
-              </div>
-              {active && <Check size={13} style={{ color: '#6366f1', flexShrink: 0 }} />}
-            </button>
-          )
-        })}
-      </div>
-      {shot.assigned_to && (
+      {!stage.builtin_key && (
         <>
-          <div style={{ height: 1, background: '#2e2e4a', margin: '0 8px' }} />
-          <button
-            onClick={() => { onAssign(null); onClose() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '9px 14px', cursor: 'pointer', color: 'var(--t4)', fontSize: 12 }}
-            onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-          >
-            <XIcon size={11} /> Unassign
-          </button>
+          <div style={{ height: 1, background: '#2e2e4a', margin: '4px 0' }} />
+          {item('🗑  Delete Column', () => onDelete(stage.id, stage.name), true)}
         </>
       )}
     </div>
-  )
-}
-
-// ── Assignee Cell ─────────────────────────────────────────────────────
-function AssigneeCell({ shot, teamMembers, onAssign }) {
-  const [open, setOpen] = useState(false)
-  const ref    = useRef()
-  const member = teamMembers.find(m => m.user_id === shot.assigned_to)
-  const name   = shot.assigned_to_name || member?.full_name
-  const avatar = shot.assigned_to_avatar || member?.avatar_url
-
-  function initials(n) {
-    if (!n) return '?'
-    const p = n.trim().split(' ')
-    return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : n.slice(0, 2).toUpperCase()
-  }
-
-  return (
-    <td style={{ padding: '0 8px', verticalAlign: 'middle', position: 'relative', width: 140, minWidth: 140 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, width: '100%' }}
-      >
-        {shot.assigned_to ? (
-          <>
-            {avatar
-              ? <img src={avatar} alt={name} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-              : <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 600, flexShrink: 0 }}>{initials(name)}</div>
-            }
-            <span style={{ fontSize: 12, color: '#d0d0f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {name?.split(' ')[0] || 'Member'}
-            </span>
-          </>
-        ) : (
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginLeft: 4 }}>—</span>
-        )}
-      </button>
-      {open && (
-        <AssigneeDropdown shot={shot} teamMembers={teamMembers} onAssign={onAssign} onClose={() => setOpen(false)} />
-      )}
-    </td>
   )
 }
 
@@ -443,7 +450,6 @@ function AssigneeCell({ shot, teamMembers, onAssign }) {
 export default function PipelineView({
   projectId, statuses, scenes, stages: initialStages, shots, columns,
   teamMembers = [],
-  hiddenBuiltinCols = [],
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
   onManageStages,
 }) {
@@ -478,26 +484,13 @@ export default function PipelineView({
     catch { await onReload() }
   }
 
-  async function handleAssign(shotId, assignedTo) {
-    const member = teamMembers.find(m => m.user_id === assignedTo)
-    setLocalShots(prev => prev.map(s =>
-      s.id === shotId
-        ? { ...s, assigned_to: assignedTo, assigned_to_name: member?.full_name || null, assigned_to_avatar: member?.avatar_url || null }
-        : s
-    ))
-    try { await productionApi.updateShotAssignee(shotId, assignedTo, null) }
-    catch { await onReload() }
-  }
-
-  const showShot       = !hiddenBuiltinCols.includes('shot')
-  const showStatus     = !hiddenBuiltinCols.includes('status')
-  const showAssignedTo = !hiddenBuiltinCols.includes('assigned_to')
-
   const groupedShots = scenes.length
     ? scenes.map(scene => ({ scene, shots: localShots.filter(s => s.scene_id === scene.id) })).filter(g => g.shots.length > 0)
     : [{ scene: null, shots: localShots }]
   const scenelessShots = localShots.filter(s => !s.scene_id)
   if (scenes.length > 0 && scenelessShots.length > 0) groupedShots.push({ scene: null, shots: scenelessShots })
+
+  const colCount = stages.length + 1 // +1 for add button
 
   return (
     <>
@@ -514,27 +507,14 @@ export default function PipelineView({
       <div className="pv-wrapper" style={{ overflowX: 'auto' }}>
         {stages.length === 0 && (
           <div className="pv-no-stages">
-            No pipeline stages configured.{' '}
-            <button className="link-btn" onClick={onManageStages}>Set up stages</button>
+            No pipeline columns configured.{' '}
+            <button className="link-btn" onClick={onManageStages}>Set up columns</button>
           </div>
         )}
 
         <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              {/* Shot */}
-              {showShot && (
-                <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, minWidth: 200 }}>
-                  Shot
-                </th>
-              )}
-              {/* Status */}
-              {showStatus && (
-                <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, width: 120 }}>
-                  Status
-                </th>
-              )}
-              {/* Stage columns */}
               {stages.map(s => (
                 <StageHeader
                   key={s.id} stage={s} shots={localShots} widths={widths}
@@ -543,17 +523,11 @@ export default function PipelineView({
                   onRename={handleRenameStage}
                 />
               ))}
-              {/* Assigned To */}
-              {showAssignedTo && (
-                <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, width: 140 }}>
-                  Assigned To
-                </th>
-              )}
-              {/* Add stage ghost */}
+              {/* Add column ghost */}
               <th style={{ width: 40, padding: 0 }}>
                 <button
                   onClick={onManageStages}
-                  title="Manage stages"
+                  title="Manage columns"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, margin: '0 auto', background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 6, cursor: 'pointer', color: 'var(--t4)' }}
                 >
                   <Plus size={13} />
@@ -567,71 +541,35 @@ export default function PipelineView({
                 {scene && (
                   <tr>
                     <td
-                      colSpan={(showShot ? 1 : 0) + (showStatus ? 1 : 0) + stages.length + (showAssignedTo ? 1 : 0) + 1}
+                      colSpan={colCount}
                       style={{ padding: '6px 14px', fontSize: 11, color: 'var(--t4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, background: 'rgba(255,255,255,0.03)', borderTop: '1px solid rgba(255,255,255,0.05)' }}
                     >
                       {scene.name}
                     </td>
                   </tr>
                 )}
-                {groupShots.map((shot, rowIdx) => {
-                  const status = statuses.find(s => s.id === shot.status_id)
-                  return (
-                    <tr
-                      key={shot.id}
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                    >
-                      {/* Shot title */}
-                      {showShot && (
-                        <td
-                          style={{ padding: '0 14px', cursor: 'pointer', minHeight: 44, height: 44, verticalAlign: 'middle' }}
-                          onClick={() => setSelectedShot(shot)}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {shot.shot_number && (
-                              <span style={{ fontSize: 10, color: 'var(--t4)', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
-                            )}
-                            <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shot.title}</span>
-                          </div>
-                        </td>
-                      )}
-                      {/* Shot status */}
-                      {showStatus && (
-                        <td style={{ padding: '0 6px', verticalAlign: 'middle', width: 120 }}>
-                          {status && (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 5,
-                              background: status.color + '22', color: status.color,
-                              border: `1px solid ${status.color}55`,
-                              borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap',
-                            }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: status.color }} />
-                              {status.name}
-                            </span>
-                          )}
-                        </td>
-                      )}
-                      {/* Stage cells */}
-                      {stages.map(stage => (
-                        <StageCell
-                          key={stage.id} shot={shot} stage={stage}
-                          onUpdate={handleCellUpdate}
-                          width={widths[stage.id] || stage.width || 120}
-                        />
-                      ))}
-                      {/* Assignee */}
-                      {showAssignedTo && (
-                        <AssigneeCell
-                          shot={shot} teamMembers={teamMembers}
-                          onAssign={assignedTo => handleAssign(shot.id, assignedTo)}
-                        />
-                      )}
-                      <td />
-                    </tr>
-                  )
-                })}
+                {groupShots.map(shot => (
+                  <tr
+                    key={shot.id}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    {stages.map(stage => (
+                      <StageCell
+                        key={stage.id}
+                        shot={shot}
+                        stage={stage}
+                        statuses={statuses}
+                        teamMembers={teamMembers}
+                        onUpdate={handleCellUpdate}
+                        onShotClick={() => setSelectedShot(shot)}
+                        width={widths[stage.id] || stage.width || 120}
+                      />
+                    ))}
+                    <td />
+                  </tr>
+                ))}
               </React.Fragment>
             ))}
           </tbody>
