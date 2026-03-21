@@ -268,7 +268,10 @@ Deno.serve(async (req) => {
       if (!projectId) return json({ error: 'project_id required' }, 400)
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
       if (req.method === 'GET') {
-        const { data, error } = await supabase.from('pipeline_stages').select('*').eq('project_id', projectId).order('order_index')
+        const showHidden = url.searchParams.get('show_hidden') === 'true'
+        let q = supabase.from('pipeline_stages').select('*').eq('project_id', projectId).order('order_index')
+        if (!showHidden) q = q.eq('is_hidden', false)
+        const { data, error } = await q
         if (error) return json({ error: error.message }, 500)
         return json({ stages: data })
       }
@@ -276,14 +279,21 @@ Deno.serve(async (req) => {
       if (req.method === 'POST') {
         const body = await req.json()
         const { data, error } = await supabase.from('pipeline_stages')
-          .insert({ project_id: projectId, name: body.name, color: body.color || '#6366f1', order_index: body.order_index ?? 0, is_final_stage: body.is_final_stage ?? false })
+          .insert({
+            project_id: projectId, name: body.name,
+            color: body.color || '#6366f1', order_index: body.order_index ?? 0,
+            is_final_stage: body.is_final_stage ?? false,
+            cell_type: body.cell_type || 'checkbox',
+            status_options: body.status_options || [],
+            width: body.width || 120,
+          })
           .select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ stage: data }, 201)
       }
       if (req.method === 'PUT' && id) {
         const body = await req.json()
-        const allowed = ['name', 'color', 'order_index', 'is_final_stage']
+        const allowed = ['name', 'color', 'order_index', 'is_final_stage', 'cell_type', 'status_options', 'is_hidden', 'width']
         const updates: Record<string, unknown> = {}
         for (const k of allowed) if (k in body) updates[k] = body[k]
         const { data, error } = await supabase.from('pipeline_stages').update(updates).eq('id', id).select().single()
@@ -298,19 +308,64 @@ Deno.serve(async (req) => {
           }
           return json({ ok: true })
         }
-        if (id) {
-          const allowed = ['name', 'color', 'order_index', 'is_final_stage']
+        const patchId = id || body.id
+        if (patchId) {
+          const allowed = ['name', 'color', 'order_index', 'is_final_stage', 'cell_type', 'status_options', 'is_hidden', 'width']
           const updates: Record<string, unknown> = {}
           for (const k of allowed) if (k in body) updates[k] = body[k]
-          const { data, error } = await supabase.from('pipeline_stages').update(updates).eq('id', id).select().single()
+          const { data, error } = await supabase.from('pipeline_stages').update(updates).eq('id', patchId).select().single()
           if (error) return json({ error: error.message }, 500)
           return json({ stage: data })
         }
       }
       if (req.method === 'DELETE' && id) {
+        const body = req.headers.get('content-type')?.includes('application/json')
+          ? await req.json().catch(() => ({}))
+          : {}
+        const permanent = body.permanent !== false // default to permanent deletion
+        if (!permanent) {
+          // Just hide the stage
+          const { data, error } = await supabase.from('pipeline_stages')
+            .update({ is_hidden: true }).eq('id', id).select().single()
+          if (error) return json({ error: error.message }, 500)
+          return json({ stage: data, hidden: true })
+        }
+        // Permanent delete: get stage name first to clean shot data
+        const { data: stage } = await supabase.from('pipeline_stages').select('name, project_id').eq('id', id).single()
         await supabase.from('pipeline_stages').delete().eq('id', id)
+        if (stage?.name) {
+          // Remove this stage key from all shots in the project using raw SQL via RPC isn't available,
+          // so we fetch and update affected shots
+          const { data: affectedShots } = await supabase.from('production_shots')
+            .select('id, pipeline_stages')
+            .eq('project_id', stage.project_id)
+            .not('pipeline_stages', 'is', null)
+          for (const shot of (affectedShots || [])) {
+            const ps = shot.pipeline_stages as Record<string, unknown>
+            if (ps && stage.name in ps) {
+              const cleaned = { ...ps }
+              delete cleaned[stage.name]
+              await supabase.from('production_shots').update({ pipeline_stages: cleaned }).eq('id', shot.id)
+            }
+          }
+        }
         return json({ ok: true })
       }
+    }
+
+    // ── PROJECT MEMBERS LIST ──────────────────────────────────────────
+    if (resource === 'project_members_list') {
+      if (!projectId) return json({ error: 'project_id required' }, 400)
+      if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+      const { data: members } = await supabase
+        .from('project_members')
+        .select('user_id, role, profiles:user_id(full_name, avatar_url)')
+        .eq('project_id', projectId).eq('accepted', true)
+      return json({ members: (members || []).map((m: any) => ({
+        user_id: m.user_id, role: m.role,
+        full_name: m.profiles?.full_name || null,
+        avatar_url: m.profiles?.avatar_url || null,
+      })) })
     }
 
     // ── SHOTS WITH MEDIA ─────────────────────────────────────────────
@@ -325,7 +380,7 @@ Deno.serve(async (req) => {
       if (shotsErr) return json({ error: shotsErr.message }, 500)
 
       const { data: stages } = await supabase.from('pipeline_stages')
-        .select('*').eq('project_id', projectId).order('order_index')
+        .select('*').eq('project_id', projectId).eq('is_hidden', false).order('order_index')
 
       // Batch fetch linked media names
       const linkedIds = (shots || []).map((s: any) => s.thumbnail_media_id).filter(Boolean)

@@ -1,36 +1,27 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { CheckCircle, Check, MagnifyingGlass, Plus, X as XIcon, UserCircle } from '@phosphor-icons/react'
+import { CheckCircle, Check, MagnifyingGlass, Plus, X as XIcon, UserCircle, ArrowsOut } from '@phosphor-icons/react'
 import { productionApi } from '../../../lib/api'
 import ShotDetailPanel from '../ShotDetailPanel'
 
-// ── Percentage Cell (unchanged behavior) ─────────────────────────────
-function PercentageCell({ shot, stage, onUpdate }) {
+// ── Percentage Cell ───────────────────────────────────────────────────
+function PercentageCell({ shot, stage, onUpdate, width }) {
   const [open, setOpen] = useState(false)
   const [val,  setVal]  = useState(shot.pipeline_stages?.[stage.name] ?? 0)
   const ref = useRef()
 
-  useEffect(() => {
-    setVal(shot.pipeline_stages?.[stage.name] ?? 0)
-  }, [shot.pipeline_stages, stage.name])
-
+  useEffect(() => { setVal(shot.pipeline_stages?.[stage.name] ?? 0) }, [shot.pipeline_stages, stage.name])
   useEffect(() => {
     if (!open) return
-    function handle(e) {
-      if (!ref.current?.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
+    function h(e) { if (!ref.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [open])
 
-  async function save() {
-    await onUpdate(shot.id, stage.name, Number(val))
-    setOpen(false)
-  }
-
+  async function save() { await onUpdate(shot.id, stage.name, Number(val)); setOpen(false) }
   const pct = Number(shot.pipeline_stages?.[stage.name] ?? 0)
 
   return (
-    <td className={`pv-cell ${pct >= 100 ? 'pv-cell--done' : ''}`}>
+    <td className={`pv-cell ${pct >= 100 ? 'pv-cell--done' : ''}`} style={{ width }}>
       <button className="pv-cell-btn" onClick={() => setOpen(v => !v)}>
         <div className="pv-cell-bar">
           <div className="pv-cell-fill" style={{ width: `${pct}%`, background: stage.color || '#6366f1' }} />
@@ -38,15 +29,10 @@ function PercentageCell({ shot, stage, onUpdate }) {
         <span className="pv-cell-pct">{pct}%</span>
         {pct >= 100 && <CheckCircle size={13} weight="fill" style={{ color: '#22c55e', flexShrink: 0 }} />}
       </button>
-
       {open && (
         <div className="pv-popover" ref={ref}>
           <label className="pv-popover-label">{stage.name}</label>
-          <input
-            type="range" min={0} max={100} step={5}
-            value={val}
-            onChange={e => setVal(e.target.value)}
-          />
+          <input type="range" min={0} max={100} step={5} value={val} onChange={e => setVal(e.target.value)} />
           <div className="pv-popover-row">
             <span className="pv-popover-pct">{val}%</span>
             <button className="btn-primary btn-xs" onClick={save}>Save</button>
@@ -58,34 +44,26 @@ function PercentageCell({ shot, stage, onUpdate }) {
 }
 
 // ── Checkbox Cell ─────────────────────────────────────────────────────
-function CheckboxCell({ shot, stage, onUpdate }) {
+function CheckboxCell({ shot, stage, onUpdate, width }) {
   const val    = shot.pipeline_stages?.[stage.name]
   const isDone = val === true || val === 1 || val === 100
-
-  async function toggle() {
-    await onUpdate(shot.id, stage.name, !isDone)
-  }
-
   return (
     <td
       className="pv-cell pv-cell--checkbox"
-      style={{ background: isDone ? 'rgba(16,185,129,0.12)' : undefined, cursor: 'pointer' }}
-      onClick={toggle}
+      style={{ width, background: isDone ? 'rgba(16,185,129,0.10)' : undefined, cursor: 'pointer' }}
+      onClick={() => onUpdate(shot.id, stage.name, !isDone)}
       title={isDone ? 'Mark not done' : 'Mark done'}
     >
-      {isDone ? (
-        <div className="pv-checkbox pv-checkbox--checked">
-          <Check size={14} weight="bold" style={{ color: '#fff' }} />
-        </div>
-      ) : (
-        <div className="pv-checkbox pv-checkbox--empty" />
-      )}
+      {isDone
+        ? <div className="pv-checkbox pv-checkbox--checked"><Check size={14} weight="bold" style={{ color: '#fff' }} /></div>
+        : <div className="pv-checkbox pv-checkbox--empty" />
+      }
     </td>
   )
 }
 
 // ── Status Cell ───────────────────────────────────────────────────────
-function StatusCell({ shot, stage, onUpdate }) {
+function StatusCell({ shot, stage, onUpdate, width }) {
   const [open, setOpen] = useState(false)
   const ref  = useRef()
   const opts = Array.isArray(stage.status_options) ? stage.status_options : []
@@ -94,37 +72,29 @@ function StatusCell({ shot, stage, onUpdate }) {
 
   useEffect(() => {
     if (!open) return
-    function handle(e) { if (!ref.current?.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
+    function h(e) { if (!ref.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [open])
 
-  async function pick(label) {
-    await onUpdate(shot.id, stage.name, label)
-    setOpen(false)
-  }
+  async function pick(label) { await onUpdate(shot.id, stage.name, label); setOpen(false) }
 
   return (
-    <td className="pv-cell pv-cell--status" style={{ position: 'relative' }}>
+    <td className="pv-cell pv-cell--status" style={{ width, position: 'relative' }}>
       <button
         className="pv-status-cell-btn"
         onClick={() => setOpen(v => !v)}
         style={curOpt ? { background: curOpt.color + '22', color: curOpt.color, borderColor: curOpt.color + '55' } : undefined}
       >
-        {curOpt ? (
-          <><span className="pv-sopt-dot" style={{ background: curOpt.color }} />{curOpt.label}</>
-        ) : (
-          <span style={{ color: 'var(--t4)' }}>—</span>
-        )}
+        {curOpt
+          ? <><span className="pv-sopt-dot" style={{ background: curOpt.color }} />{curOpt.label}</>
+          : <span style={{ color: 'var(--t4)' }}>—</span>
+        }
       </button>
       {open && (
         <div className="pv-status-dropdown" ref={ref}>
           {opts.map(opt => (
-            <button
-              key={opt.label}
-              className="pv-status-opt"
-              onClick={() => pick(opt.label)}
-            >
+            <button key={opt.label} className="pv-status-opt" onClick={() => pick(opt.label)}>
               <span className="pv-sopt-dot" style={{ background: opt.color }} />
               {opt.label}
               {cur === opt.label && <Check size={11} style={{ marginLeft: 'auto', color: opt.color }} />}
@@ -141,32 +111,135 @@ function StatusCell({ shot, stage, onUpdate }) {
   )
 }
 
-// ── Stage Cell dispatcher ─────────────────────────────────────────────
-function StageCell({ shot, stage, onUpdate }) {
+function StageCell({ shot, stage, onUpdate, width }) {
   const type = stage.cell_type || 'checkbox'
-  if (type === 'percentage') return <PercentageCell shot={shot} stage={stage} onUpdate={onUpdate} />
-  if (type === 'status')     return <StatusCell     shot={shot} stage={stage} onUpdate={onUpdate} />
-  return <CheckboxCell shot={shot} stage={stage} onUpdate={onUpdate} />
+  if (type === 'percentage') return <PercentageCell shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
+  if (type === 'status')     return <StatusCell     shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
+  return <CheckboxCell shot={shot} stage={stage} onUpdate={onUpdate} width={width} />
 }
 
-// ── Assignee Dropdown ─────────────────────────────────────────────────
-function AssigneeDropdown({ shot, teamMembers, customAssignees, projectId, onAssign, onAddCustom, onRemoveCustom, onClose }) {
-  const [search,     setSearch]     = useState('')
-  const [adding,     setAdding]     = useState(false)
-  const [newName,    setNewName]    = useState('')
-  const [saving,     setSaving]     = useState(false)
-  const ref = useRef()
-  const inputRef = useRef()
+// ── Column aggregate stat ─────────────────────────────────────────────
+function stageStat(stage, shots) {
+  const type = stage.cell_type || 'checkbox'
+  const vals = shots.map(s => s.pipeline_stages?.[stage.name])
+  if (type === 'checkbox') {
+    const done = vals.filter(v => v === true || v === 1 || v === 100).length
+    return `${done}/${shots.length}`
+  }
+  if (type === 'percentage') {
+    const sum = vals.reduce((a, v) => a + Number(v || 0), 0)
+    return `${Math.round(sum / Math.max(shots.length, 1))}% avg`
+  }
+  return null
+}
 
+// ── Stage column header with resize + right-click ────────────────────
+function StageHeader({ stage, shots, widths, onWidthChange, onWidthSave, onContextMenu, onRename }) {
+  const resizeRef  = useRef()
+  const startX     = useRef(null)
+  const startWidth = useRef(null)
+  const w = widths[stage.id] || stage.width || 120
+  const stat = stageStat(stage, shots)
+  const [renaming, setRenaming] = useState(false)
+  const [draftName, setDraftName] = useState(stage.name)
+
+  function onResizeDown(e) {
+    e.preventDefault()
+    startX.current = e.clientX
+    startWidth.current = w
+    function onMove(e2) {
+      const delta = e2.clientX - startX.current
+      const next = Math.min(300, Math.max(80, startWidth.current + delta))
+      onWidthChange(stage.id, next)
+    }
+    function onUp(e2) {
+      const delta = e2.clientX - startX.current
+      const next = Math.min(300, Math.max(80, startWidth.current + delta))
+      onWidthSave(stage.id, next)
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  function handleContextMenu(e) {
+    e.preventDefault()
+    onContextMenu(e, stage, () => setRenaming(true))
+  }
+
+  async function commitRename() {
+    if (draftName.trim() && draftName.trim() !== stage.name) {
+      await productionApi.updatePipelineStage(stage.id, { name: draftName.trim() })
+      onRename(stage.id, draftName.trim())
+    }
+    setRenaming(false)
+  }
+
+  return (
+    <th
+      className="pv-th-stage"
+      style={{ width: w, minWidth: w, maxWidth: w, background: (stage.color || '#6366f1') + '18', position: 'relative' }}
+      onContextMenu={handleContextMenu}
+    >
+      <div className="pv-th-stage-inner">
+        <span className="pv-stage-dot" style={{ background: stage.color || '#6366f1' }} />
+        {renaming ? (
+          <input
+            className="pv-th-rename-input"
+            autoFocus
+            value={draftName}
+            onChange={e => setDraftName(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(false) }}
+          />
+        ) : (
+          <div className="pv-th-stage-text">
+            <span className="pv-th-stage-name">{stage.name}</span>
+            {stat && <span className="pv-th-stage-stat">{stat}</span>}
+          </div>
+        )}
+      </div>
+      <div
+        className="pv-resize-handle"
+        ref={resizeRef}
+        onMouseDown={onResizeDown}
+        title="Drag to resize"
+      />
+    </th>
+  )
+}
+
+// ── Context Menu ─────────────────────────────────────────────────────
+function ContextMenu({ x, y, stage, onHide, onRename, onDelete, onClose }) {
+  const ref = useRef()
   useEffect(() => {
-    function handle(e) { if (!ref.current?.contains(e.target)) onClose() }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
+    function h(e) { if (!ref.current?.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  return (
+    <div className="pv-context-menu" ref={ref} style={{ position: 'fixed', left: x, top: y, zIndex: 9999 }}>
+      <button className="pv-ctx-item" onClick={() => { onRename(); onClose() }}>✏️ Rename</button>
+      <button className="pv-ctx-item" onClick={() => { onHide(stage.id); onClose() }}>👁 Hide Column</button>
+      <div className="pv-ctx-sep" />
+      <button className="pv-ctx-item pv-ctx-item--danger" onClick={() => { onDelete(stage.id, stage.name); onClose() }}>🗑 Delete Column</button>
+    </div>
+  )
+}
+
+// ── Assignee Dropdown (team members only) ─────────────────────────────
+function AssigneeDropdown({ shot, teamMembers, onAssign, onClose }) {
+  const [search, setSearch] = useState('')
+  const ref = useRef()
+  useEffect(() => {
+    function h(e) { if (!ref.current?.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
 
   const q = search.toLowerCase()
-  const filteredTeam   = teamMembers.filter(m => (m.full_name || '').toLowerCase().includes(q))
-  const filteredCustom = customAssignees.filter(a => a.name.toLowerCase().includes(q))
+  const filtered = teamMembers.filter(m => (m.full_name || '').toLowerCase().includes(q))
 
   function initials(name) {
     if (!name) return '?'
@@ -174,111 +247,54 @@ function AssigneeDropdown({ shot, teamMembers, customAssignees, projectId, onAss
     return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase()
   }
 
-  async function handleAddCustom() {
-    if (!newName.trim() || saving) return
-    setSaving(true)
-    try {
-      const ca = await onAddCustom(newName.trim())
-      await onAssign(null, ca.name)
-      onClose()
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div className="pv-assignee-dropdown" ref={ref}>
+      <div className="pv-assignee-dropdown-header">Assign To</div>
       <div className="pv-assignee-search">
         <MagnifyingGlass size={12} style={{ color: 'var(--t3)', flexShrink: 0 }} />
         <input
           autoFocus
           className="pv-assignee-search-input"
-          placeholder="Search…"
+          placeholder="Search team…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
       </div>
-
-      {filteredTeam.length > 0 && (
-        <div className="pv-assignee-section">
-          <div className="pv-assignee-section-label">TEAM MEMBERS</div>
-          {filteredTeam.map(m => (
-            <button
-              key={m.user_id}
-              className={`pv-assignee-opt ${shot.assigned_to === m.user_id ? 'active' : ''}`}
-              onClick={() => { onAssign(m.user_id, null); onClose() }}
-            >
-              {m.avatar_url
-                ? <img src={m.avatar_url} className="pv-assignee-avatar" alt={m.full_name} />
-                : <div className="pv-assignee-initials">{initials(m.full_name)}</div>
-              }
-              <span>{m.full_name || 'Unnamed'}</span>
-              {shot.assigned_to === m.user_id && <Check size={11} style={{ marginLeft: 'auto', color: '#6366f1' }} />}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {filteredCustom.length > 0 && (
-        <div className="pv-assignee-section">
-          <div className="pv-assignee-section-label">CUSTOM</div>
-          {filteredCustom.map(a => (
-            <div key={a.id} className="pv-assignee-opt-row">
-              <button
-                className={`pv-assignee-opt ${shot.custom_assignee === a.name ? 'active' : ''}`}
-                onClick={() => { onAssign(null, a.name); onClose() }}
-              >
-                <div className="pv-assignee-initials">{initials(a.name)}</div>
-                <span>{a.name}</span>
-                {shot.custom_assignee === a.name && <Check size={11} style={{ marginLeft: 'auto', color: '#6366f1' }} />}
-              </button>
-              <button
-                className="pv-assignee-remove"
-                title="Remove"
-                onClick={e => { e.stopPropagation(); onRemoveCustom(a.id) }}
-              >
-                <XIcon size={11} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {(shot.assigned_to || shot.custom_assignee) && (
-        <button className="pv-assignee-opt pv-assignee-unassign" onClick={() => { onAssign(null, null); onClose() }}>
+      <div className="pv-assignee-list">
+        {filtered.length === 0 && (
+          <div className="pv-assignee-empty">
+            {teamMembers.length === 0 ? 'No team members yet' : 'No results'}
+          </div>
+        )}
+        {filtered.map(m => (
+          <button
+            key={m.user_id}
+            className={`pv-assignee-opt ${shot.assigned_to === m.user_id ? 'active' : ''}`}
+            onClick={() => { onAssign(m.user_id); onClose() }}
+          >
+            {m.avatar_url
+              ? <img src={m.avatar_url} className="pv-assignee-avatar" alt={m.full_name} />
+              : <div className="pv-assignee-initials">{initials(m.full_name)}</div>
+            }
+            <span className="pv-assignee-name">{m.full_name || 'Unnamed'}</span>
+            <span className="pv-assignee-role">{m.role}</span>
+            {shot.assigned_to === m.user_id && <Check size={11} style={{ marginLeft: 'auto', color: '#6366f1' }} />}
+          </button>
+        ))}
+      </div>
+      {shot.assigned_to && (
+        <button className="pv-assignee-unassign" onClick={() => { onAssign(null); onClose() }}>
           <XIcon size={11} /> Unassign
         </button>
       )}
-
-      <div className="pv-assignee-add">
-        {adding ? (
-          <div className="pv-assignee-add-row">
-            <input
-              ref={inputRef}
-              autoFocus
-              className="pv-assignee-add-input"
-              placeholder="Custom name…"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddCustom(); if (e.key === 'Escape') setAdding(false) }}
-            />
-            <button className="btn-primary btn-xs" onClick={handleAddCustom} disabled={!newName.trim() || saving}>
-              {saving ? '…' : 'Add'}
-            </button>
-          </div>
-        ) : (
-          <button className="pv-assignee-add-btn" onClick={() => setAdding(true)}>
-            <Plus size={11} /> Add custom name…
-          </button>
-        )}
-      </div>
     </div>
   )
 }
 
 // ── Assignee Cell ─────────────────────────────────────────────────────
-function AssigneeCell({ shot, teamMembers, customAssignees, projectId, onAssign, onAddCustom, onRemoveCustom }) {
+function AssigneeCell({ shot, teamMembers, onAssign }) {
   const [open, setOpen] = useState(false)
+  const member = teamMembers.find(m => m.user_id === shot.assigned_to)
 
   function initials(name) {
     if (!name) return '?'
@@ -286,42 +302,29 @@ function AssigneeCell({ shot, teamMembers, customAssignees, projectId, onAssign,
     return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase()
   }
 
-  const hasTeamAssignee   = !!shot.assigned_to
-  const hasCustomAssignee = !!shot.custom_assignee
-  const member = teamMembers.find(m => m.user_id === shot.assigned_to)
+  const name    = shot.assigned_to_name || member?.full_name
+  const avatar  = shot.assigned_to_avatar || member?.avatar_url
 
   return (
     <td className="pv-cell pv-cell--assignee" style={{ position: 'relative' }}>
       <button className="pv-assignee-cell-btn" onClick={() => setOpen(v => !v)}>
-        {hasTeamAssignee && (
+        {shot.assigned_to ? (
           <>
-            {(shot.assigned_to_avatar || member?.avatar_url)
-              ? <img src={shot.assigned_to_avatar || member?.avatar_url} className="pv-assignee-avatar" alt="" />
-              : <div className="pv-assignee-initials">{initials(shot.assigned_to_name || member?.full_name)}</div>
+            {avatar
+              ? <img src={avatar} className="pv-assignee-avatar" alt={name} />
+              : <div className="pv-assignee-initials" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(name)}</div>
             }
-            <span className="pv-assignee-name">{shot.assigned_to_name || member?.full_name || 'Member'}</span>
+            <span className="pv-assignee-name">{name?.split(' ')[0] || 'Member'}</span>
           </>
-        )}
-        {hasCustomAssignee && !hasTeamAssignee && (
-          <>
-            <div className="pv-assignee-initials">{initials(shot.custom_assignee)}</div>
-            <span className="pv-assignee-name">{shot.custom_assignee}</span>
-          </>
-        )}
-        {!hasTeamAssignee && !hasCustomAssignee && (
-          <span className="pv-assignee-empty">— Unassigned</span>
+        ) : (
+          <span className="pv-assignee-empty">—</span>
         )}
       </button>
-
       {open && (
         <AssigneeDropdown
           shot={shot}
           teamMembers={teamMembers}
-          customAssignees={customAssignees}
-          projectId={projectId}
           onAssign={onAssign}
-          onAddCustom={onAddCustom}
-          onRemoveCustom={onRemoveCustom}
           onClose={() => setOpen(false)}
         />
       )}
@@ -331,20 +334,54 @@ function AssigneeCell({ shot, teamMembers, customAssignees, projectId, onAssign,
 
 // ── Main PipelineView ─────────────────────────────────────────────────
 export default function PipelineView({
-  projectId, statuses, scenes, stages, shots, columns,
-  teamMembers = [], customAssignees: initialCustomAssignees = [],
+  projectId, statuses, scenes, stages: initialStages, shots, columns,
+  teamMembers = [],
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
   onManageStages,
 }) {
-  const [selectedShot,    setSelectedShot]    = useState(null)
-  const [localShots,      setLocalShots]      = useState(shots)
-  const [customAssignees, setCustomAssignees] = useState(initialCustomAssignees)
+  const [selectedShot, setSelectedShot] = useState(null)
+  const [localShots,   setLocalShots]   = useState(shots)
+  const [stages,       setStages]       = useState(initialStages)
+  const [widths,       setWidths]       = useState({})
+  const [ctxMenu,      setCtxMenu]      = useState(null) // { x, y, stage, onRename }
 
   useEffect(() => { setLocalShots(shots) }, [shots])
-  useEffect(() => { setCustomAssignees(initialCustomAssignees) }, [initialCustomAssignees])
+  useEffect(() => { setStages(initialStages) }, [initialStages])
+
+  // Debounce ref for width saves
+  const widthSaveTimer = useRef({})
+
+  function handleWidthChange(stageId, w) {
+    setWidths(prev => ({ ...prev, [stageId]: w }))
+  }
+
+  function handleWidthSave(stageId, w) {
+    clearTimeout(widthSaveTimer.current[stageId])
+    widthSaveTimer.current[stageId] = setTimeout(() => {
+      productionApi.updateStageWidth(stageId, w).catch(() => {})
+    }, 500)
+  }
+
+  function handleContextMenu(e, stage, openRename) {
+    setCtxMenu({ x: e.clientX, y: e.clientY, stage, onRename: openRename })
+  }
+
+  function handleRenameStage(stageId, name) {
+    setStages(prev => prev.map(s => s.id === stageId ? { ...s, name } : s))
+  }
+
+  async function handleHideStage(stageId) {
+    await productionApi.hideStage(stageId).catch(() => {})
+    setStages(prev => prev.filter(s => s.id !== stageId))
+  }
+
+  async function handleDeleteStage(stageId, stageName) {
+    if (!window.confirm(`Delete "${stageName}" permanently? All progress data will be lost.`)) return
+    await productionApi.deletePipelineStage(stageId).catch(() => {})
+    setStages(prev => prev.filter(s => s.id !== stageId))
+  }
 
   async function handleCellUpdate(shotId, stageName, value) {
-    // Optimistic update
     setLocalShots(prev => prev.map(s =>
       s.id === shotId
         ? { ...s, pipeline_stages: { ...(s.pipeline_stages || {}), [stageName]: value } }
@@ -353,54 +390,46 @@ export default function PipelineView({
     try {
       await productionApi.updateShotPipeline(shotId, stageName, value)
     } catch {
-      // revert on error
       await onReload()
     }
   }
 
-  async function handleAssign(shotId, assignedTo, customAssignee) {
+  async function handleAssign(shotId, assignedTo) {
+    const member = teamMembers.find(m => m.user_id === assignedTo)
     setLocalShots(prev => prev.map(s =>
       s.id === shotId
-        ? { ...s, assigned_to: assignedTo, custom_assignee: customAssignee,
-            assigned_to_name: teamMembers.find(m => m.user_id === assignedTo)?.full_name || s.assigned_to_name,
-            assigned_to_avatar: teamMembers.find(m => m.user_id === assignedTo)?.avatar_url || null,
-          }
+        ? { ...s, assigned_to: assignedTo, assigned_to_name: member?.full_name || null, assigned_to_avatar: member?.avatar_url || null }
         : s
     ))
     try {
-      await productionApi.updateShotAssignee(shotId, assignedTo, customAssignee)
+      await productionApi.updateShotAssignee(shotId, assignedTo, null)
     } catch {
       await onReload()
     }
   }
 
-  async function handleAddCustomAssignee(name) {
-    const r = await productionApi.addCustomAssignee(projectId, name)
-    setCustomAssignees(prev => [...prev, r.assignee])
-    return r.assignee
-  }
-
-  async function handleRemoveCustomAssignee(id) {
-    setCustomAssignees(prev => prev.filter(a => a.id !== id))
-    await productionApi.removeCustomAssignee(id).catch(() => {})
-  }
-
   const groupedShots = scenes.length
-    ? scenes.map(scene => ({
-        scene,
-        shots: localShots.filter(s => s.scene_id === scene.id),
-      })).filter(g => g.shots.length > 0)
+    ? scenes.map(scene => ({ scene, shots: localShots.filter(s => s.scene_id === scene.id) })).filter(g => g.shots.length > 0)
     : [{ scene: null, shots: localShots }]
-
   const scenelessShots = localShots.filter(s => !s.scene_id)
-  if (scenes.length > 0 && scenelessShots.length > 0) {
-    groupedShots.push({ scene: null, shots: scenelessShots })
-  }
+  if (scenes.length > 0 && scenelessShots.length > 0) groupedShots.push({ scene: null, shots: scenelessShots })
 
-  const colSpan = 2 + stages.length + 1 // shot + status + stages + assignee
+  const colSpan = 2 + stages.length + 1
 
   return (
     <>
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          stage={ctxMenu.stage}
+          onHide={handleHideStage}
+          onRename={ctxMenu.onRename}
+          onDelete={handleDeleteStage}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+
       <div className="pv-wrapper">
         {stages.length === 0 && (
           <div className="pv-no-stages">
@@ -415,13 +444,23 @@ export default function PipelineView({
               <th className="pv-th-shot">Shot</th>
               <th className="pv-th-status">Status</th>
               {stages.map(s => (
-                <th key={s.id} className="pv-th-stage">
-                  <span className="pv-stage-dot" style={{ background: s.color || '#6366f1' }} />
-                  {s.name}
-                  {s.is_final_stage && <span className="pv-final-badge">Final</span>}
-                </th>
+                <StageHeader
+                  key={s.id}
+                  stage={s}
+                  shots={localShots}
+                  widths={widths}
+                  onWidthChange={handleWidthChange}
+                  onWidthSave={handleWidthSave}
+                  onContextMenu={handleContextMenu}
+                  onRename={handleRenameStage}
+                />
               ))}
-              <th className="pv-th-assignee">Assigned To</th>
+              <th className="pv-th-assignee" style={{ width: 140 }}>Assigned To</th>
+              <th className="pv-th-add">
+                <button className="pv-add-stage-btn" onClick={onManageStages} title="Add stage">
+                  <Plus size={12} />
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -429,7 +468,7 @@ export default function PipelineView({
               <React.Fragment key={scene?.id || 'no-scene'}>
                 {scene && (
                   <tr className="pv-scene-row">
-                    <td colSpan={colSpan} className="pv-scene-cell">{scene.name}</td>
+                    <td colSpan={colSpan + 1} className="pv-scene-cell">{scene.name}</td>
                   </tr>
                 )}
                 {groupShots.map(shot => {
@@ -444,26 +483,27 @@ export default function PipelineView({
                       </td>
                       <td className="pv-td-status">
                         {status && (
-                          <span
-                            className="pv-status-chip"
-                            style={{ background: status.color + '22', color: status.color, borderColor: status.color + '55' }}
-                          >
+                          <span className="pv-status-chip"
+                            style={{ background: status.color + '22', color: status.color, borderColor: status.color + '55' }}>
                             {status.name}
                           </span>
                         )}
                       </td>
                       {stages.map(stage => (
-                        <StageCell key={stage.id} shot={shot} stage={stage} onUpdate={handleCellUpdate} />
+                        <StageCell
+                          key={stage.id}
+                          shot={shot}
+                          stage={stage}
+                          onUpdate={handleCellUpdate}
+                          width={widths[stage.id] || stage.width || 120}
+                        />
                       ))}
                       <AssigneeCell
                         shot={shot}
                         teamMembers={teamMembers}
-                        customAssignees={customAssignees}
-                        projectId={projectId}
-                        onAssign={(assignedTo, customAssignee) => handleAssign(shot.id, assignedTo, customAssignee)}
-                        onAddCustom={handleAddCustomAssignee}
-                        onRemoveCustom={handleRemoveCustomAssignee}
+                        onAssign={assignedTo => handleAssign(shot.id, assignedTo)}
                       />
+                      <td className="pv-td-add" />
                     </tr>
                   )
                 })}

@@ -263,11 +263,20 @@ export const productionApi = {
   deleteComment:  (shotId, id)     => del(PROD, { resource: 'shot_comments', shot_id: shotId, id }, true),
 
   // Pipeline Stages
-  listPipelineStages:   (projectId)       => get(PROD, { resource: 'pipeline_stages', project_id: projectId }, true),
-  createPipelineStage:  (projectId, body) => post(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, body, true),
-  updatePipelineStage:  (id, body)        => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, body, true),
-  deletePipelineStage:  (id)              => del(PROD, { resource: 'pipeline_stages', id }, true),
-  reorderPipelineStages:(projectId, items) => patch(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, {}, { reorder: true, items }, true),
+  listPipelineStages:      (projectId)             => get(PROD, { resource: 'pipeline_stages', project_id: projectId }, true),
+  listAllPipelineStages:   (projectId)             => get(PROD, { resource: 'pipeline_stages', project_id: projectId, show_hidden: 'true' }, true),
+  createPipelineStage:     (projectId, body)       => post(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, body, true),
+  updatePipelineStage:     (id, body)              => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, body, true),
+  patchPipelineStage:      (id, body)              => patch(`${PROD}?resource=pipeline_stages&id=${id}&project_id=_`, {}, { id, ...body }, true),
+  deletePipelineStage:     (id)                    => del(PROD, { resource: 'pipeline_stages', id }, true),
+  hideStage:               (id)                    => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, { is_hidden: true }, true),
+  showStage:               (id)                    => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, { is_hidden: false }, true),
+  updateStageWidth:        (id, width)             => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, { width }, true),
+  reorderPipelineStages:   (projectId, items)      => patch(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, {}, { reorder: true, items }, true),
+
+  // Team members for pipeline assign
+  getProjectMembers: (projectId) =>
+    get(PROD, { resource: 'project_members_list', project_id: projectId }, true),
 
   // Shots with media/thumbnails
   listShotsWithMedia: (projectId, filters = {}) =>

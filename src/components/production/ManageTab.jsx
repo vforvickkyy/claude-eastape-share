@@ -35,7 +35,6 @@ export default function ManageTab() {
   const [shots,           setShots]           = useState([])
   const [stages,          setStages]          = useState([])
   const [teamMembers,     setTeamMembers]     = useState([])
-  const [customAssignees, setCustomAssignees] = useState([])
   const [loading,         setLoading]         = useState(true)
   const [loadError,       setLoadError]       = useState(null)
   const [seeding,    setSeeding]    = useState(false)
@@ -55,21 +54,20 @@ export default function ManageTab() {
     setLoading(true)
     setLoadError(null)
     try {
-      const [stsRes, scnRes, colRes, shotsRes, stagesRes, assigneesRes] = await Promise.all([
+      const [stsRes, scnRes, colRes, shotsRes, stagesRes, membersRes] = await Promise.all([
         productionApi.listStatuses(projectId),
         productionApi.listScenes(projectId),
         productionApi.listColumns(projectId),
         productionApi.listShotsWithMedia(projectId),
         productionApi.listPipelineStages(projectId),
-        productionApi.getAssignees(projectId).catch(() => ({ teamMembers: [], customAssignees: [] })),
+        productionApi.getProjectMembers(projectId).catch(() => ({ members: [] })),
       ])
-      setStatuses(stsRes.statuses              || [])
-      setScenes(scnRes.scenes                  || [])
-      setColumns(colRes.columns                || [])
-      setShots(shotsRes.shots                  || [])
-      setStages(stagesRes.stages               || [])
-      setTeamMembers(assigneesRes.teamMembers  || [])
-      setCustomAssignees(assigneesRes.customAssignees || [])
+      setStatuses(stsRes.statuses   || [])
+      setScenes(scnRes.scenes       || [])
+      setColumns(colRes.columns     || [])
+      setShots(shotsRes.shots       || [])
+      setStages(stagesRes.stages    || [])
+      setTeamMembers(membersRes.members || [])
     } catch (err) {
       setLoadError(err?.message || 'Failed to load production data')
     }
@@ -166,7 +164,7 @@ export default function ManageTab() {
   // ── Review mode is full-overlay, rendered differently ────────────
   const sharedProps = {
     projectId, statuses, scenes, stages, columns, shots,
-    teamMembers, customAssignees,
+    teamMembers,
     onShotCreate:  createShot,
     onShotUpdate:  updateShot,
     onShotDelete:  deleteShot,
