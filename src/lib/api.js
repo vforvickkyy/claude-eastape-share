@@ -2,20 +2,38 @@
  * Central API utility — all calls go to Supabase Edge Functions.
  * Import typed API objects; avoid calling fetch() directly in components.
  */
+import { supabase } from './supabaseClient'
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
-function getToken() {
-  try { return JSON.parse(localStorage.getItem('ets_auth'))?.access_token } catch { return null }
+// Returns the best available access token.
+// Prefers ets_auth (email/password logins), falls back to Supabase's native
+// session (Google OAuth) which auto-refreshes independently of ets_auth.
+async function getToken() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('ets_auth'))
+    if (stored?.access_token && stored?.expires_at) {
+      // Token still valid with 60-second buffer
+      if (Date.now() / 1000 < stored.expires_at - 60) return stored.access_token
+    }
+    // ets_auth missing or expired — get fresh token from Supabase native session
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      // Sync ets_auth so future calls don't need to re-fetch
+      localStorage.setItem('ets_auth', JSON.stringify(session))
+      return session.access_token
+    }
+    return null
+  } catch { return null }
 }
 
-function authHeaders() {
-  return { Authorization: `Bearer ${getToken()}` }
+async function authHeaders() {
+  return { Authorization: `Bearer ${await getToken()}` }
 }
 
 async function post(url, body, auth = false) {
   const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, authHeaders())
+  if (auth) Object.assign(headers, await authHeaders())
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
   const data = await res.json()
   if (!res.ok) {
@@ -28,7 +46,7 @@ async function post(url, body, auth = false) {
 
 async function get(url, params = {}, auth = false) {
   const headers = {}
-  if (auth) Object.assign(headers, authHeaders())
+  if (auth) Object.assign(headers, await authHeaders())
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
@@ -40,7 +58,7 @@ async function get(url, params = {}, auth = false) {
 
 async function put(url, params = {}, body = {}, auth = false) {
   const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, authHeaders())
+  if (auth) Object.assign(headers, await authHeaders())
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
@@ -52,7 +70,7 @@ async function put(url, params = {}, body = {}, auth = false) {
 
 async function patch(url, params = {}, body = {}, auth = false) {
   const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, authHeaders())
+  if (auth) Object.assign(headers, await authHeaders())
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
@@ -64,7 +82,7 @@ async function patch(url, params = {}, body = {}, auth = false) {
 
 async function del(url, params = {}, auth = false) {
   const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, authHeaders())
+  if (auth) Object.assign(headers, await authHeaders())
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
