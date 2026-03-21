@@ -26,6 +26,23 @@ Deno.serve(async (req) => {
     const folderId = url.searchParams.get('folderId')
     const trashed  = url.searchParams.get('trashed') === 'true'
 
+    // GET ?resource=storage — storage usage summary
+    if (req.method === 'GET' && url.searchParams.get('resource') === 'storage') {
+      const [driveRes, projFilesRes, projMediaRes, planRes] = await Promise.all([
+        supabase.from('drive_files').select('file_size').eq('user_id', user.id).eq('is_trashed', false),
+        supabase.from('project_files').select('file_size').eq('user_id', user.id).eq('is_trashed', false),
+        supabase.from('project_media').select('file_size').eq('user_id', user.id).eq('is_trashed', false),
+        supabase.from('user_plans').select('plans(storage_limit_gb)').eq('user_id', user.id).eq('is_active', true).single(),
+      ])
+      const usedBytes = [
+        ...(driveRes.data || []),
+        ...(projFilesRes.data || []),
+        ...(projMediaRes.data || []),
+      ].reduce((s: number, r: any) => s + (r.file_size || 0), 0)
+      const limitGb = (planRes.data as any)?.plans?.storage_limit_gb ?? 2
+      return json({ used_bytes: usedBytes, limit_bytes: limitGb * 1024 * 1024 * 1024, limit_gb: limitGb })
+    }
+
     // GET — list files
     if (req.method === 'GET') {
       let q = supabase.from('drive_files').select('*').eq('user_id', user.id).order('created_at', { ascending: false })

@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-
 import { AuthProvider } from "./context/AuthContext";
 import { PlanProvider } from "./context/PlanContext";
 import { ProjectProvider } from "./context/ProjectContext";
-import UploadPage          from "./UploadPage.jsx";
+import { UploadProvider } from "./context/UploadContext";
+import UploadProgressPanel from "./components/drive/UploadProgressPanel";
 import SharePage           from "./SharePage.jsx";
 import LoginPage           from "./LoginPage.jsx";
 import SignupPage          from "./SignupPage.jsx";
@@ -62,6 +63,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
       <PlanProvider>
+      <UploadProvider>
+        <UploadProgressPanel />
         <Routes>
           {/* ── Root = Master Dashboard ── */}
           <Route path="/"                         element={<DashboardPage />} />
@@ -102,8 +105,8 @@ export default function App() {
           <Route path="/my-files"                 element={<Navigate to="/drive" replace />} />
           <Route path="/my-files/folder/:id"      element={<Navigate to="/drive" replace />} />
 
-          {/* ── Upload (still accessible) ── */}
-          <Route path="/upload"                   element={<UploadPage />} />
+          {/* ── Upload → redirect to Drive ── */}
+          <Route path="/upload"                   element={<Navigate to="/drive" replace />} />
 
           {/* ── Public share pages ── */}
           <Route path="/share/:token"             element={<SharePage />} />
@@ -132,6 +135,7 @@ export default function App() {
             }
           />
         </Routes>
+      </UploadProvider>
       </PlanProvider>
       </AuthProvider>
     </BrowserRouter>

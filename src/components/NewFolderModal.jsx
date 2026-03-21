@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, FolderSimplePlus } from "@phosphor-icons/react";
-import { userApiFetch } from "../lib/userApi";
+import { driveFoldersApi } from "../lib/api";
 
 export default function NewFolderModal({ parentId, onCreated, onClose }) {
   const [name, setName]       = useState("");
@@ -15,10 +15,7 @@ export default function NewFolderModal({ parentId, onCreated, onClose }) {
     if (!name.trim()) return;
     setLoading(true); setError("");
     try {
-      const { folder } = await userApiFetch("/api/user/folders", {
-        method: "POST",
-        body: JSON.stringify({ name: name.trim(), parentId }),
-      });
+      const { folder } = await driveFoldersApi.create({ name: name.trim(), parent_id: parentId || undefined });
       onCreated(folder);
     } catch (err) {
       setError(err.message);

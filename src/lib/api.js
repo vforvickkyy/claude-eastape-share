@@ -152,11 +152,12 @@ export const activityApi = {
 
 // ── Drive Files ────────────────────────────────────────────────────
 export const driveFilesApi = {
-  list:    (params = {}) => get(`${BASE}/drive-files`, params, true),
-  update:  (id, body)    => put(`${BASE}/drive-files`, { id }, body, true),
-  delete:  (id)          => del(`${BASE}/drive-files`, { id }, true),
-  presign: (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'drive' }, true),
-  getDownloadUrl: (id)   => get(`${BASE}/download`, { drive_id: id }, true),
+  list:       (params = {}) => get(`${BASE}/drive-files`, params, true),
+  update:     (id, body)    => put(`${BASE}/drive-files`, { id }, body, true),
+  delete:     (id)          => del(`${BASE}/drive-files`, { id }, true),
+  presign:    (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'drive' }, true),
+  getDownloadUrl: (id)      => get(`${BASE}/download`, { drive_id: id }, true),
+  getStorage: ()            => get(`${BASE}/drive-files`, { resource: 'storage' }, true),
 }
 
 // ── Drive Folders ──────────────────────────────────────────────────
