@@ -256,10 +256,7 @@ function PersonalInfoSection({ profile, onUpdate, notify }) {
     e.preventDefault();
     setSavingUname(true);
     try {
-      const data = await userApiFetch("/api/user/profile", {
-        method: "PUT",
-        body: JSON.stringify({ action: "username", username }),
-      });
+      const data = await userApi.updateProfile({ action: "username", username });
       onUpdate({ username: data.username });
       setUnameStatus("available");
       setUnameMsg("Saved!");
