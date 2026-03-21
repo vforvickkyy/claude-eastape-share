@@ -9,6 +9,7 @@ import { userApi } from "./lib/api";
 function RoleCombobox({ value, onChange, options, placeholder }) {
   const [query, setQuery]   = useState(value || "");
   const [open, setOpen]     = useState(false);
+  const [rect, setRect]     = useState(null);
   const ref     = useRef(null);
   const inputRef = useRef(null);
 
@@ -20,6 +21,14 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
+
+  // Measure input position for fixed dropdown
+  useEffect(() => {
+    if (open && inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  }, [open]);
 
   const filtered = query.trim()
     ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
@@ -35,7 +44,7 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
 
   function handleInput(e) {
     setQuery(e.target.value);
-    onChange(e.target.value);   // allow free-text role
+    onChange(e.target.value);
     setOpen(true);
   }
 
@@ -63,12 +72,12 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
       </div>
 
       <AnimatePresence>
-        {open && (filtered.length > 0 || showCustom) && (
+        {open && rect && (filtered.length > 0 || showCustom) && (
           <motion.div
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
             style={{
-              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+              position: "fixed", top: rect.top, left: rect.left, width: rect.width, zIndex: 9999,
               background: "#13131f", border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
             }}
