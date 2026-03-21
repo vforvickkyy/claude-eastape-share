@@ -272,22 +272,37 @@ export default function ColumnManager({ projectId, columns: initialCols, hiddenC
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-          {/* Fixed columns (always visible) */}
+          {/* Built-in columns (hideable but not deletable) */}
           <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-            Fixed columns
+            Built-in columns
           </div>
           {[
-            { label: 'Thumbnail', color: '#404050' },
-            { label: 'Shot Name', color: '#6366f1' },
-            { label: 'Status',    color: '#10b981' },
-          ].map(f => (
-            <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#111120', border: '1px solid #1e1e2e', borderRadius: 10, margin: '3px 0', opacity: 0.6 }}>
-              <span style={{ color: 'var(--t4)', display: 'flex', flexShrink: 0 }}><DotsSixVertical size={15} weight="bold" /></span>
-              <span style={{ width: 18, height: 18, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#888' }}>{f.label}</span>
-              <span style={{ fontSize: 10, color: 'var(--t4)', background: '#1e1e30', border: '1px solid #2a2a3a', borderRadius: 5, padding: '3px 8px' }}>Fixed</span>
-            </div>
-          ))}
+            { key: 'thumbnail', label: 'Thumbnail', color: '#64748b' },
+            { key: 'title',     label: 'Shot Name', color: '#6366f1' },
+            { key: 'status',    label: 'Status',    color: '#10b981' },
+          ].map(f => {
+            const hidden = !!hiddenCols[f.key]
+            return (
+              <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: hidden ? '#111120' : '#16162a', border: `1px solid ${hidden ? '#1e1e2e' : '#2a2a3a'}`, borderRadius: 10, margin: '3px 0', opacity: hidden ? 0.65 : 1, transition: 'all 0.15s' }}>
+                <span style={{ color: 'var(--t4)', display: 'flex', flexShrink: 0 }}><DotsSixVertical size={15} weight="bold" style={{ opacity: 0.3 }} /></span>
+                <span style={{ width: 18, height: 18, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: hidden ? '#888' : '#e8e8ff' }}>{f.label}</span>
+                {hidden ? (
+                  <button type="button" title="Show column" onClick={() => onToggleHide(f.key, false)}
+                    style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#10b981'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+                  ><Eye size={14} /></button>
+                ) : (
+                  <button type="button" title="Hide column" onClick={() => onToggleHide(f.key, true)}
+                    style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 5, flexShrink: 0 }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#e2e8f0'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+                  ><EyeSlash size={14} /></button>
+                )}
+              </div>
+            )
+          })}
 
           {/* Custom columns */}
           <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 1, margin: '16px 0 8px' }}>

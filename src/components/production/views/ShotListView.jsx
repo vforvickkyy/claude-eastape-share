@@ -344,6 +344,9 @@ export default function ShotListView({
     status: colWidths.status || 150,
   }
 
+  const showThumb  = !hiddenCols['thumbnail']
+  const showTitle  = !hiddenCols['title']
+  const showStatus = !hiddenCols['status']
   const visibleCols = columns.filter(c => !hiddenCols[c.id])
 
   // ── Groups ─────────────────────────────────────────────────────────
@@ -354,7 +357,7 @@ export default function ShotListView({
   const ungrouped = localShots.filter(s => !s.scene_id)
   if (ungrouped.length > 0) groups.push({ scene: null, color: 'var(--t4)', shots: ungrouped })
 
-  const colCount = 1 + 1 + 1 + visibleCols.length + 1 + 1 // thumb+title+status+customs+addBtn+actions
+  const colCount = (showThumb ? 1 : 0) + (showTitle ? 1 : 0) + (showStatus ? 1 : 0) + visibleCols.length + 1 + 1
 
   return (
     <>
@@ -365,25 +368,31 @@ export default function ShotListView({
           <thead>
             <tr style={{ background: '#0d0d15', borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'sticky', top: 0, zIndex: 10 }}>
 
-              {/* Thumbnail — no label, no color dot */}
-              <th style={{ width: W.thumb, minWidth: W.thumb, maxWidth: W.thumb, position: 'relative', padding: 0 }}>
-                <div onMouseDown={e => onResizeDown(e, 'thumb', 60)}
-                  style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 1 }} />
-              </th>
+              {/* Thumbnail */}
+              {showThumb && (
+                <th style={{ width: W.thumb, minWidth: W.thumb, maxWidth: W.thumb, position: 'relative', padding: 0 }}>
+                  <div onMouseDown={e => onResizeDown(e, 'thumb', 60)}
+                    style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 1 }} />
+                </th>
+              )}
 
               {/* Shot Name */}
-              <ColHeader
-                label="Shot Name" color="#6366f1" sortKey="title"
-                width={colWidths.title || W.title} widthKey="title"
-                sort={sort} onSort={handleSort} onResizeDown={onResizeDown}
-              />
+              {showTitle && (
+                <ColHeader
+                  label="Shot Name" color="#6366f1" sortKey="title"
+                  width={colWidths.title || W.title} widthKey="title"
+                  sort={sort} onSort={handleSort} onResizeDown={onResizeDown}
+                />
+              )}
 
               {/* Status */}
-              <ColHeader
-                label="Status" color="#10b981" sortKey="status"
-                width={colWidths.status || W.status} widthKey="status"
-                sort={sort} onSort={handleSort} onResizeDown={onResizeDown}
-              />
+              {showStatus && (
+                <ColHeader
+                  label="Status" color="#10b981" sortKey="status"
+                  width={colWidths.status || W.status} widthKey="status"
+                  sort={sort} onSort={handleSort} onResizeDown={onResizeDown}
+                />
+              )}
 
               {/* Custom columns */}
               {visibleCols.map((col, idx) => (
@@ -492,54 +501,60 @@ export default function ShotListView({
                         }}
                       >
                         {/* Thumbnail */}
-                        <td
-                          style={{ width: W.thumb, minWidth: W.thumb, padding: '6px 8px', verticalAlign: 'middle' }}
-                          onClick={e => { if (linkedId) { e.stopPropagation(); navigate(`/projects/${projectId}/media/${linkedId}`, { state: { from: 'manage' } }) } }}
-                        >
-                          <div style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden', cursor: linkedId ? 'pointer' : 'default' }}>
-                            {thumbUrl
-                              ? <img src={thumbUrl} alt="" style={{ width: 44, height: 44, objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                              : <div style={{ width: 44, height: 44, background: '#1a1a24', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  <FilmSlate size={18} weight="duotone" style={{ color: '#404050' }} />
-                                </div>
-                            }
-                          </div>
-                        </td>
+                        {showThumb && (
+                          <td
+                            style={{ width: W.thumb, minWidth: W.thumb, padding: '6px 8px', verticalAlign: 'middle' }}
+                            onClick={e => { if (linkedId) { e.stopPropagation(); navigate(`/projects/${projectId}/media/${linkedId}`, { state: { from: 'manage' } }) } }}
+                          >
+                            <div style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden', cursor: linkedId ? 'pointer' : 'default' }}>
+                              {thumbUrl
+                                ? <img src={thumbUrl} alt="" style={{ width: 44, height: 44, objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                                : <div style={{ width: 44, height: 44, background: '#1a1a24', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FilmSlate size={18} weight="duotone" style={{ color: '#404050' }} />
+                                  </div>
+                              }
+                            </div>
+                          </td>
+                        )}
 
                         {/* Shot Name — click to inline edit */}
-                        <td
-                          style={{ width: colWidths.title || W.title, minWidth: colWidths.title || W.title, padding: '0 10px', verticalAlign: 'middle', overflow: 'hidden' }}
-                          onClick={e => { e.stopPropagation(); if (!isEditing) { setEditingName(shot.id); setEditNameVal(shot.title) } }}
-                        >
-                          {isEditing ? (
-                            <input
-                              autoFocus value={editNameVal}
-                              onChange={e => setEditNameVal(e.target.value)}
-                              onBlur={() => handleNameEdit(shot)}
-                              onKeyDown={e => { if (e.key === 'Enter') handleNameEdit(shot); if (e.key === 'Escape') setEditingName(null) }}
-                              onClick={e => e.stopPropagation()}
-                              style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid #6366f1', borderRadius: 5, color: '#e8e8ff', fontSize: 13, padding: '3px 8px', outline: 'none' }}
-                            />
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
-                              {shot.shot_number && (
-                                <span style={{ fontSize: 10, color: 'var(--t4)', fontFamily: 'monospace', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
-                              )}
-                              {linkedId && <LinkIcon size={12} style={{ color: '#7c3aed', flexShrink: 0 }} />}
-                              <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {shot.title}
-                              </span>
-                            </div>
-                          )}
-                        </td>
+                        {showTitle && (
+                          <td
+                            style={{ width: colWidths.title || W.title, minWidth: colWidths.title || W.title, padding: '0 10px', verticalAlign: 'middle', overflow: 'hidden' }}
+                            onClick={e => { e.stopPropagation(); if (!isEditing) { setEditingName(shot.id); setEditNameVal(shot.title) } }}
+                          >
+                            {isEditing ? (
+                              <input
+                                autoFocus value={editNameVal}
+                                onChange={e => setEditNameVal(e.target.value)}
+                                onBlur={() => handleNameEdit(shot)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleNameEdit(shot); if (e.key === 'Escape') setEditingName(null) }}
+                                onClick={e => e.stopPropagation()}
+                                style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid #6366f1', borderRadius: 5, color: '#e8e8ff', fontSize: 13, padding: '3px 8px', outline: 'none' }}
+                              />
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+                                {shot.shot_number && (
+                                  <span style={{ fontSize: 10, color: 'var(--t4)', fontFamily: 'monospace', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
+                                )}
+                                {linkedId && <LinkIcon size={12} style={{ color: '#7c3aed', flexShrink: 0 }} />}
+                                <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {shot.title}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        )}
 
                         {/* Status */}
-                        <td
-                          style={{ width: colWidths.status || W.status, minWidth: colWidths.status || W.status, padding: '0 10px', verticalAlign: 'middle' }}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <StatusPill shot={shot} statuses={statuses} onUpdate={handleStatusUpdate} />
-                        </td>
+                        {showStatus && (
+                          <td
+                            style={{ width: colWidths.status || W.status, minWidth: colWidths.status || W.status, padding: '0 10px', verticalAlign: 'middle' }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <StatusPill shot={shot} statuses={statuses} onUpdate={handleStatusUpdate} />
+                          </td>
+                        )}
 
                         {/* Custom columns */}
                         {visibleCols.map(col => (
