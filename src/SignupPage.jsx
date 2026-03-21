@@ -34,7 +34,7 @@ export default function SignupPage() {
     setError(""); setLoading(true);
     try {
       await signup(email, password, name);
-      navigate("/", { replace: true });
+      navigate("/onboarding", { replace: true });
     } catch (err) {
       setError(err.message || "Sign up failed. Please try again.");
     } finally { setLoading(false); }

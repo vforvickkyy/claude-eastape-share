@@ -23,7 +23,8 @@ import ProjectsPage        from "./ProjectsPage.jsx";
 import ProjectPage         from "./ProjectPage.jsx";
 import ProjectMediaAssetPage from "./ProjectMediaAssetPage.jsx";
 
-const AdminApp = lazy(() => import("./adminpanel/AdminApp.jsx"));
+const AdminApp       = lazy(() => import("./adminpanel/AdminApp.jsx"));
+const OnboardingPage = lazy(() => import("./OnboardingPage.jsx"));
 
 export default function App() {
   const [maintenanceMode, setMaintenanceMode] = useState(false)
@@ -110,6 +111,11 @@ export default function App() {
 
           {/* ── Public share pages ── */}
           <Route path="/share/:token"             element={<SharePage />} />
+
+          {/* ── Onboarding ── */}
+          <Route path="/onboarding" element={
+            <Suspense fallback={null}><OnboardingPage /></Suspense>
+          } />
 
           {/* ── Auth ── */}
           <Route path="/login"                    element={<LoginPage />} />

@@ -9,7 +9,7 @@ import { useAuth } from "./context/AuthContext";
 import { projectsApi, userApi } from "./lib/api";
 
 export default function DashboardLayout({ children, title }) {
-  const { user, logout, loading } = useAuth();
+  const { user, logout, loading, profile } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
   const [dropOpen,      setDropOpen]      = useState(false);
@@ -18,14 +18,19 @@ export default function DashboardLayout({ children, title }) {
   const [settOpen,      setSettOpen]      = useState(false);
   const [recentProjects, setRecentProjects] = useState([]);
   const [username,       setUsername]      = useState(null);
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => sessionStorage.getItem("onboarding-banner-dismissed") === "1"
+  );
   const menuRef = useRef(null);
   const settRef = useRef(null);
 
-  // Fetch recent projects and username for sidebar
+  // Sync username from profile context (no extra API call needed)
+  useEffect(() => { setUsername(profile?.username || null); }, [profile?.username]);
+
+  // Fetch recent projects for sidebar
   useEffect(() => {
     if (!user) return;
     projectsApi.list({ limit: 5 }).then(d => setRecentProjects(d.projects || [])).catch(() => {});
-    userApi.getProfile().then(d => setUsername(d.username || null)).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -283,6 +288,35 @@ export default function DashboardLayout({ children, title }) {
             </div>
           )}
         </header>
+
+        {/* ── Incomplete onboarding banner ── */}
+        {profile && !profile.onboarding_completed && (profile.onboarding_step ?? 0) > 0
+          && !bannerDismissed && location.pathname !== "/onboarding" && (
+          <div style={{
+            background: "rgba(124,58,237,0.1)", borderBottom: "1px solid rgba(124,58,237,0.2)",
+            padding: "0 24px", height: 44, display: "flex", alignItems: "center", gap: 12,
+            fontSize: 13,
+          }}>
+            <span style={{ flex: 1 }}>✨ Complete your account setup</span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[1, 2, 3].map(n => (
+                <div key={n} style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: (profile.onboarding_step ?? 0) >= n ? "#7c3aed" : "rgba(255,255,255,0.15)",
+                }} />
+              ))}
+            </div>
+            <button className="btn-primary-sm" style={{ fontSize: 12, padding: "4px 12px" }} onClick={() => navigate("/onboarding")}>
+              Continue Setup →
+            </button>
+            <button
+              onClick={() => { sessionStorage.setItem("onboarding-banner-dismissed", "1"); setBannerDismissed(true); }}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--t3)", fontSize: 18, lineHeight: 1, padding: "0 4px" }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <main className="db-content">
           {children}

@@ -55,6 +55,14 @@ Deno.serve(async (req) => {
           started_at: new Date().toISOString(),
         }, { onConflict: 'user_id' })
       }
+
+      // Ensure onboarding fields are initialised in profiles
+      await supabaseAdmin.from('profiles').upsert({
+        id: created.user.id,
+        onboarding_completed: false,
+        onboarding_step: 0,
+        onboarding_dismissed: false,
+      }, { onConflict: 'id' })
     }
 
     const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })

@@ -9,6 +9,7 @@ import { useAuth } from "./context/AuthContext";
 import { usePlan } from "./context/PlanContext";
 import DashboardLayout from "./DashboardLayout";
 import { dashboardApi, formatSize } from "./lib/api";
+import GettingStartedChecklist from "./components/dashboard/GettingStartedChecklist";
 
 const CARD_VARIANTS = {
   hidden:  { opacity: 0, y: 16 },
@@ -16,7 +17,7 @@ const CARD_VARIANTS = {
 };
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, profile } = useAuth();
   const plan = usePlan();
   const navigate = useNavigate();
 
@@ -53,8 +54,17 @@ export default function DashboardPage() {
 
   const displayName = user?.user_metadata?.full_name?.split(" ")[0] || "there";
 
+  // Show checklist for new users (first 7 days, completed onboarding, not dismissed)
+  const isNewUser = profile?.createdAt
+    ? new Date(profile.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    : false;
+  const showChecklist = profile?.onboarding_completed && isNewUser && !profile?.onboarding_dismissed;
+
   return (
     <DashboardLayout title="Dashboard">
+      {/* Getting Started Checklist */}
+      {showChecklist && <GettingStartedChecklist />}
+
       {/* Greeting */}
       <motion.div
         className="dash-greeting"

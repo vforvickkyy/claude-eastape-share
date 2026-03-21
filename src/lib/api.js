@@ -180,7 +180,7 @@ export const shareLinksApi = {
 // ── User ───────────────────────────────────────────────────────────
 export const userApi = {
   getProfile:    ()          => get(`${BASE}/user-profile`, {}, true),
-  updateProfile: (body)      => put(`${BASE}/user-profile`, {}, body, true),
+  updateProfile: (data)      => patch(`${BASE}/user-profile`, {}, data, true),
   uploadAvatar:  (body)      => post(`${BASE}/user-avatar`, body, true),
   deleteAvatar:  ()          => del(`${BASE}/user-avatar`, {}, true),
   checkUsername: (username)  => get(`${BASE}/user-profile`, { action: 'check_username', username }),

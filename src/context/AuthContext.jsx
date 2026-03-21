@@ -1,8 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-
-// Auth is handled via Supabase Edge Functions.
-// Sessions are stored in localStorage so they survive page reloads.
+import { userApi } from "../lib/api";
 
 const SESSION_KEY = "ets_auth";
 const AuthContext = createContext(null);
@@ -15,7 +13,6 @@ function saveSession(session) {
   else localStorage.removeItem(SESSION_KEY);
 }
 function isExpired(session) {
-  // expires_at is a Unix timestamp in seconds
   return !session?.expires_at || Date.now() / 1000 > session.expires_at - 30;
 }
 
@@ -40,14 +37,13 @@ async function apiPost(path, body) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);
+  const [user,    setUser]    = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   function applySession(session) {
     setUser(session?.user ?? null);
     saveSession(session ?? null);
-    // Sync to Supabase native so supabase.auth.getSession() works for all users.
-    // Critical for email/password users whose session was created server-side.
     if (session?.access_token && session?.refresh_token) {
       supabase.auth.setSession({
         access_token: session.access_token,
@@ -55,7 +51,20 @@ export function AuthProvider({ children }) {
       }).catch(() => {});
     } else if (!session) {
       supabase.auth.signOut().catch(() => {});
+      setProfile(null);
     }
+  }
+
+  // Merge partial updates into profile state immediately (no refetch needed)
+  function updateProfileLocally(updates) {
+    setProfile(prev => prev ? { ...prev, ...updates } : updates);
+  }
+
+  async function fetchProfile() {
+    try {
+      const data = await userApi.getProfile();
+      setProfile(data);
+    } catch { /* profile stays null; pages that need it will handle gracefully */ }
   }
 
   // Restore session on mount + proactive auto-refresh
@@ -71,9 +80,6 @@ export function AuthProvider({ children }) {
 
       if (!isExpired(session)) {
         if (!cancelled) setUser(session.user);
-        // AWAIT setSession so supabase.auth.getSession() is populated before
-        // any child component mounts and calls getToken(). Without awaiting,
-        // components mount immediately and getSession() returns null → 401.
         try {
           await supabase.auth.setSession({
             access_token: session.access_token,
@@ -81,11 +87,11 @@ export function AuthProvider({ children }) {
           });
         } catch {}
         if (!cancelled) setLoading(false);
+        if (!cancelled) fetchProfile();
       } else {
-        // Session expired on load — try to refresh silently
         try {
           const { session: newSession } = await apiPost("/api/auth/refresh", { refreshToken: session.refresh_token });
-          if (!cancelled) applySession(newSession);
+          if (!cancelled) { applySession(newSession); fetchProfile(); }
         } catch {
           if (!cancelled) { saveSession(null); setUser(null); }
         }
@@ -95,7 +101,6 @@ export function AuthProvider({ children }) {
 
     init();
 
-    // Check every 4 minutes; refresh if token expires within 5 minutes
     const interval = setInterval(() => {
       const current = loadSession();
       if (!current?.refresh_token) return;
@@ -103,7 +108,7 @@ export function AuthProvider({ children }) {
       if (expiresInSeconds < 300) {
         apiPost("/api/auth/refresh", { refreshToken: current.refresh_token })
           .then(({ session: newSession }) => applySession(newSession))
-          .catch(() => { saveSession(null); setUser(null); });
+          .catch(() => { saveSession(null); setUser(null); setProfile(null); });
       }
     }, 4 * 60 * 1000);
 
@@ -113,12 +118,15 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { session } = await apiPost("/api/auth/login", { email, password });
     applySession(session);
+    // Fetch profile after a brief tick so supabase.auth.setSession has fired
+    setTimeout(fetchProfile, 200);
     return session;
   }
 
   async function signup(email, password, fullName) {
     const { session } = await apiPost("/api/auth/signup", { email, password, fullName });
     applySession(session);
+    setTimeout(fetchProfile, 200);
     return session;
   }
 
@@ -137,10 +145,11 @@ export function AuthProvider({ children }) {
   function logout() {
     saveSession(null);
     setUser(null);
+    setProfile(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, loginWithGoogle }}>
+    <AuthContext.Provider value={{ user, loading, profile, setProfile, updateProfileLocally, login, signup, logout, loginWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );
