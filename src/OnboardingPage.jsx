@@ -1,9 +1,69 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check } from "@phosphor-icons/react";
+import { Check, CaretDown } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { userApi } from "./lib/api";
+
+/* ── Custom dropdown (avoids white native select popup) ── */
+function CustomSelect({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "var(--input-bg, rgba(255,255,255,0.06))", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: "var(--r, 10px)", padding: "10px 14px", color: value ? "var(--t1)" : "var(--t3)",
+          fontSize: 14, cursor: "pointer", textAlign: "left",
+        }}
+      >
+        {value || placeholder}
+        <CaretDown size={14} style={{ opacity: 0.5, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+              background: "#1c1c2e", border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            }}
+          >
+            {options.map(opt => (
+              <button
+                key={opt} type="button"
+                onClick={() => { onChange(opt); setOpen(false); }}
+                style={{
+                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 14,
+                  background: value === opt ? "rgba(124,58,237,0.2)" : "none",
+                  color: value === opt ? "#c4b5fd" : "var(--t1)",
+                  border: "none", cursor: "pointer", display: "block",
+                }}
+                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = "none"; }}
+              >
+                {opt}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /* ── Suggestion generator ── */
 function generateSuggestions(fullName) {
@@ -338,17 +398,12 @@ export default function OnboardingPage() {
                 {/* Role */}
                 <div className="form-group" style={{ marginBottom: 16 }}>
                   <label className="form-label" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Your Role</label>
-                  <div className="form-input-wrap">
-                    <select
-                      className="form-input"
-                      value={role}
-                      onChange={e => setRole(e.target.value)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <option value="">— Select your role —</option>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </div>
+                  <CustomSelect
+                    value={role}
+                    onChange={setRole}
+                    options={ROLES}
+                    placeholder="— Select your role —"
+                  />
                 </div>
 
                 {/* Company */}
