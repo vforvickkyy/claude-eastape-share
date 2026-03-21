@@ -46,6 +46,16 @@ export function AuthProvider({ children }) {
   function applySession(session) {
     setUser(session?.user ?? null);
     saveSession(session ?? null);
+    // Sync to Supabase native so supabase.auth.getSession() works for all users.
+    // This is critical for email/password users whose session was created server-side.
+    if (session?.access_token && session?.refresh_token) {
+      supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }).catch(() => {});
+    } else if (!session) {
+      supabase.auth.signOut().catch(() => {});
+    }
   }
 
   // Restore session on mount + proactive auto-refresh
@@ -55,6 +65,13 @@ export function AuthProvider({ children }) {
 
     if (!isExpired(session)) {
       setUser(session.user);
+      // Sync existing valid session to Supabase native
+      if (session.access_token && session.refresh_token) {
+        supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }).catch(() => {});
+      }
       setLoading(false);
     } else {
       // Session expired on load — try to refresh silently

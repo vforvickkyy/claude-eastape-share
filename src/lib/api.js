@@ -6,25 +6,16 @@ import { supabase } from './supabaseClient'
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
-// Returns the best available access token.
-// Prefers ets_auth (email/password logins), falls back to Supabase's native
-// session (Google OAuth) which auto-refreshes independently of ets_auth.
+// Returns the current access token.
+// Prefers supabase.auth.getSession() which auto-refreshes for all users
+// (works after AuthContext syncs email/password sessions via setSession).
+// Falls back to ets_auth directly for any edge case.
 async function getToken() {
   try {
-    const stored = JSON.parse(localStorage.getItem('ets_auth'))
-    if (stored?.access_token && stored?.expires_at) {
-      // Token still valid with 60-second buffer
-      if (Date.now() / 1000 < stored.expires_at - 60) return stored.access_token
-    }
-    // ets_auth missing or expired — get fresh token from Supabase native session
     const { data: { session } } = await supabase.auth.getSession()
-    if (session?.access_token) {
-      // Sync ets_auth so future calls don't need to re-fetch
-      localStorage.setItem('ets_auth', JSON.stringify(session))
-      return session.access_token
-    }
-    return null
-  } catch { return null }
+    if (session?.access_token) return session.access_token
+  } catch {}
+  try { return JSON.parse(localStorage.getItem('ets_auth'))?.access_token ?? null } catch { return null }
 }
 
 async function authHeaders() {
