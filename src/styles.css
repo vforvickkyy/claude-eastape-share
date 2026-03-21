@@ -453,6 +453,8 @@ input  { font-family: var(--font-body); }
   background: linear-gradient(135deg, #6d28d9, #2563eb);
   box-shadow: 0 4px 16px rgba(109,40,217,0.28);
   transition: box-shadow 0.2s, transform 0.14s;
+  display: inline-flex; align-items: center; gap: 6px;
+  border: none; cursor: pointer; white-space: nowrap;
 }
 .btn-primary-sm:hover {
   box-shadow: 0 6px 24px rgba(109,40,217,0.48);
@@ -2340,14 +2342,17 @@ input  { font-family: var(--font-body); }
 .btn-ghost.danger { color: #f87171; border-color: rgba(248,113,113,0.3); }
 .btn-ghost.danger:hover { background: rgba(248,113,113,0.1); }
 
+.btn-primary,
 .btn-primary-sm {
   display: inline-flex; align-items: center; gap: 6px;
   background: linear-gradient(135deg, #6d28d9, #2563eb);
   color: #fff; border: none; border-radius: var(--r-pill);
   padding: 8px 16px; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: opacity 0.15s;
+  cursor: pointer; transition: opacity 0.15s; white-space: nowrap;
 }
+.btn-primary:hover,
 .btn-primary-sm:hover { opacity: 0.88; }
+.btn-primary:disabled,
 .btn-primary-sm:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .icon-btn {

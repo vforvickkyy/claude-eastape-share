@@ -162,7 +162,7 @@ export default function NewProjectModal({ onClose }) {
     >
       <motion.div
         className="modal-box"
-        style={{ maxWidth: 700, width: '95vw', padding: 0, overflow: 'hidden' }}
+        style={{ maxWidth: 700, width: '95vw', padding: 0 }}
         initial={{ scale: 0.93, opacity: 0, y: 16 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.93, opacity: 0, y: 16 }}
@@ -389,7 +389,7 @@ export default function NewProjectModal({ onClose }) {
                       className="btn-primary"
                       onClick={addInvite}
                       disabled={!inviteEmail.trim()}
-                      style={{ whiteSpace: 'nowrap' }}
+                      style={{ flexShrink: 0 }}
                     >
                       <Plus size={14} /> Add
                     </button>
