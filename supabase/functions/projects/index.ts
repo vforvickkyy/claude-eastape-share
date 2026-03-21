@@ -59,12 +59,13 @@ Deno.serve(async (req) => {
     // POST — create project
     if (req.method === 'POST') {
       const body = await req.json()
-      const { name, description, color, icon, client_name, client_email, due_date } = body
+      const { name, description, color, icon, client_name, client_email, due_date, preset_type } = body
       if (!name?.trim()) return json({ error: 'name required' }, 400)
 
       const { data: project, error } = await supabase.from('projects').insert({
         user_id: user.id, name: name.trim(), description, color: color || '#6366f1',
         icon: icon || '🎬', client_name, client_email, due_date,
+        preset_type: preset_type || 'blank',
       }).select().single()
       if (error) return json({ error: error.message }, 500)
 

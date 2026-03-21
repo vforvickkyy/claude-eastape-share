@@ -714,8 +714,56 @@ Deno.serve(async (req) => {
       if (!projectId) return json({ error: 'project_id required' }, 400)
       const owner = await isOwner(projectId)
       if (!owner) return json({ error: 'Forbidden' }, 403)
-      const { error: rpcErr } = await supabase.rpc('seed_production', { p_id: projectId })
-      if (rpcErr) return json({ error: rpcErr.message }, 500)
+
+      let bodyData: { preset_type?: string } = {}
+      try { bodyData = await req.json() } catch {}
+      const presetType = bodyData.preset_type || 'blank'
+
+      type StatusDef = { name: string; color: string; position: number }
+      type StageDef  = { name: string; color: string; order_index: number; is_final_stage: boolean }
+      type ColDef    = { name: string; type: string; options?: string[]; position: number }
+
+      const STATUSES: Record<string, StatusDef[]> = {
+        vfx:        [{ name:'Not Started',color:'#64748b',position:0},{name:'In Progress',color:'#3b82f6',position:1},{name:'In Review',color:'#f97316',position:2},{name:'Approved',color:'#10b981',position:3},{name:'Delivered',color:'#06b6d4',position:4}],
+        commercial: [{ name:'Not Started',color:'#64748b',position:0},{name:'Filming',color:'#f59e0b',position:1},{name:'Editing',color:'#8b5cf6',position:2},{name:'Client Review',color:'#f97316',position:3},{name:'Approved',color:'#10b981',position:4},{name:'Delivered',color:'#06b6d4',position:5}],
+        wedding:    [{ name:'Not Started',color:'#64748b',position:0},{name:'Filmed',color:'#3b82f6',position:1},{name:'Editing',color:'#8b5cf6',position:2},{name:'Color',color:'#f59e0b',position:3},{name:'Review',color:'#f97316',position:4},{name:'Delivered',color:'#10b981',position:5}],
+        social:     [{ name:'Idea',color:'#64748b',position:0},{name:'Scripting',color:'#8b5cf6',position:1},{name:'Production',color:'#f59e0b',position:2},{name:'Editing',color:'#3b82f6',position:3},{name:'Review',color:'#f97316',position:4},{name:'Posted',color:'#10b981',position:5}],
+        music:      [{ name:'Not Started',color:'#64748b',position:0},{name:'Filming',color:'#f59e0b',position:1},{name:'Syncing',color:'#8b5cf6',position:2},{name:'Editing',color:'#3b82f6',position:3},{name:'Review',color:'#f97316',position:4},{name:'Delivered',color:'#10b981',position:5}],
+        blank:      [{ name:'Not Started',color:'#64748b',position:0},{name:'In Progress',color:'#3b82f6',position:1},{name:'Done',color:'#10b981',position:2}],
+      }
+      const STAGES: Record<string, StageDef[]> = {
+        vfx:        [{name:'KEY',color:'#3b82f6',order_index:0,is_final_stage:false},{name:'RENDERS',color:'#8b5cf6',order_index:1,is_final_stage:false},{name:'COMP',color:'#10b981',order_index:2,is_final_stage:false},{name:'CHECK',color:'#f59e0b',order_index:3,is_final_stage:false},{name:'DELIVER',color:'#06b6d4',order_index:4,is_final_stage:true}],
+        commercial: [{name:'SHOOT',color:'#f59e0b',order_index:0,is_final_stage:false},{name:'OFFLINE',color:'#8b5cf6',order_index:1,is_final_stage:false},{name:'ONLINE',color:'#3b82f6',order_index:2,is_final_stage:false},{name:'COLOR',color:'#10b981',order_index:3,is_final_stage:false},{name:'AUDIO',color:'#f97316',order_index:4,is_final_stage:false},{name:'DELIVER',color:'#06b6d4',order_index:5,is_final_stage:true}],
+        wedding:    [{name:'FILMED',color:'#3b82f6',order_index:0,is_final_stage:false},{name:'CULLED',color:'#8b5cf6',order_index:1,is_final_stage:false},{name:'EDITED',color:'#f59e0b',order_index:2,is_final_stage:false},{name:'COLOR',color:'#10b981',order_index:3,is_final_stage:false},{name:'AUDIO',color:'#f97316',order_index:4,is_final_stage:false},{name:'DELIVERED',color:'#06b6d4',order_index:5,is_final_stage:true}],
+        social:     [{name:'SCRIPT',color:'#8b5cf6',order_index:0,is_final_stage:false},{name:'SHOOT',color:'#f59e0b',order_index:1,is_final_stage:false},{name:'EDIT',color:'#3b82f6',order_index:2,is_final_stage:false},{name:'CAPTION',color:'#10b981',order_index:3,is_final_stage:false},{name:'CLIENT',color:'#f97316',order_index:4,is_final_stage:false},{name:'POST',color:'#06b6d4',order_index:5,is_final_stage:true}],
+        music:      [{name:'SHOOT',color:'#f59e0b',order_index:0,is_final_stage:false},{name:'SYNC',color:'#8b5cf6',order_index:1,is_final_stage:false},{name:'EDIT',color:'#3b82f6',order_index:2,is_final_stage:false},{name:'COLOR',color:'#10b981',order_index:3,is_final_stage:false},{name:'VFX',color:'#f97316',order_index:4,is_final_stage:false},{name:'DELIVER',color:'#06b6d4',order_index:5,is_final_stage:true}],
+        blank:      [],
+      }
+      const COLUMNS: Record<string, ColDef[]> = {
+        vfx:        [{name:'Shot Type',type:'select',options:['Wide','Medium','CU','ECU','POV','Aerial'],position:0},{name:'Camera Movement',type:'select',options:['Static','Pan','Tilt','Dolly','Handheld'],position:1},{name:'Frames',type:'number',position:2},{name:'VFX Notes',type:'text',position:3}],
+        commercial: [{name:'Shot Type',type:'select',options:['Wide','Medium','CU','Insert','Aerial'],position:0},{name:'Location',type:'text',position:1},{name:'Lens',type:'text',position:2},{name:'Notes',type:'text',position:3}],
+        wedding:    [{name:'Moment',type:'text',position:0},{name:'Time of Day',type:'text',position:1},{name:'Location',type:'text',position:2},{name:'B-Roll',type:'checkbox',position:3}],
+        social:     [{name:'Platform',type:'select',options:['Instagram','TikTok','YouTube','Twitter','LinkedIn'],position:0},{name:'Format',type:'select',options:['Landscape','Portrait','Square'],position:1},{name:'Duration',type:'number',position:2},{name:'Caption',type:'text',position:3}],
+        music:      [{name:'Shot Type',type:'select',options:['Wide','Medium','CU','Performance','BTS'],position:0},{name:'Artist',type:'text',position:1},{name:'Playback',type:'checkbox',position:2},{name:'Lip Sync',type:'checkbox',position:3}],
+        blank:      [],
+      }
+
+      const statuses = STATUSES[presetType] ?? STATUSES['blank']
+      const stages   = STAGES[presetType]   ?? []
+      const columns  = COLUMNS[presetType]  ?? []
+
+      if (statuses.length > 0) {
+        const { error: sErr } = await supabase.from('production_statuses').insert(statuses.map(s => ({ project_id: projectId, ...s })))
+        if (sErr) return json({ error: sErr.message }, 500)
+      }
+      if (stages.length > 0) {
+        const { error: stErr } = await supabase.from('pipeline_stages').insert(stages.map(s => ({ project_id: projectId, ...s, cell_type: 'checkbox', status_options: [], width: 120 })))
+        if (stErr) return json({ error: stErr.message }, 500)
+      }
+      if (columns.length > 0) {
+        const { error: cErr } = await supabase.from('shot_columns').insert(columns.map(c => ({ project_id: projectId, name: c.name, type: c.type, options: c.options ?? null, position: c.position })))
+        if (cErr) return json({ error: cErr.message }, 500)
+      }
       return json({ ok: true })
     }
 

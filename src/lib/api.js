@@ -230,7 +230,7 @@ export const mediaApi = {
 const PROD = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/production`
 export const productionApi = {
   // Seed defaults for new project
-  seed:           (projectId)      => post(`${PROD}?resource=seed&project_id=${projectId}`, {}, true),
+  seed:           (projectId, presetType) => post(`${PROD}?resource=seed&project_id=${projectId}`, { preset_type: presetType || 'blank' }, true),
 
   // Statuses
   listStatuses:   (projectId)      => get(PROD, { resource: 'statuses', project_id: projectId }, true),

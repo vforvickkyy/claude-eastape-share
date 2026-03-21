@@ -3,14 +3,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, MagnifyingGlass, SquaresFour, Rows, Briefcase,
-  DotsThree, PencilSimple, Trash, Clock, X, FolderPlus,
+  DotsThree, PencilSimple, Trash, Clock, FolderPlus,
   CaretDown, Check,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./DashboardLayout";
 import { projectsApi } from "./lib/api";
+import NewProjectModal from "./components/NewProjectModal";
 
-const COLOR_OPTS = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#14b8a6"];
 
 const STATUS_OPTS = [
   { value: "active",    label: "Active",    cls: "swatch-active"    },
@@ -44,10 +44,6 @@ export default function ProjectsPage() {
   const [menuOpen,    setMenuOpen]   = useState(null);
   const [statusMenu,  setStatusMenu] = useState(null);
 
-  const [newName,   setNewName]   = useState("");
-  const [newColor,  setNewColor]  = useState(COLOR_OPTS[0]);
-  const [newClient, setNewClient] = useState("");
-  const [creating,  setCreating]  = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login", { replace: true });
@@ -63,21 +59,6 @@ export default function ProjectsPage() {
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
-
-  async function handleCreate(e) {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    setCreating(true);
-    try {
-      const d = await projectsApi.create({ name: newName.trim(), color: newColor, client_name: newClient });
-      const created = d.project;
-      setShowNew(false);
-      setNewName(""); setNewClient(""); setNewColor(COLOR_OPTS[0]);
-      if (created?.id) navigate(`/projects/${created.id}`);
-      else load();
-    } catch { setCreating(false); }
-    finally { setCreating(false); }
-  }
 
   async function handleDelete(id) {
     if (!confirm("Delete this project? This cannot be undone.")) return;
@@ -303,69 +284,8 @@ export default function ProjectsPage() {
           </div>
         )}
 
-        {/* New Project Modal */}
         <AnimatePresence>
-          {showNew && (
-            <motion.div
-              className="modal-overlay"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowNew(false)}
-            >
-              <motion.div
-                className="modal-box"
-                style={{ maxWidth: 420 }}
-                initial={{ scale: 0.92, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.92, opacity: 0 }}
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="modal-header">
-                  <h3>New Project</h3>
-                  <button className="modal-close" onClick={() => setShowNew(false)}><X size={16} /></button>
-                </div>
-                <form onSubmit={handleCreate} className="new-project-form">
-                  <label>Project Name *</label>
-                  <input
-                    className="input-field"
-                    value={newName}
-                    onChange={e => setNewName(e.target.value)}
-                    placeholder="e.g. Brand Campaign 2025"
-                    required autoFocus
-                  />
-                  <label>Client Name</label>
-                  <input
-                    className="input-field"
-                    value={newClient}
-                    onChange={e => setNewClient(e.target.value)}
-                    placeholder="Optional"
-                  />
-                  <label>Color</label>
-                  <div className="color-picker-row">
-                    {COLOR_OPTS.map(c => (
-                      <button
-                        key={c} type="button"
-                        className={`color-swatch ${newColor === c ? "selected" : ""}`}
-                        style={{ background: c }}
-                        onClick={() => setNewColor(c)}
-                      />
-                    ))}
-                  </div>
-                  {/* Preview */}
-                  <div className="new-proj-preview" style={{ background: newColor }}>
-                    <div className="project-card-initials" style={{ fontSize: 16, width: 36, height: 36 }}>
-                      {newName ? newName.slice(0, 2).toUpperCase() : "PR"}
-                    </div>
-                  </div>
-                  <div className="modal-actions">
-                    <button type="button" className="btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-                    <button type="submit" className="btn-primary" disabled={creating || !newName.trim()}>
-                      {creating ? "Creating…" : "Create Project"}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
+          {showNew && <NewProjectModal onClose={() => setShowNew(false)} />}
         </AnimatePresence>
       </div>
     </DashboardLayout>
