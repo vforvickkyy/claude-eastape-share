@@ -36,11 +36,29 @@ Deno.serve(async (req) => {
       }
       const { data: members, error } = await supabase
         .from('project_members')
-        .select('*, profiles:user_id(full_name, avatar_url)')
+        .select('*')
         .eq('project_id', projectId)
         .order('created_at', { ascending: true })
       if (error) return json({ error: error.message }, 500)
-      return json({ members: members || [] })
+
+      // Manually enrich with profile data (no FK constraint exists)
+      const userIds = (members || []).map((m: Record<string, unknown>) => m.user_id).filter(Boolean) as string[]
+      let profilesMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {}
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .in('id', userIds)
+        if (profiles) {
+          for (const p of profiles) profilesMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url }
+        }
+      }
+
+      const enriched = (members || []).map((m: Record<string, unknown>) => ({
+        ...m,
+        profiles: m.user_id ? (profilesMap[m.user_id as string] ?? null) : null,
+      }))
+      return json({ members: enriched })
     }
 
     // POST — invite or add manual member
