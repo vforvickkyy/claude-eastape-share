@@ -298,6 +298,22 @@ export const productionApi = {
   // All project media with linking status (for MediaBrowserModal)
   getProjectMedia: (projectId) =>
     get(PROD, { resource: 'project_media_list', project_id: projectId }, true),
+
+  // Assignees (team members + custom names)
+  getAssignees: (projectId) =>
+    get(PROD, { resource: 'custom_assignees', project_id: projectId }, true),
+  addCustomAssignee: (projectId, name) =>
+    post(`${PROD}?resource=custom_assignees&project_id=${projectId}`, { name }, true),
+  removeCustomAssignee: (id) =>
+    del(PROD, { resource: 'custom_assignees', id }, true),
+
+  // Update shot pipeline cell value (supports boolean, number, string)
+  updateShotPipeline: (shotId, stageName, value) =>
+    patch(`${PROD}?resource=shot_pipeline&shot_id=${shotId}`, {}, { stage_name: stageName, value }, true),
+
+  // Update shot assignee
+  updateShotAssignee: (shotId, assignedTo, customAssignee) =>
+    patch(`${PROD}?resource=update_shot&shot_id=${shotId}`, {}, { assigned_to: assignedTo || null, custom_assignee: customAssignee || null }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────
