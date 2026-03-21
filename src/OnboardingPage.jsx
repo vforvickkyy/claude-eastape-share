@@ -5,10 +5,15 @@ import { Check, CaretDown, FilmSlate, CloudArrowUp, UserPlus, SquaresFour } from
 import { useAuth } from "./context/AuthContext";
 import { userApi } from "./lib/api";
 
-/* ── Custom dropdown (avoids white native select popup) ── */
-function CustomSelect({ value, onChange, options, placeholder }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+/* ── Combobox: type to filter or enter custom role ── */
+function RoleCombobox({ value, onChange, options, placeholder }) {
+  const [query, setQuery]   = useState(value || "");
+  const [open, setOpen]     = useState(false);
+  const ref     = useRef(null);
+  const inputRef = useRef(null);
+
+  // Keep input in sync if parent clears value
+  useEffect(() => { if (!value) setQuery(""); }, [value]);
 
   useEffect(() => {
     function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
@@ -16,52 +21,92 @@ function CustomSelect({ value, onChange, options, placeholder }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
+  const filtered = query.trim()
+    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  const showCustom = query.trim() && !options.some(o => o.toLowerCase() === query.toLowerCase());
+
+  function select(opt) {
+    setQuery(opt);
+    onChange(opt);
+    setOpen(false);
+  }
+
+  function handleInput(e) {
+    setQuery(e.target.value);
+    onChange(e.target.value);   // allow free-text role
+    setOpen(true);
+  }
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "var(--input-bg, rgba(255,255,255,0.06))", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: "var(--r, 10px)", padding: "10px 14px", color: value ? "var(--t1)" : "var(--t3)",
-          fontSize: 14, cursor: "pointer", textAlign: "left",
-        }}
-      >
-        {value || placeholder}
-        <CaretDown size={14} style={{ opacity: 0.5, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
-      </button>
+      <div style={{ position: "relative" }}>
+        <input
+          ref={inputRef}
+          className="form-input"
+          style={{ width: "100%", boxSizing: "border-box", paddingRight: 36 }}
+          placeholder={placeholder}
+          value={query}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+          autoComplete="off"
+        />
+        <CaretDown
+          size={14}
+          onClick={() => { setOpen(o => !o); inputRef.current?.focus(); }}
+          style={{
+            position: "absolute", right: 12, top: "50%", transform: open ? "translateY(-50%) rotate(180deg)" : "translateY(-50%)",
+            opacity: 0.4, cursor: "pointer", transition: "transform 0.15s", flexShrink: 0,
+          }}
+        />
+      </div>
+
       <AnimatePresence>
-        {open && (
+        {open && (filtered.length > 0 || showCustom) && (
           <motion.div
-            initial={{ opacity: 0, y: -6, scaleY: 0.95 }} animate={{ opacity: 1, y: 0, scaleY: 1 }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.15 }}
+            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
             style={{
-              position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 50,
-              background: "#16162a", border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 12, overflow: "hidden auto", maxHeight: 280,
-              boxShadow: "0 16px 40px rgba(0,0,0,0.6)", transformOrigin: "top",
+              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+              background: "#13131f", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
             }}
           >
-            {options.map((opt, i) => (
+            {filtered.map((opt, i) => (
               <button
                 key={opt} type="button"
-                onClick={() => { onChange(opt); setOpen(false); }}
+                onMouseDown={e => { e.preventDefault(); select(opt); }}
                 style={{
-                  width: "100%", textAlign: "left", padding: "11px 16px", fontSize: 14,
-                  background: value === opt ? "rgba(124,58,237,0.25)" : "transparent",
-                  color: value === opt ? "#c4b5fd" : "var(--t2)",
+                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 14,
+                  background: value === opt ? "rgba(124,58,237,0.2)" : "transparent",
+                  color: value === opt ? "#c4b5fd" : "var(--t1)",
                   borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                  border: "none", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                  cursor: "pointer", display: "block", transition: "background 0.1s",
+                  border: "none", cursor: "pointer", display: "block",
                   fontWeight: value === opt ? 600 : 400,
                 }}
-                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
                 onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = "transparent"; }}
               >
                 {opt}
               </button>
             ))}
+            {showCustom && (
+              <button
+                type="button"
+                onMouseDown={e => { e.preventDefault(); select(query.trim()); }}
+                style={{
+                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 13,
+                  background: "transparent", color: "var(--t3)",
+                  borderTop: filtered.length > 0 ? "1px solid rgba(255,255,255,0.08)" : "none",
+                  border: "none", cursor: "pointer", display: "block", fontStyle: "italic",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+              >
+                Use "{query.trim()}"
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -407,11 +452,11 @@ export default function OnboardingPage() {
                 {/* Role */}
                 <div className="form-group" style={{ marginBottom: 16 }}>
                   <label className="form-label" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Your Role</label>
-                  <CustomSelect
+                  <RoleCombobox
                     value={role}
                     onChange={setRole}
                     options={ROLES}
-                    placeholder="— Select your role —"
+                    placeholder="Search or type your role..."
                   />
                 </div>
 
