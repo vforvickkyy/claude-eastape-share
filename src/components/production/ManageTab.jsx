@@ -40,8 +40,19 @@ export default function ManageTab() {
   const [seeding,    setSeeding]    = useState(false)
   const [seedError,  setSeedError]  = useState(null)
   const [seeded,     setSeeded]     = useState(false)
-  const [showColMgr, setShowColMgr] = useState(false)
+  const [showColMgr,   setShowColMgr]   = useState(false)
   const [showStageMgr, setShowStageMgr] = useState(false)
+  const [hiddenCols,   setHiddenCols]   = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`list-cols-${projectId}`)) || {} } catch { return {} }
+  })
+
+  function toggleHideCol(colId, hidden) {
+    setHiddenCols(prev => {
+      const next = { ...prev, [colId]: hidden }
+      localStorage.setItem(`list-cols-${projectId}`, JSON.stringify(next))
+      return next
+    })
+  }
 
   // Set initial view from project once loaded
   useEffect(() => {
@@ -204,7 +215,7 @@ export default function ManageTab() {
       {/* View content */}
       {resolvedView === 'cards'    && <ShotCardsView {...sharedProps} />}
       {resolvedView === 'pipeline' && <PipelineView  {...sharedProps} onManageStages={() => setShowStageMgr(true)} />}
-      {resolvedView === 'list'     && <ShotListView     {...sharedProps} onManageColumns={() => setShowColMgr(true)} />}
+      {resolvedView === 'list'     && <ShotListView     {...sharedProps} hiddenCols={hiddenCols} onManageColumns={() => setShowColMgr(true)} />}
       {resolvedView === 'calendar' && <CalendarView      {...sharedProps} />}
       {resolvedView === 'progress' && <ProgressDashboard {...sharedProps} />}
 
@@ -212,6 +223,8 @@ export default function ManageTab() {
         <ColumnManager
           projectId={projectId}
           columns={columns}
+          hiddenCols={hiddenCols}
+          onToggleHide={toggleHideCol}
           onClose={() => setShowColMgr(false)}
           onSaved={cols => setColumns(cols)}
         />

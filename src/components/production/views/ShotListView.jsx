@@ -220,12 +220,12 @@ function colStat(col, shots) {
 // ── Main ShotListView ─────────────────────────────────────────────────
 export default function ShotListView({
   projectId, statuses, scenes, stages = [], columns = [], shots,
+  hiddenCols = {},
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload, onManageColumns,
 }) {
   const navigate    = useNavigate()
   const collapseKey = `ets_list_collapse_${projectId}`
   const widthKey    = `list-widths-${projectId}`
-  const colVisKey   = `list-cols-${projectId}`
 
   const [localShots,   setLocalShots]   = useState(shots)
   const [mediaThumbs,  setMediaThumbs]  = useState({})
@@ -234,9 +234,6 @@ export default function ShotListView({
   })
   const [colWidths,    setColWidths]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(widthKey)) || {} } catch { return {} }
-  })
-  const [hiddenCols,   setHiddenCols]   = useState(() => {
-    try { return JSON.parse(localStorage.getItem(colVisKey)) || {} } catch { return {} }
   })
   const [sort,         setSort]         = useState({ col: null, dir: 'asc' })
   const [selectedShot, setSelectedShot] = useState(null)
