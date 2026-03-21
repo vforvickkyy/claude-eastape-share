@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   FilmSlate, Link, PlusCircle, CaretDown, CaretRight,
-  DotsThree, Pencil, Trash, ListBullets, Play, X as XIcon,
+  DotsThree, Pencil, Trash, Play, X as XIcon,
 } from '@phosphor-icons/react'
 import ShotDetailPanel from '../ShotDetailPanel'
 import MediaBrowserModal from '../MediaBrowserModal'
@@ -63,7 +63,7 @@ function SceneMenu({ scene, onEdit, onBulkAdd, onDelete, onClose }) {
         <Pencil size={13} /> Edit Scene Name
       </button>
       <button className="scg-menu-item" onClick={() => { onBulkAdd(); onClose() }}>
-        <ListBullets size={13} /> Bulk Add Shots
+        Bulk Add Shots
       </button>
       <div className="scg-menu-sep" />
       <button className="scg-menu-item scg-menu-item--danger" onClick={() => { onDelete(); onClose() }}>
@@ -130,11 +130,18 @@ function SceneGroupHeader({
             <span className="scg-progress-pct" style={{ color: completionColor(pct) }}>{pct}%</span>
           </div>
         )}
-        <button className="btn-ghost btn-xs scg-quick-btn" onClick={() => {}}>
-          + Quick Add
-        </button>
         {scene && (
-          <button className="btn-primary btn-xs scg-bulk-btn" onClick={onBulkAdd}>
+          <button
+            onClick={onBulkAdd}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)',
+              color: '#a5b4fc', borderRadius: 7, padding: '4px 10px', fontSize: 12,
+              fontWeight: 500, cursor: 'pointer', flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.15)' }}
+          >
             Bulk Add
           </button>
         )}
@@ -385,6 +392,9 @@ export default function ShotCardsView({
   const [collapsed,    setCollapsed]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(collapseKey)) || {} } catch { return {} }
   })
+  const [tileSize,     setTileSize]     = useState(() => {
+    return parseInt(localStorage.getItem(`ets_tile_size_${projectId}`) || '200', 10)
+  })
   const [selectedShot, setSelectedShot] = useState(null)
   const [linkingShot,  setLinkingShot]  = useState(null)
   const [bulkAddScene, setBulkAddScene] = useState(false)
@@ -505,8 +515,24 @@ export default function ShotCardsView({
     )
   }
 
+  function handleTileSize(v) {
+    const n = Number(v)
+    setTileSize(n)
+    localStorage.setItem(`ets_tile_size_${projectId}`, String(n))
+  }
+
   return (
     <>
+      {/* Tile size slider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 2px', justifyContent: 'flex-end' }}>
+        <span style={{ fontSize: 11, color: 'var(--t4)', flexShrink: 0 }}>Size</span>
+        <input
+          type="range" min={140} max={340} step={20} value={tileSize}
+          onChange={e => handleTileSize(e.target.value)}
+          style={{ width: 90, accentColor: '#6366f1', cursor: 'pointer' }}
+        />
+      </div>
+
       <div className="scg-container">
         {groups.map(({ scene, idx, shots: groupShots, color }) => {
           const sceneId = scene?.id || null
@@ -527,7 +553,7 @@ export default function ShotCardsView({
               />
 
               {!isCollapsed && (
-                <div className="shot-cards-grid">
+                <div className="shot-cards-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize}px, 1fr))` }}>
                   {groupShots.map(shot => {
                     const status = statuses.find(s => s.id === shot.status_id)
                     const linkedId = shot.linked_media_id || shot.thumbnail_media_id

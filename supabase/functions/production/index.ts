@@ -112,15 +112,16 @@ Deno.serve(async (req) => {
 
     // ── SCENES ───────────────────────────────────────────────────────
     if (resource === 'scenes') {
-      if (!projectId) return json({ error: 'project_id required' }, 400)
-      if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
-      if (req.method === 'GET') {
-        const { data, error } = await supabase.from('production_scenes').select('*').eq('project_id', projectId).order('position')
-        if (error) return json({ error: error.message }, 500)
-        return json({ scenes: data })
-      }
-      if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
-      if (req.method === 'POST') {
+      // GET / POST require project_id; PUT / DELETE look it up from the scene row
+      if (req.method === 'GET' || req.method === 'POST') {
+        if (!projectId) return json({ error: 'project_id required' }, 400)
+        if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+        if (req.method === 'GET') {
+          const { data, error } = await supabase.from('production_scenes').select('*').eq('project_id', projectId).order('position')
+          if (error) return json({ error: error.message }, 500)
+          return json({ scenes: data })
+        }
+        if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
         const body = await req.json()
         const { data, error } = await supabase.from('production_scenes')
           .insert({ project_id: projectId, name: body.name, description: body.description || null, position: body.position ?? 0 })
@@ -128,7 +129,15 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 500)
         return json({ scene: data }, 201)
       }
-      if (req.method === 'PUT' && id) {
+      if ((req.method === 'PUT' || req.method === 'DELETE') && id) {
+        const { data: sceneRow } = await supabase.from('production_scenes').select('project_id').eq('id', id).single()
+        if (!sceneRow) return json({ error: 'Not found' }, 404)
+        if (!(await canAccess(sceneRow.project_id))) return json({ error: 'Forbidden' }, 403)
+        if (!(await isOwner(sceneRow.project_id))) return json({ error: 'Forbidden' }, 403)
+        if (req.method === 'DELETE') {
+          await supabase.from('production_scenes').delete().eq('id', id)
+          return json({ ok: true })
+        }
         const body = await req.json()
         const allowed = ['name', 'description', 'position']
         const updates: Record<string, unknown> = {}
@@ -136,10 +145,6 @@ Deno.serve(async (req) => {
         const { data, error } = await supabase.from('production_scenes').update(updates).eq('id', id).select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ scene: data })
-      }
-      if (req.method === 'DELETE' && id) {
-        await supabase.from('production_scenes').delete().eq('id', id)
-        return json({ ok: true })
       }
     }
 
