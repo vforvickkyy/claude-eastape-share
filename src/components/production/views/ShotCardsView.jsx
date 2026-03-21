@@ -259,12 +259,14 @@ function ShotCardMenu({ hasLinked, onOpen, onLink, onUnlink, onEdit, onDelete, o
 
 // ── Shot Card ─────────────────────────────────────────────────────────
 function ShotCard({ shot, status, stages, onOpen, onLink, onUnlink, onEdit, onDelete }) {
-  const [hovering, setHovering] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const pct       = pipelineCompletion(shot, stages)
-  const hasLinked = !!(shot.linked_media_id || shot.thumbnail_media_id)
-  const mediaName = shot.linked_media_name
-  const displayName = mediaName
+  const [hovering,   setHovering]   = useState(false)
+  const [menuOpen,   setMenuOpen]   = useState(false)
+  const [thumbError, setThumbError] = useState(false)
+  const pct          = pipelineCompletion(shot, stages)
+  const hasLinked    = !!(shot.linked_media_id || shot.thumbnail_media_id)
+  const hasThumbnail = !thumbError && !!shot.thumbnailUrl
+  const mediaName    = shot.linked_media_name
+  const displayName  = mediaName
     ? (mediaName.length > 22 ? mediaName.slice(0, 22) + '…' : mediaName)
     : ''
 
@@ -275,24 +277,36 @@ function ShotCard({ shot, status, stages, onOpen, onLink, onUnlink, onEdit, onDe
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {/* Always dark placeholder — no image loading */}
-      <div className="sc-thumb sc-thumb--empty">
-        <div className="sc-placeholder">
-          <FilmSlate size={36} weight="duotone" style={{ color: '#404050', opacity: 0.7 }} />
-          {hasLinked ? (
-            <span className="sc-filename">{displayName}</span>
-          ) : (
-            <>
-              <span className="sc-no-file">No file linked</span>
-              <button
-                className="sc-link-file-btn"
-                onClick={e => { e.stopPropagation(); onLink() }}
-              >
-                <Link size={11} /> Link File
-              </button>
-            </>
-          )}
-        </div>
+      <div className="sc-thumb sc-thumb--empty" style={{ position: 'relative' }}>
+        {hasThumbnail ? (
+          <img
+            src={shot.thumbnailUrl}
+            alt={mediaName || 'thumbnail'}
+            style={{
+              position: 'absolute', top: 0, left: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover',
+            }}
+            onError={() => setThumbError(true)}
+          />
+        ) : (
+          <div className="sc-placeholder">
+            <FilmSlate size={36} weight="duotone" style={{ color: '#404050', opacity: 0.7 }} />
+            {hasLinked ? (
+              <span className="sc-filename">{displayName}</span>
+            ) : (
+              <>
+                <span className="sc-no-file">No file linked</span>
+                <button
+                  className="sc-link-file-btn"
+                  onClick={e => { e.stopPropagation(); onLink() }}
+                >
+                  <Link size={11} /> Link File
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {hasLinked && hovering && <div className="sc-open-badge">▶ Open</div>}
         {shot.shot_number && <span className="sc-shot-num">#{shot.shot_number}</span>}
         {status && hasLinked && (
@@ -373,7 +387,7 @@ export default function ShotCardsView({
   })
   const [selectedShot, setSelectedShot] = useState(null)
   const [linkingShot,  setLinkingShot]  = useState(null)
-  const [bulkAddScene, setBulkAddScene] = useState(null)
+  const [bulkAddScene, setBulkAddScene] = useState(false)
   const [localShots,   setLocalShots]   = useState(shots)
 
   // Keep local shots in sync when parent updates
@@ -429,7 +443,7 @@ export default function ShotCardsView({
     onReload()
   }
 
-  // Optimistic update after linking — only mediaId and mediaName needed
+  // Optimistic update after linking
   function handleMediaLinked(data) {
     setLocalShots(prev => prev.map(shot =>
       shot.id === data.shotId
@@ -438,6 +452,7 @@ export default function ShotCardsView({
             thumbnail_media_id: data.mediaId,
             linked_media_id:    data.mediaId,
             linked_media_name:  data.mediaName,
+            thumbnailUrl:       data.thumbnailUrl || null,
           }
         : shot
     ))

@@ -75,8 +75,9 @@ export default function MediaBrowserModal({
       const mediaItem = media.find(m => m.id === selectedId)
       onLinked({
         shotId,
-        mediaId:   selectedId,
-        mediaName: mediaItem?.name || res.media_name || 'Linked file',
+        mediaId:      selectedId,
+        mediaName:    mediaItem?.name || res.media_name || 'Linked file',
+        thumbnailUrl: res.thumbnailUrl || mediaItem?.thumbnail_url || null,
       })
       onClose()
     } catch (e) {
