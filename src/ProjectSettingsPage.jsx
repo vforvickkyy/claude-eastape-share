@@ -10,7 +10,7 @@ const STATUS_OPTS = ["active", "completed", "on_hold", "archived"];
 export default function ProjectSettingsPage() {
   const navigate = useNavigate();
   const { id: projectId } = useParams();
-  const { project, isOwner, refetch } = useProject();
+  const { project, canManageSettings, refetch } = useProject();
 
   const [name,        setName]        = useState("");
   const [description, setDescription] = useState("");
@@ -63,7 +63,7 @@ export default function ProjectSettingsPage() {
     } catch { setDeleting(false); }
   }
 
-  if (!isOwner) {
+  if (!canManageSettings) {
     return (
       <div className="project-settings-tab">
         <p style={{ opacity: 0.5, padding: "24px 0" }}>Only the project owner can change settings.</p>

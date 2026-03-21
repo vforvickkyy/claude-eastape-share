@@ -51,7 +51,7 @@ function TypeIcon({ item, size = 18 }) {
 
 export default function ProjectFilesPage() {
   const { user } = useAuth();
-  const { isOwner } = useProject();
+  const { canEdit, canDelete, canDownload } = useProject();
   const navigate = useNavigate();
   const { id: projectId, folderId } = useParams();
 
@@ -269,11 +269,13 @@ export default function ProjectFilesPage() {
         <div className="ufiles-toolbar-right">
           <button className={`icon-btn ${view === "grid" ? "active" : ""}`} onClick={() => setView("grid")} title="Grid"><SquaresFour size={16} weight="duotone" /></button>
           <button className={`icon-btn ${view === "list" ? "active" : ""}`} onClick={() => setView("list")} title="List"><Rows size={16} weight="duotone" /></button>
-          <button className="icon-btn" onClick={() => setShowNewFolder(true)} title="New Folder"><FolderSimplePlus size={17} weight="duotone" /></button>
-          <button className="ufiles-upload-btn" onClick={() => setShowUpload(true)}>
-            <UploadSimple size={15} weight="bold" />
-            Upload
-          </button>
+          {canEdit && <button className="icon-btn" onClick={() => setShowNewFolder(true)} title="New Folder"><FolderSimplePlus size={17} weight="duotone" /></button>}
+          {canEdit && (
+            <button className="ufiles-upload-btn" onClick={() => setShowUpload(true)}>
+              <UploadSimple size={15} weight="bold" />
+              Upload
+            </button>
+          )}
         </div>
       </div>
 
@@ -294,7 +296,7 @@ export default function ProjectFilesPage() {
       {selected.size > 0 && (
         <div className="mpv-bulk-bar">
           <span>{selected.size} selected</span>
-          <button className="btn-danger-sm" onClick={handleBulkDelete}><Trash size={13} /> Delete</button>
+          {canDelete && <button className="btn-danger-sm" onClick={handleBulkDelete}><Trash size={13} /> Delete</button>}
           <button className="btn-ghost-sm" onClick={() => setSelected(new Set())}><X size={13} /> Clear</button>
         </div>
       )}
@@ -482,9 +484,9 @@ export default function ProjectFilesPage() {
                     <span>{item.file_size ? formatSize(item.file_size) : "—"}</span>
                     <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : "—"}</span>
                     <span style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-                      <button onClick={() => handleDownload(item)}><DownloadSimple size={14} /></button>
-                      <button onClick={() => { setRenameItem({ ...item, _type: "file" }); setRenameVal(item.name); }}><PencilSimple size={14} /></button>
-                      <button onClick={() => handleDelete(item)}><Trash size={14} /></button>
+                      {canDownload && <button onClick={() => handleDownload(item)}><DownloadSimple size={14} /></button>}
+                      {canEdit    && <button onClick={() => { setRenameItem({ ...item, _type: "file" }); setRenameVal(item.name); }}><PencilSimple size={14} /></button>}
+                      {canDelete  && <button onClick={() => handleDelete(item)}><Trash size={14} /></button>}
                     </span>
                   </div>
                 );
@@ -508,13 +510,19 @@ export default function ProjectFilesPage() {
               <button onClick={() => { navigate(`/projects/${projectId}/files/folder/${ctxMenu.item.id}`); closeCtx(); }}>
                 <FolderOpen size={13} /> Open
               </button>
-              <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "folder" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
-                <PencilSimple size={13} /> Rename
-              </button>
-              <div className="ctx-divider" />
-              <button className="danger" onClick={() => { handleFolderDelete(ctxMenu.item); closeCtx(); }}>
-                <Trash size={13} /> Delete
-              </button>
+              {canEdit && (
+                <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "folder" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
+                  <PencilSimple size={13} /> Rename
+                </button>
+              )}
+              {canDelete && (
+                <>
+                  <div className="ctx-divider" />
+                  <button className="danger" onClick={() => { handleFolderDelete(ctxMenu.item); closeCtx(); }}>
+                    <Trash size={13} /> Delete
+                  </button>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -523,13 +531,17 @@ export default function ProjectFilesPage() {
                   <Play size={13} /> Preview
                 </button>
               )}
-              <button onClick={() => { handleDownload(ctxMenu.item); closeCtx(); }}>
-                <DownloadSimple size={13} /> Download
-              </button>
-              <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "file" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
-                <PencilSimple size={13} /> Rename
-              </button>
-              {ctxMenu.item._source === "media" && (
+              {canDownload && (
+                <button onClick={() => { handleDownload(ctxMenu.item); closeCtx(); }}>
+                  <DownloadSimple size={13} /> Download
+                </button>
+              )}
+              {canEdit && (
+                <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "file" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
+                  <PencilSimple size={13} /> Rename
+                </button>
+              )}
+              {ctxMenu.item._source === "media" && canEdit && (
                 <>
                   <button onClick={() => handleCopyLink(ctxMenu.item)}>
                     {copied === ctxMenu.item.id ? <CheckCircle size={13} /> : <Copy size={13} />}
@@ -563,10 +575,14 @@ export default function ProjectFilesPage() {
                   </div>
                 </>
               )}
-              <div className="ctx-divider" />
-              <button className="danger" onClick={() => { handleDelete(ctxMenu.item); closeCtx(); }}>
-                <Trash size={13} /> Delete
-              </button>
+              {canDelete && (
+                <>
+                  <div className="ctx-divider" />
+                  <button className="danger" onClick={() => { handleDelete(ctxMenu.item); closeCtx(); }}>
+                    <Trash size={13} /> Delete
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

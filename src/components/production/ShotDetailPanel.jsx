@@ -37,7 +37,7 @@ export default function ShotDetailPanel({ shotId, statuses, scenes, onClose, onU
     try {
       const res = await productionApi.updateShot(shotId, fields)
       setShot(res.shot)
-      onUpdate(res.shot)
+      if (onUpdate) onUpdate(res.shot)
     } catch {}
     setSaving(false)
   }
@@ -76,13 +76,16 @@ export default function ShotDetailPanel({ shotId, statuses, scenes, onClose, onU
             className="shot-detail-title-input"
             value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
-            onBlur={() => editTitle.trim() && editTitle !== shot.title && save({ title: editTitle.trim() })}
+            onBlur={() => onUpdate && editTitle.trim() && editTitle !== shot.title && save({ title: editTitle.trim() })}
             onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+            readOnly={!onUpdate}
           />
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn-ghost danger" onClick={() => onDelete(shot.id)}>
-              <Trash size={14} />
-            </button>
+            {onDelete && (
+              <button className="btn-ghost danger" onClick={() => onDelete(shot.id)}>
+                <Trash size={14} />
+              </button>
+            )}
             <button className="icon-btn" onClick={onClose}><X size={16} /></button>
           </div>
         </div>
@@ -95,7 +98,8 @@ export default function ShotDetailPanel({ shotId, statuses, scenes, onClose, onU
               <select
                 className="input-field"
                 value={shot.status_id || ''}
-                onChange={e => save({ status_id: e.target.value || null })}
+                onChange={e => onUpdate && save({ status_id: e.target.value || null })}
+                disabled={!onUpdate}
               >
                 <option value="">No status</option>
                 {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -109,7 +113,8 @@ export default function ShotDetailPanel({ shotId, statuses, scenes, onClose, onU
             <select
               className="input-field"
               value={shot.scene_id || ''}
-              onChange={e => save({ scene_id: e.target.value || null })}
+              onChange={e => onUpdate && save({ scene_id: e.target.value || null })}
+              disabled={!onUpdate}
             >
               <option value="">Unassigned</option>
               {scenes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

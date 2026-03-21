@@ -239,7 +239,7 @@ function MemberCard({ member, isOwner, onUpdate, onRemove }) {
 // ── Main ──────────────────────────────────────────────────────────────
 export default function ProjectTeamPage() {
   const { id: projectId } = useParams()
-  const { isOwner }       = useProject()
+  const { canManageMembers: isOwner } = useProject()
 
   const [members,     setMembers]     = useState([])
   const [loading,     setLoading]     = useState(true)

@@ -223,6 +223,8 @@ export default function ShotListView({
   hiddenCols = {},
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload, onManageColumns,
 }) {
+  const canEdit   = !!onShotCreate
+  const canDelete = !!onShotDelete
   const navigate    = useNavigate()
   const collapseKey = `ets_list_collapse_${projectId}`
   const widthKey    = `list-widths-${projectId}`
@@ -463,7 +465,7 @@ export default function ShotListView({
                               </div>
                             </div>
                           )}
-                          {scene && (
+                          {scene && canEdit && (
                             <button
                               onClick={() => onShotCreate({ title: 'New Shot', scene_id: scene.id, position: groupShots.length })}
                               style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 12, cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}
@@ -616,8 +618,8 @@ export default function ShotListView({
         <ShotDetailPanel
           shotId={selectedShot.id} statuses={statuses} scenes={scenes}
           onClose={() => setSelectedShot(null)}
-          onUpdate={u => { onShotUpdate(u.id, u); setSelectedShot(u) }}
-          onDelete={id => { onShotDelete(id); setSelectedShot(null) }}
+          onUpdate={canEdit   ? u => { onShotUpdate(u.id, u); setSelectedShot(u) } : null}
+          onDelete={canDelete ? id => { onShotDelete(id); setSelectedShot(null) } : null}
         />
       )}
 

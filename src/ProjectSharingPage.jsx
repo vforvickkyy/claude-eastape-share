@@ -6,7 +6,7 @@ import { shareLinksApi } from "./lib/api";
 
 export default function ProjectSharingPage() {
   const { id: projectId } = useParams();
-  const { isOwner } = useProject();
+  const { canManageSharing } = useProject();
 
   const [links,     setLinks]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -92,7 +92,7 @@ export default function ProjectSharingPage() {
                 <button title="Copy link" onClick={() => copyLink(link)}>
                   {copied === link.id ? <CheckCircle size={15} /> : <Copy size={15} />}
                 </button>
-                {isOwner && (
+                {canManageSharing && (
                   <button title="Revoke" onClick={() => handleDelete(link.id)}>
                     <Trash size={15} />
                   </button>
@@ -103,7 +103,7 @@ export default function ProjectSharingPage() {
         </div>
       )}
 
-      {isOwner && (
+      {canManageSharing && (
         <div className="sharing-create-section">
           <h3 className="tab-section-title">Create Share Link</h3>
           <form onSubmit={handleCreate} className="sharing-create-form">

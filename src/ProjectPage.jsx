@@ -25,7 +25,7 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
-  const { project, loading: projLoading } = useProject();
+  const { project, loading: projLoading, canManageSettings, canManageSharing } = useProject();
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login", { replace: true });
@@ -67,7 +67,11 @@ export default function ProjectPage() {
 
         {/* Tab nav */}
         <div className="project-tabs">
-          {TABS.map(tab => (
+          {TABS.filter(tab => {
+            if (tab.path === 'settings') return canManageSettings;
+            if (tab.path === 'sharing')  return canManageSharing;
+            return true;
+          }).map(tab => (
             <NavLink
               key={tab.path}
               to={`/projects/${id}/${tab.path}`}

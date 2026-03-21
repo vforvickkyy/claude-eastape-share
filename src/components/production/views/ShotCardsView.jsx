@@ -49,7 +49,7 @@ function nextShotNumber(groupShots, scene) {
 }
 
 // ── Scene Menu ───────────────────────────────────────────────────────
-function SceneMenu({ scene, onEdit, onBulkAdd, onDelete, onClose }) {
+function SceneMenu({ scene, canEdit, canDelete, onEdit, onBulkAdd, onDelete, onClose }) {
   const ref = useRef()
   useEffect(() => {
     function h(e) { if (!ref.current?.contains(e.target)) onClose() }
@@ -59,23 +59,31 @@ function SceneMenu({ scene, onEdit, onBulkAdd, onDelete, onClose }) {
 
   return (
     <div className="scg-menu" ref={ref}>
-      <button className="scg-menu-item" onClick={() => { onEdit(); onClose() }}>
-        <Pencil size={13} /> Edit Scene Name
-      </button>
-      <button className="scg-menu-item" onClick={() => { onBulkAdd(); onClose() }}>
-        Bulk Add Shots
-      </button>
-      <div className="scg-menu-sep" />
-      <button className="scg-menu-item scg-menu-item--danger" onClick={() => { onDelete(); onClose() }}>
-        <Trash size={13} /> Delete Scene
-      </button>
+      {canEdit && (
+        <button className="scg-menu-item" onClick={() => { onEdit(); onClose() }}>
+          <Pencil size={13} /> Edit Scene Name
+        </button>
+      )}
+      {canEdit && (
+        <button className="scg-menu-item" onClick={() => { onBulkAdd(); onClose() }}>
+          Bulk Add Shots
+        </button>
+      )}
+      {canDelete && (
+        <>
+          <div className="scg-menu-sep" />
+          <button className="scg-menu-item scg-menu-item--danger" onClick={() => { onDelete(); onClose() }}>
+            <Trash size={13} /> Delete Scene
+          </button>
+        </>
+      )}
     </div>
   )
 }
 
 // ── Scene Group Header ────────────────────────────────────────────────
 function SceneGroupHeader({
-  scene, shots, stages, color, collapsed,
+  scene, shots, stages, color, collapsed, canEdit, canDelete,
   onToggle, onBulkAdd, onEdit, onDelete,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -130,7 +138,7 @@ function SceneGroupHeader({
             <span className="scg-progress-pct" style={{ color: completionColor(pct) }}>{pct}%</span>
           </div>
         )}
-        {scene && (
+        {scene && canEdit && (
           <button
             onClick={onBulkAdd}
             style={{
@@ -145,7 +153,7 @@ function SceneGroupHeader({
             Bulk Add
           </button>
         )}
-        {scene && (
+        {scene && (canEdit || canDelete) && (
           <div style={{ position: 'relative' }}>
             <button className="scg-menu-trigger" onClick={() => setMenuOpen(v => !v)}>
               <DotsThree size={16} weight="bold" />
@@ -153,6 +161,8 @@ function SceneGroupHeader({
             {menuOpen && (
               <SceneMenu
                 scene={scene}
+                canEdit={canEdit}
+                canDelete={canDelete}
                 onEdit={() => setEditing(true)}
                 onBulkAdd={onBulkAdd}
                 onDelete={onDelete}
@@ -222,7 +232,7 @@ function QuickAddCard({ scene, sceneShots, onCreate }) {
 }
 
 // ── Shot Card Context Menu ─────────────────────────────────────────────
-function ShotCardMenu({ hasLinked, onOpen, onLink, onUnlink, onEdit, onDelete, onClose }) {
+function ShotCardMenu({ hasLinked, canEdit, canDelete, onOpen, onLink, onUnlink, onEdit, onDelete, onClose }) {
   const ref = useRef()
   useEffect(() => {
     function h(e) { if (!ref.current?.contains(e.target)) onClose() }
@@ -254,18 +264,22 @@ function ShotCardMenu({ hasLinked, onOpen, onLink, onUnlink, onEdit, onDelete, o
           <div className="sc-card-menu-sep" />
         </>
       )}
-      <button className="sc-card-menu-item" onClick={() => { onEdit(); onClose() }}>
-        <Pencil size={12} /> Edit Shot
-      </button>
-      <button className="sc-card-menu-item sc-card-menu-item--danger" onClick={() => { onDelete(); onClose() }}>
-        <Trash size={12} /> Delete Shot
-      </button>
+      {canEdit && (
+        <button className="sc-card-menu-item" onClick={() => { onEdit(); onClose() }}>
+          <Pencil size={12} /> Edit Shot
+        </button>
+      )}
+      {canDelete && (
+        <button className="sc-card-menu-item sc-card-menu-item--danger" onClick={() => { onDelete(); onClose() }}>
+          <Trash size={12} /> Delete Shot
+        </button>
+      )}
     </div>
   )
 }
 
 // ── Shot Card ─────────────────────────────────────────────────────────
-function ShotCard({ shot, thumbnailUrl, status, stages, onOpen, onLink, onUnlink, onEdit, onDelete }) {
+function ShotCard({ shot, thumbnailUrl, status, stages, canEdit, canDelete, onOpen, onLink, onUnlink, onEdit, onDelete }) {
   const [hovering,   setHovering]   = useState(false)
   const [menuOpen,   setMenuOpen]   = useState(false)
   const [thumbError, setThumbError] = useState(false)
@@ -324,6 +338,7 @@ function ShotCard({ shot, thumbnailUrl, status, stages, onOpen, onLink, onUnlink
       </div>
 
       {/* Three-dot context menu */}
+      {(canEdit || canDelete) && (
       <div className="sc-card-menu-wrap">
         <button
           className="sc-card-menu-btn"
@@ -335,6 +350,8 @@ function ShotCard({ shot, thumbnailUrl, status, stages, onOpen, onLink, onUnlink
         {menuOpen && (
           <ShotCardMenu
             hasLinked={hasLinked}
+            canEdit={canEdit}
+            canDelete={canDelete}
             onOpen={onOpen}
             onLink={onLink}
             onUnlink={onUnlink}
@@ -344,6 +361,7 @@ function ShotCard({ shot, thumbnailUrl, status, stages, onOpen, onLink, onUnlink
           />
         )}
       </div>
+      )}
 
       {/* Body */}
       <div className="sc-body">
@@ -386,6 +404,8 @@ export default function ShotCardsView({
   projectId, statuses, scenes, stages, shots, columns,
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
 }) {
+  const canEdit   = !!onShotCreate
+  const canDelete = !!onShotDelete
   const navigate   = useNavigate()
   const collapseKey = `ets_scene_collapse_${projectId}`
 
@@ -546,6 +566,8 @@ export default function ShotCardsView({
                 stages={stages}
                 color={color}
                 collapsed={isCollapsed}
+                canEdit={canEdit}
+                canDelete={canDelete}
                 onToggle={() => toggleCollapse(sceneId)}
                 onBulkAdd={() => setBulkAddScene(scene)}
                 onEdit={newName => scene && handleEditScene(scene, newName)}
@@ -564,6 +586,8 @@ export default function ShotCardsView({
                         thumbnailUrl={mediaThumbs[shot.thumbnail_media_id] || null}
                         status={status}
                         stages={stages}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
                         onOpen={() => navigate(
                           `/projects/${projectId}/media/${linkedId}`,
                           { state: { from: 'manage' } }
@@ -575,11 +599,13 @@ export default function ShotCardsView({
                       />
                     )
                   })}
-                  <QuickAddCard
-                    scene={scene}
-                    sceneShots={groupShots}
-                    onCreate={handleQuickCreate}
-                  />
+                  {canEdit && (
+                    <QuickAddCard
+                      scene={scene}
+                      sceneShots={groupShots}
+                      onCreate={handleQuickCreate}
+                    />
+                  )}
                 </div>
               )}
 
@@ -595,15 +621,17 @@ export default function ShotCardsView({
           )
         })}
 
-        <button
-          className="scg-add-scene-btn"
-          onClick={() => {
-            const name = window.prompt('Scene name:')
-            if (name?.trim()) onSceneCreate(name.trim())
-          }}
-        >
-          <PlusCircle size={16} weight="duotone" /> Add Scene
-        </button>
+        {canEdit && (
+          <button
+            className="scg-add-scene-btn"
+            onClick={() => {
+              const name = window.prompt('Scene name:')
+              if (name?.trim()) onSceneCreate(name.trim())
+            }}
+          >
+            <PlusCircle size={16} weight="duotone" /> Add Scene
+          </button>
+        )}
       </div>
 
       {selectedShot && (
@@ -612,8 +640,8 @@ export default function ShotCardsView({
           statuses={statuses}
           scenes={scenes}
           onClose={() => setSelectedShot(null)}
-          onUpdate={updatedShot => { onShotUpdate(updatedShot.id, updatedShot); setSelectedShot(updatedShot) }}
-          onDelete={id => { onShotDelete(id); setSelectedShot(null) }}
+          onUpdate={canEdit   ? updatedShot => { onShotUpdate(updatedShot.id, updatedShot); setSelectedShot(updatedShot) } : null}
+          onDelete={canDelete ? id => { onShotDelete(id); setSelectedShot(null) } : null}
         />
       )}
 

@@ -453,6 +453,8 @@ export default function PipelineView({
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload,
   onManageStages,
 }) {
+  const canEdit   = !!onShotUpdate
+  const canDelete = !!onShotDelete
   const [selectedShot, setSelectedShot] = useState(null)
   const [localShots,   setLocalShots]   = useState(shots)
   const [stages,       setStages]       = useState(initialStages)
@@ -586,8 +588,8 @@ export default function PipelineView({
         <ShotDetailPanel
           shotId={selectedShot.id} statuses={statuses} scenes={scenes}
           onClose={() => setSelectedShot(null)}
-          onUpdate={u => { onShotUpdate(u.id, u); setSelectedShot(u) }}
-          onDelete={id => { onShotDelete(id); setSelectedShot(null) }}
+          onUpdate={canEdit   ? u => { onShotUpdate(u.id, u); setSelectedShot(u) } : null}
+          onDelete={canDelete ? id => { onShotDelete(id); setSelectedShot(null) } : null}
         />
       )}
     </>

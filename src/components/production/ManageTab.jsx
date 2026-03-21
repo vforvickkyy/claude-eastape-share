@@ -26,7 +26,7 @@ const VIEWS = [
 
 export default function ManageTab() {
   const { id: projectId }         = useParams()
-  const { project, refetch }      = useProject()
+  const { project, refetch, canEdit, canDelete } = useProject()
 
   const [view,            setView]            = useState(null)
   const [statuses,        setStatuses]        = useState([])
@@ -175,10 +175,12 @@ export default function ManageTab() {
   const sharedProps = {
     projectId, statuses, scenes, stages, columns, shots,
     teamMembers,
-    onShotCreate:  createShot,
-    onShotUpdate:  updateShot,
-    onShotDelete:  deleteShot,
-    onSceneCreate: createScene,
+    canEdit,
+    canDelete,
+    onShotCreate:  canEdit  ? createShot  : null,
+    onShotUpdate:  canEdit  ? updateShot  : null,
+    onShotDelete:  canDelete ? deleteShot : null,
+    onSceneCreate: canEdit  ? createScene : null,
     onReload:      load,
   }
 
@@ -201,14 +203,16 @@ export default function ManageTab() {
           ))}
         </div>
         <div className="manage-toolbar-right">
-          {(activeView === 'cards' || activeView === 'pipeline') && (
+          {canEdit && (activeView === 'cards' || activeView === 'pipeline') && (
             <button className="btn-ghost" onClick={() => setShowStageMgr(true)}>
               <Gear size={14} /> Stages
             </button>
           )}
-          <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
-            <SlidersHorizontal size={14} /> Columns
-          </button>
+          {canEdit && (
+            <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
+              <SlidersHorizontal size={14} /> Columns
+            </button>
+          )}
         </div>
       </div>
 
