@@ -7,7 +7,7 @@ import {
 import ShotDetailPanel from '../ShotDetailPanel'
 import MediaBrowserModal from '../MediaBrowserModal'
 import BulkAddShotsModal from '../BulkAddShotsModal'
-import { productionApi } from '../../../lib/api'
+import { productionApi, projectMediaApi } from '../../../lib/api'
 
 const SCENE_COLORS = [
   '#6366f1','#3b82f6','#06b6d4','#10b981',
@@ -258,13 +258,13 @@ function ShotCardMenu({ hasLinked, onOpen, onLink, onUnlink, onEdit, onDelete, o
 }
 
 // ── Shot Card ─────────────────────────────────────────────────────────
-function ShotCard({ shot, status, stages, onOpen, onLink, onUnlink, onEdit, onDelete }) {
+function ShotCard({ shot, thumbnailUrl, status, stages, onOpen, onLink, onUnlink, onEdit, onDelete }) {
   const [hovering,   setHovering]   = useState(false)
   const [menuOpen,   setMenuOpen]   = useState(false)
   const [thumbError, setThumbError] = useState(false)
   const pct          = pipelineCompletion(shot, stages)
   const hasLinked    = !!(shot.linked_media_id || shot.thumbnail_media_id)
-  const hasThumbnail = !thumbError && !!shot.thumbnailUrl
+  const hasThumbnail = !thumbError && !!thumbnailUrl
   const mediaName    = shot.linked_media_name
   const displayName  = mediaName
     ? (mediaName.length > 22 ? mediaName.slice(0, 22) + '…' : mediaName)
@@ -280,7 +280,7 @@ function ShotCard({ shot, status, stages, onOpen, onLink, onUnlink, onEdit, onDe
       <div className="sc-thumb sc-thumb--empty" style={{ position: 'relative' }}>
         {hasThumbnail ? (
           <img
-            src={shot.thumbnailUrl}
+            src={thumbnailUrl}
             alt={mediaName || 'thumbnail'}
             style={{
               position: 'absolute', top: 0, left: 0,
@@ -389,9 +389,23 @@ export default function ShotCardsView({
   const [linkingShot,  setLinkingShot]  = useState(null)
   const [bulkAddScene, setBulkAddScene] = useState(false)
   const [localShots,   setLocalShots]   = useState(shots)
+  const [mediaThumbs,  setMediaThumbs]  = useState({})
 
   // Keep local shots in sync when parent updates
   useEffect(() => { setLocalShots(shots) }, [shots])
+
+  // Load thumbnail URLs for all project media — same method as Files tab
+  useEffect(() => {
+    projectMediaApi.list({ projectId })
+      .then(d => {
+        const map = {}
+        for (const a of (d.assets || [])) {
+          if (a.thumbnailUrl) map[a.id] = a.thumbnailUrl
+        }
+        setMediaThumbs(map)
+      })
+      .catch(() => {})
+  }, [projectId])
 
   function toggleCollapse(sceneId) {
     setCollapsed(prev => {
@@ -452,7 +466,6 @@ export default function ShotCardsView({
             thumbnail_media_id: data.mediaId,
             linked_media_id:    data.mediaId,
             linked_media_name:  data.mediaName,
-            thumbnailUrl:       data.thumbnailUrl || null,
           }
         : shot
     ))
@@ -522,6 +535,7 @@ export default function ShotCardsView({
                       <ShotCard
                         key={shot.id}
                         shot={shot}
+                        thumbnailUrl={mediaThumbs[shot.thumbnail_media_id] || null}
                         status={status}
                         stages={stages}
                         onOpen={() => navigate(
