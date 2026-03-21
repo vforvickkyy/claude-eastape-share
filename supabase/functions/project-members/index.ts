@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
       }
       const { data: members, error } = await supabase
         .from('project_members')
-        .select('*, profiles:user_id(full_name, avatar_url, email)')
+        .select('*, profiles:user_id(full_name, avatar_url)')
         .eq('project_id', projectId)
         .order('created_at', { ascending: true })
       if (error) return json({ error: error.message }, 500)
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
         insertData.accepted      = !!profile?.id
       }
 
-      const { data: member, error } = await supabase.from('project_members').insert(insertData).select('*, profiles:user_id(full_name, avatar_url, email)').single()
+      const { data: member, error } = await supabase.from('project_members').insert(insertData).select('*').single()
       if (error) return json({ error: error.message }, 500)
 
       if (!is_manual) {
@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
       if (body.display_name !== undefined) updates.display_name = body.display_name
       if (body.position     !== undefined) updates.position     = body.position
 
-      const { data: updated, error } = await supabase.from('project_members').update(updates).eq('id', memberId).select('*, profiles:user_id(full_name, avatar_url, email)').single()
+      const { data: updated, error } = await supabase.from('project_members').update(updates).eq('id', memberId).select('*').single()
       if (error) return json({ error: error.message }, 500)
       return json({ member: updated })
     }
