@@ -6,7 +6,7 @@ import {
   Scales, CloudArrowUp, Plus, Briefcase,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
-import { projectsApi } from "./lib/api";
+import { projectsApi, userApi } from "./lib/api";
 
 export default function DashboardLayout({ children, title }) {
   const { user, logout, loading } = useAuth();
@@ -17,13 +17,15 @@ export default function DashboardLayout({ children, title }) {
   const [projectsOpen,  setProjectsOpen]  = useState(true);
   const [settOpen,      setSettOpen]      = useState(false);
   const [recentProjects, setRecentProjects] = useState([]);
+  const [username,       setUsername]      = useState(null);
   const menuRef = useRef(null);
   const settRef = useRef(null);
 
-  // Fetch recent projects for sidebar
+  // Fetch recent projects and username for sidebar
   useEffect(() => {
     if (!user) return;
     projectsApi.list({ limit: 5 }).then(d => setRecentProjects(d.projects || [])).catch(() => {});
+    userApi.getProfile().then(d => setUsername(d.username || null)).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -213,8 +215,14 @@ export default function DashboardLayout({ children, title }) {
                 ? <img src={avatarUrl} alt={initial} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
                 : <span>{initial}</span>}
             </div>
-            <span className="db-settings-name">{displayName}</span>
-            <Gear size={15} weight="duotone" style={{ marginLeft: "auto", opacity: 0.5 }} />
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+              <span className="db-settings-name">{displayName}</span>
+              {username
+                ? <span style={{ fontSize: 11, color: "var(--t3)", lineHeight: 1 }}>@{username}</span>
+                : <span style={{ fontSize: 11, color: "var(--accent)", lineHeight: 1, opacity: 0.8 }} onClick={e => { e.stopPropagation(); navigate("/profile"); }}>Set username →</span>
+              }
+            </div>
+            <Gear size={15} weight="duotone" style={{ marginLeft: "auto", opacity: 0.5, flexShrink: 0 }} />
           </button>
         </div>
       </aside>
@@ -247,6 +255,7 @@ export default function DashboardLayout({ children, title }) {
               {dropOpen && (
                 <div className="user-dropdown">
                   <div className="dropdown-info">
+                    {username && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--t1)" }}>@{username}</span>}
                     <span className="dropdown-email">{user.email}</span>
                   </div>
                   <button

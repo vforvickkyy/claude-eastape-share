@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Camera, Trash, User, Buildings, EnvelopeSimple, Lock,
-  CheckCircle, Warning, Eye, EyeSlash, FloppyDisk,
+  CheckCircle, Warning, Eye, EyeSlash, FloppyDisk, At,
+  Spinner, XCircle, Info,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { usePlan } from "./context/PlanContext";
 import DashboardLayout from "./DashboardLayout";
 import { userApiFetch, formatSize } from "./lib/userApi";
+import { userApi } from "./lib/api";
 
 /* ─── tiny helpers ─── */
 function Section({ title, description, children }) {
@@ -58,10 +60,18 @@ export default function ProfilePage() {
     if (!authLoading && !user) navigate("/login", { replace: true });
   }, [user, authLoading]);
 
-  const [profile, setProfile] = useState(null);
-  const [toast, setToast]     = useState(null); // { type: "success"|"error", message }
+  const [profile, setProfile]             = useState(null);
+  const [toast, setToast]                 = useState(null); // { type: "success"|"error", message }
+  const [usernameBannerDismissed, setUsernameBannerDismissed] = useState(
+    () => localStorage.getItem("username-banner-dismissed") === "1"
+  );
 
   function notify(type, message) { setToast({ type, message }); }
+
+  function dismissUsernameBanner() {
+    localStorage.setItem("username-banner-dismissed", "1");
+    setUsernameBannerDismissed(true);
+  }
 
   // Load fresh profile data from server
   useEffect(() => {
@@ -74,6 +84,7 @@ export default function ProfilePage() {
         company: user.user_metadata?.company || "",
         avatarUrl: user.user_metadata?.avatar_url || null,
         createdAt: user.created_at,
+        username: null,
       }));
   }, [user]);
 
@@ -83,11 +94,26 @@ export default function ProfilePage() {
     </DashboardLayout>
   );
 
+  const showUsernameBanner = profile && !profile.username && !usernameBannerDismissed;
+
   return (
     <DashboardLayout title="Profile Settings">
       <div className="profile-wrap">
         {toast && (
           <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />
+        )}
+
+        {showUsernameBanner && (
+          <div className="username-banner">
+            <Info size={16} weight="fill" />
+            <span>Set a username so others can find and mention you — it only takes a second.</span>
+            <button className="btn-primary-sm" style={{ marginLeft: "auto" }} onClick={() => {
+              document.getElementById("username-field")?.focus();
+            }}>Set Username</button>
+            <button className="username-banner-close" onClick={dismissUsernameBanner} title="Dismiss">
+              <XCircle size={16} />
+            </button>
+          </div>
         )}
 
         <AvatarSection
@@ -196,6 +222,59 @@ function PersonalInfoSection({ profile, onUpdate, notify }) {
   const [company, setCompany] = useState(profile.company || "");
   const [saving, setSaving]   = useState(false);
 
+  // Username state
+  const [username, setUsername]         = useState(profile.username || "");
+  const [unameStatus, setUnameStatus]   = useState(null); // null | 'checking' | 'available' | 'taken' | 'invalid' | 'cooldown' | 'reserved'
+  const [unameMsg, setUnameMsg]         = useState("");
+  const [savingUname, setSavingUname]   = useState(false);
+  const debounceRef = useRef(null);
+
+  function handleUsernameChange(e) {
+    const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    setUsername(val);
+    setUnameStatus(null);
+    setUnameMsg("");
+    clearTimeout(debounceRef.current);
+    if (!val) return;
+    if (val.length < 3 || val.length > 20) {
+      setUnameStatus("invalid");
+      setUnameMsg("3–20 characters required.");
+      return;
+    }
+    setUnameStatus("checking");
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await userApi.checkUsername(val);
+        if (res.available) { setUnameStatus("available"); setUnameMsg("Available!"); }
+        else if (res.reason === "reserved") { setUnameStatus("reserved"); setUnameMsg("That username is reserved."); }
+        else { setUnameStatus("taken"); setUnameMsg("Already taken."); }
+      } catch { setUnameStatus(null); }
+    }, 600);
+  }
+
+  async function handleSaveUsername(e) {
+    e.preventDefault();
+    setSavingUname(true);
+    try {
+      const data = await userApiFetch("/api/user/profile", {
+        method: "PUT",
+        body: JSON.stringify({ action: "username", username }),
+      });
+      onUpdate({ username: data.username });
+      setUnameStatus("available");
+      setUnameMsg("Saved!");
+      notify("success", `Username set to @${data.username}`);
+    } catch (err) {
+      const msg = err.message || "Save failed.";
+      if (msg.includes("day")) setUnameStatus("cooldown");
+      else setUnameStatus("taken");
+      setUnameMsg(msg);
+      notify("error", msg);
+    } finally {
+      setSavingUname(false);
+    }
+  }
+
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true);
@@ -213,8 +292,12 @@ function PersonalInfoSection({ profile, onUpdate, notify }) {
     }
   }
 
+  const unameColor = { available: "#22c55e", taken: "#ef4444", invalid: "#f59e0b", reserved: "#f59e0b", cooldown: "#60a5fa", checking: "var(--t3)" }[unameStatus] || "var(--t3)";
+  const unameIcon  = { available: <CheckCircle size={14} />, taken: <XCircle size={14} />, invalid: <Warning size={14} />, reserved: <Warning size={14} />, cooldown: <Info size={14} />, checking: <Spinner size={14} className="spinner-icon" /> }[unameStatus];
+  const canSaveUname = unameStatus === "available" && username.length >= 3 && username !== (profile.username || "");
+
   return (
-    <Section title="Personal Information" description="Update your name and company details.">
+    <Section title="Personal Information" description="Update your name, username, and company details.">
       <form className="profile-form" onSubmit={handleSave}>
         <Field label="Full Name" icon={<User size={15} />}>
           <input
@@ -226,6 +309,48 @@ function PersonalInfoSection({ profile, onUpdate, notify }) {
             maxLength={120}
           />
         </Field>
+
+        {/* Username field */}
+        <div className="form-group">
+          <label className="form-label">Username</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="form-input-wrap" style={{ flex: 1, position: "relative" }}>
+              <span className="form-icon"><At size={15} /></span>
+              <input
+                id="username-field"
+                className="form-input"
+                type="text"
+                placeholder="yourhandle"
+                value={username}
+                onChange={handleUsernameChange}
+                maxLength={20}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+              />
+              <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--t3)" }}>
+                {username.length}/20
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn-primary-sm"
+              disabled={savingUname || !canSaveUname}
+              onClick={handleSaveUsername}
+            >
+              {savingUname ? <><span className="spinner" /> Saving…</> : "Save"}
+            </button>
+          </div>
+          {unameStatus && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5, fontSize: 12, color: unameColor }}>
+              {unameIcon} {unameMsg}
+            </div>
+          )}
+          <p className="profile-hint" style={{ marginTop: 4 }}>
+            Lowercase letters, numbers, underscores only. Can be changed once every 30 days.
+          </p>
+        </div>
+
         <Field label="Company / Organisation" icon={<Buildings size={15} />}>
           <input
             className="form-input"
