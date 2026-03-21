@@ -265,9 +265,10 @@ Deno.serve(async (req) => {
 
     // ── PIPELINE STAGES ──────────────────────────────────────────────
     if (resource === 'pipeline_stages') {
-      if (!projectId) return json({ error: 'project_id required' }, 400)
-      if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+      // GET: project_id required
       if (req.method === 'GET') {
+        if (!projectId) return json({ error: 'project_id required' }, 400)
+        if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
         const showHidden = url.searchParams.get('show_hidden') === 'true'
         let q = supabase.from('pipeline_stages').select('*').eq('project_id', projectId).order('order_index')
         if (!showHidden) q = q.eq('is_hidden', false)
@@ -275,8 +276,12 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 500)
         return json({ stages: data })
       }
-      if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
+
+      // POST: project_id required
       if (req.method === 'POST') {
+        if (!projectId) return json({ error: 'project_id required' }, 400)
+        if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+        if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
         const body = await req.json()
         const { data, error } = await supabase.from('pipeline_stages')
           .insert({
@@ -291,25 +296,25 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 500)
         return json({ stage: data }, 201)
       }
-      if (req.method === 'PUT' && id) {
-        const body = await req.json()
-        const allowed = ['name', 'color', 'order_index', 'is_final_stage', 'cell_type', 'status_options', 'is_hidden', 'width']
-        const updates: Record<string, unknown> = {}
-        for (const k of allowed) if (k in body) updates[k] = body[k]
-        const { data, error } = await supabase.from('pipeline_stages').update(updates).eq('id', id).select().single()
-        if (error) return json({ error: error.message }, 500)
-        return json({ stage: data })
-      }
+
+      // PATCH: reorder (needs project_id) or update single by id
       if (req.method === 'PATCH') {
         const body = await req.json()
         if (body.reorder && Array.isArray(body.items)) {
+          if (!projectId) return json({ error: 'project_id required' }, 400)
+          if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
+          if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
           for (const item of body.items) {
             await supabase.from('pipeline_stages').update({ order_index: item.order_index }).eq('id', item.id)
           }
           return json({ ok: true })
         }
+        // Update single stage — look up project_id from stage id
         const patchId = id || body.id
         if (patchId) {
+          const { data: stg } = await supabase.from('pipeline_stages').select('project_id').eq('id', patchId).single()
+          if (!stg) return json({ error: 'Not found' }, 404)
+          if (!(await isOwner(stg.project_id))) return json({ error: 'Forbidden' }, 403)
           const allowed = ['name', 'color', 'order_index', 'is_final_stage', 'cell_type', 'status_options', 'is_hidden', 'width']
           const updates: Record<string, unknown> = {}
           for (const k of allowed) if (k in body) updates[k] = body[k]
@@ -318,24 +323,29 @@ Deno.serve(async (req) => {
           return json({ stage: data })
         }
       }
+
+      // PUT: update single stage by id — look up project_id from stage
+      if (req.method === 'PUT' && id) {
+        const { data: stg } = await supabase.from('pipeline_stages').select('project_id').eq('id', id).single()
+        if (!stg) return json({ error: 'Not found' }, 404)
+        if (!(await isOwner(stg.project_id))) return json({ error: 'Forbidden' }, 403)
+        const body = await req.json()
+        const allowed = ['name', 'color', 'order_index', 'is_final_stage', 'cell_type', 'status_options', 'is_hidden', 'width']
+        const updates: Record<string, unknown> = {}
+        for (const k of allowed) if (k in body) updates[k] = body[k]
+        const { data, error } = await supabase.from('pipeline_stages').update(updates).eq('id', id).select().single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ stage: data })
+      }
+
+      // DELETE: look up project_id from stage id
       if (req.method === 'DELETE' && id) {
-        const body = req.headers.get('content-type')?.includes('application/json')
-          ? await req.json().catch(() => ({}))
-          : {}
-        const permanent = body.permanent !== false // default to permanent deletion
-        if (!permanent) {
-          // Just hide the stage
-          const { data, error } = await supabase.from('pipeline_stages')
-            .update({ is_hidden: true }).eq('id', id).select().single()
-          if (error) return json({ error: error.message }, 500)
-          return json({ stage: data, hidden: true })
-        }
-        // Permanent delete: get stage name first to clean shot data
         const { data: stage } = await supabase.from('pipeline_stages').select('name, project_id').eq('id', id).single()
+        if (!stage) return json({ error: 'Not found' }, 404)
+        if (!(await isOwner(stage.project_id))) return json({ error: 'Forbidden' }, 403)
         await supabase.from('pipeline_stages').delete().eq('id', id)
+        // Clean stage key from all shots in the project
         if (stage?.name) {
-          // Remove this stage key from all shots in the project using raw SQL via RPC isn't available,
-          // so we fetch and update affected shots
           const { data: affectedShots } = await supabase.from('production_shots')
             .select('id, pipeline_stages')
             .eq('project_id', stage.project_id)
