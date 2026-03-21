@@ -99,8 +99,13 @@ export default function ColumnManager({ projectId, columns, onClose, onSaved }) 
           </div>
         </div>
 
-        <div className="modal-actions">
-          <button className="btn-ghost" onClick={onClose}>Close</button>
+        <div style={{ padding: '8px 16px 16px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 24px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>

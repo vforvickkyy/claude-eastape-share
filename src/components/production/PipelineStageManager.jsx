@@ -115,13 +115,23 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
   const orig = useRef({ name: stage.name, color: stage.color || '#6366f1', type: stage.cell_type || 'checkbox' })
   const dirty = name !== orig.current.name || color !== orig.current.color || type !== orig.current.type
 
-  async function save() {
-    if (!name.trim() || saving) return
+  async function save(overrides = {}) {
+    const n = overrides.name ?? name
+    const c = overrides.color ?? color
+    const t = overrides.type ?? type
+    const s = overrides.sopts ?? sopts
+    if (!n.trim() || saving) return
     setSaving(true)
     try {
-      await onUpdate(stage.id, { name: name.trim(), color, cell_type: type, status_options: type === 'status' ? sopts : [] })
-      orig.current = { name: name.trim(), color, type }
+      await onUpdate(stage.id, { name: n.trim(), color: c, cell_type: t, status_options: t === 'status' ? s : [] })
+      orig.current = { name: n.trim(), color: c, type: t }
     } finally { setSaving(false) }
+  }
+
+  async function handleTypeChange(newType) {
+    setType(newType)
+    // auto-save immediately so the change persists without needing to click Save
+    await save({ type: newType })
   }
 
   if (confirmDel) return (
@@ -172,7 +182,7 @@ function ActiveStageRow({ stage, onHide, onDelete, onUpdate, isDragging, isOver,
 
         <select
           value={type}
-          onChange={e => setType(e.target.value)}
+          onChange={e => handleTypeChange(e.target.value)}
           style={{
             background: '#1e1e30', border: '1px solid #333', borderRadius: 6,
             color: '#aaa', fontSize: 11, padding: '3px 6px', cursor: 'pointer', flexShrink: 0,

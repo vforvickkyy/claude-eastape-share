@@ -45,19 +45,34 @@ function PercentageCell({ shot, stage, onUpdate, width }) {
 
 // ── Checkbox Cell ─────────────────────────────────────────────────────
 function CheckboxCell({ shot, stage, onUpdate, width }) {
+  const [hover, setHover] = useState(false)
   const val    = shot.pipeline_stages?.[stage.name]
   const isDone = val === true || val === 1 || val === 100
+  const stageColor = stage.color || '#10b981'
+
   return (
     <td
-      className="pv-cell pv-cell--checkbox"
-      style={{ width, background: isDone ? 'rgba(16,185,129,0.10)' : undefined, cursor: 'pointer' }}
+      style={{
+        width, textAlign: 'center', verticalAlign: 'middle',
+        background: isDone ? stageColor + '18' : hover ? 'rgba(255,255,255,0.03)' : undefined,
+        cursor: 'pointer', transition: 'background 0.15s',
+        padding: 0,
+      }}
       onClick={() => onUpdate(shot.id, stage.name, !isDone)}
-      title={isDone ? 'Mark not done' : 'Mark done'}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={isDone ? 'Click to uncheck' : 'Click to check'}
     >
-      {isDone
-        ? <div className="pv-checkbox pv-checkbox--checked"><Check size={14} weight="bold" style={{ color: '#fff' }} /></div>
-        : <div className="pv-checkbox pv-checkbox--empty" />
-      }
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 22, height: 22, borderRadius: 6,
+        background: isDone ? stageColor : 'transparent',
+        border: `2px solid ${isDone ? stageColor : hover ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}`,
+        transition: 'all 0.15s',
+        boxShadow: isDone ? `0 0 8px ${stageColor}55` : 'none',
+      }}>
+        {isDone && <Check size={13} weight="bold" style={{ color: '#fff' }} />}
+      </div>
     </td>
   )
 }
