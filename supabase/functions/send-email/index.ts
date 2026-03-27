@@ -9,276 +9,336 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') || 'notifications@eastape.com'
 const FROM_NAME = 'Eastape'
 const APP_URL = 'https://claude-eastape-share.vercel.app'
+const LOGO_URL = 'https://zzevqgnhbintrpohunjr.supabase.co/storage/v1/object/public/Site%20Assets/logo.png'
 
-const emailHeader = `
-  <div style="background:#0a0a0f;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh">
-  <div style="max-width:480px;margin:0 auto">
+// Shared components
+const logo = `
   <div style="text-align:center;margin-bottom:32px">
-    <h1 style="color:white;font-size:28px;font-weight:900;letter-spacing:3px;margin:0">EASTAPE</h1>
-    <p style="color:#7c3aed;font-size:14px;font-weight:300;margin:4px 0 0">Share</p>
+    <img src="${LOGO_URL}" alt="Eastape" width="140"
+         style="display:block;margin:0 auto;max-width:140px;height:auto"/>
   </div>
 `
 
-const emailFooter = `
-  <p style="color:#404050;font-size:11px;text-align:center;margin-top:24px">
+const footer = `
+  <p style="color:#404050;font-size:11px;text-align:center;margin-top:24px;line-height:1.6">
     © 2026 Eastape Films. All rights reserved.<br>
-    <a href="${APP_URL}" style="color:#606070;text-decoration:none">eastape.com</a>
+    <a href="${APP_URL}" style="color:#505060;text-decoration:none">${APP_URL.replace('https://', '')}</a>
   </p>
-  </div></div>
+`
+
+const wrapper = (content: string) => `
+  <!DOCTYPE html>
+  <html>
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+  <body style="margin:0;padding:0;background:#0a0a0f">
+  <div style="background:#0a0a0f;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:480px;margin:0 auto">
+    ${logo}
+    ${content}
+    ${footer}
+  </div>
+  </div>
+  </body>
+  </html>
 `
 
 const card = (content: string, borderColor = '#2a2a3a') => `
-  <div style="background:#13131a;border:1px solid ${borderColor};border-radius:16px;padding:32px;margin-bottom:16px">
+  <div style="background:#13131a;border:1px solid ${borderColor};border-radius:16px;padding:32px">
     ${content}
   </div>
 `
 
-const primaryButton = (text: string, url: string, color = '#7c3aed') => `
+const button = (text: string, url: string, color = '#7c3aed') => `
   <a href="${url}"
      style="display:block;background:linear-gradient(135deg,${color},${color}dd);
             color:white;text-decoration:none;text-align:center;
             padding:14px 24px;border-radius:12px;font-size:16px;
-            font-weight:600;margin-top:20px">
+            font-weight:600;margin-top:20px;margin-bottom:4px">
     ${text}
   </a>
 `
 
-const statusBadge = (text: string, color: string) => `
-  <span style="background:${color}22;color:${color};padding:4px 12px;
-               border-radius:999px;font-size:13px;font-weight:600">
+const infoBox = (content: string) => `
+  <div style="background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;
+              padding:16px;margin:16px 0">
+    ${content}
+  </div>
+`
+
+const statusPill = (text: string, color: string) => `
+  <span style="background:${color}22;color:${color};padding:4px 14px;
+               border-radius:999px;font-size:13px;font-weight:600;
+               display:inline-block">
     ${text}
   </span>
 `
 
+// All email templates
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
 
   welcome: (data) => ({
     subject: `Welcome to Eastape, ${data.name}! 🎬`,
-    html: emailHeader + card(`
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">👋</div>
       <h2 style="color:white;font-size:22px;font-weight:700;margin:0 0 8px">
-        Welcome, ${data.name}! 👋
+        Welcome, ${data.name}!
       </h2>
-      <p style="color:#606070;font-size:15px;line-height:1.6;margin:0 0 20px">
-        Your Eastape account is ready. You can now manage projects,
-        share files, review videos, and collaborate with your team.
+      <p style="color:#606070;font-size:15px;margin:0 0 20px;line-height:1.6">
+        Your Eastape account is ready. Start managing your projects,
+        sharing files, and collaborating with your team.
       </p>
-      <div style="background:#1a1a24;border-radius:10px;padding:16px;margin-bottom:4px">
-        <p style="color:#606070;font-size:13px;margin:0 0 8px">Get started:</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">🎬 Create your first project</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">📁 Upload files to Drive</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">👥 Invite your team</p>
-      </div>
-      ${primaryButton('Open Eastape →', APP_URL + '/dashboard')}
-    `) + emailFooter
+      ${infoBox(`
+        <p style="color:#606070;font-size:13px;margin:0 0 10px">Get started:</p>
+        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">🎬&nbsp; Create your first project</p>
+        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">📁&nbsp; Upload files to Drive</p>
+        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">👥&nbsp; Invite your team members</p>
+        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">🎬&nbsp; Review and approve media</p>
+      `)}
+      ${button('Open Eastape →', APP_URL + '/dashboard')}
+    `))
   }),
 
   teamInvite: (data) => ({
     subject: `${data.inviterName} invited you to ${data.projectName}`,
-    html: emailHeader + card(`
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">👥</div>
       <h2 style="color:white;font-size:22px;font-weight:700;margin:0 0 8px">
-        You've been invited! 👥
+        You've been invited!
       </h2>
-      <p style="color:#606070;font-size:15px;margin:0 0 16px">
+      <p style="color:#606070;font-size:15px;margin:0 0 16px;line-height:1.6">
         <strong style="color:#a0a0b0">${data.inviterName}</strong>
-        invited you to collaborate on:
+        invited you to collaborate on a project:
       </p>
-      <div style="background:#1a1a24;border:1px solid #2a2a3a;border-radius:10px;padding:16px;margin:0 0 4px">
+      ${infoBox(`
         <p style="color:white;font-size:18px;font-weight:700;margin:0 0 6px">
-          ${data.projectIcon || '🎬'} ${data.projectName}
+          ${data.projectIcon || '🎬'}&nbsp;${data.projectName}
         </p>
-        <p style="color:#7c3aed;font-size:13px;margin:0">
+        <p style="color:#7c3aed;font-size:13px;margin:0 0 4px">
           Your role: <strong>${data.role}</strong>
         </p>
         ${data.clientName ? `<p style="color:#606070;font-size:12px;margin:4px 0 0">Client: ${data.clientName}</p>` : ''}
-      </div>
-      ${primaryButton('Accept Invitation →', data.acceptUrl || APP_URL + '/projects')}
+      `)}
+      ${button('Accept Invitation →', data.acceptUrl || APP_URL + '/projects')}
       <p style="color:#404050;font-size:12px;text-align:center;margin-top:12px">
-        Invitation expires in 7 days
+        This invitation expires in 7 days
       </p>
-    `) + emailFooter
+    `))
   }),
 
   commentAdded: (data) => ({
     subject: `${data.commenterName} commented on ${data.fileName}`,
-    html: emailHeader + card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
-        💬 New Comment
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">💬</div>
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
+        New Comment
       </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 4px">
+      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
         <strong style="color:#a0a0b0">${data.commenterName}</strong>
         commented on
         <strong style="color:#a0a0b0">${data.fileName}</strong>
-        ${data.timestamp ? `at <span style="color:#7c3aed;font-weight:600">${data.timestamp}</span>` : ''}
+        ${data.timestamp ? `<br>at timestamp <span style="color:#7c3aed;font-weight:600">${data.timestamp}</span>` : ''}
       </p>
-      <div style="background:#1a1a24;border-left:3px solid #7c3aed;
-                  padding:16px;margin:16px 0;border-radius:0 8px 8px 0">
-        <p style="color:white;font-size:15px;line-height:1.5;margin:0">
+      <div style="background:#0a0a0f;border-left:3px solid #7c3aed;
+                  padding:16px;border-radius:0 8px 8px 0;margin-bottom:4px">
+        <p style="color:white;font-size:15px;line-height:1.6;margin:0;font-style:italic">
           "${data.commentBody}"
         </p>
       </div>
-      ${primaryButton('View & Reply →', data.viewUrl || APP_URL)}
-    `) + emailFooter
+      ${button('View & Reply →', data.viewUrl || APP_URL)}
+    `))
   }),
 
   mentionedInComment: (data) => ({
     subject: `${data.mentionerName} mentioned you in a comment`,
-    html: emailHeader + card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
-        🔔 You were mentioned
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">🔔</div>
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
+        You were mentioned
       </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px">
+      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
         <strong style="color:#a0a0b0">${data.mentionerName}</strong>
-        mentioned you in <strong style="color:#a0a0b0">${data.fileName}</strong>
+        mentioned you in a comment on
+        <strong style="color:#a0a0b0">${data.fileName}</strong>
       </p>
-      <div style="background:#1a1a24;border-left:3px solid #a78bfa;
-                  padding:16px;margin:0 0 4px;border-radius:0 8px 8px 0">
-        <p style="color:white;font-size:15px;line-height:1.5;margin:0">
+      <div style="background:#0a0a0f;border-left:3px solid #a78bfa;
+                  padding:16px;border-radius:0 8px 8px 0;margin-bottom:4px">
+        <p style="color:white;font-size:15px;line-height:1.6;margin:0;font-style:italic">
           "${data.commentBody}"
         </p>
       </div>
-      ${primaryButton('View Comment →', data.viewUrl || APP_URL)}
-    `) + emailFooter
+      ${button('View Comment →', data.viewUrl || APP_URL)}
+    `))
   }),
 
   statusChanged: (data) => ({
     subject: `${data.fileName} marked as ${data.newStatus}`,
-    html: emailHeader + card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">🔄</div>
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
         Status Updated
       </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px">
+      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
         <strong style="color:#a0a0b0">${data.changedBy}</strong>
         updated the status of
         <strong style="color:#a0a0b0">${data.fileName}</strong>
       </p>
-      <div style="display:flex;align-items:center;gap:12px;margin:16px 0;flex-wrap:wrap">
-        ${statusBadge(data.oldStatus, '#606070')}
-        <span style="color:#404050;font-size:18px">→</span>
-        ${statusBadge(data.newStatus,
-          data.newStatus === 'Approved' ? '#10b981' :
-          data.newStatus === 'Revision' ? '#ef4444' : '#f59e0b'
-        )}
-      </div>
-      ${data.projectName ? `<p style="color:#606070;font-size:13px;margin:0">Project: ${data.projectName}</p>` : ''}
-      ${primaryButton('View File →', data.viewUrl || APP_URL)}
-    `) + emailFooter
+      ${infoBox(`
+        <p style="color:#606070;font-size:12px;margin:0 0 10px;text-transform:uppercase;
+                  letter-spacing:1px;font-weight:600">Status change</p>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          ${statusPill(data.oldStatus, '#606070')}
+          <span style="color:#404050;font-size:16px">→</span>
+          ${statusPill(data.newStatus,
+            data.newStatus === 'Approved' ? '#10b981' :
+            data.newStatus === 'Revision' ? '#ef4444' : '#f59e0b'
+          )}
+        </div>
+        ${data.projectName ? `<p style="color:#606070;font-size:12px;margin:10px 0 0">Project: ${data.projectName}</p>` : ''}
+      `)}
+      ${button('View File →', data.viewUrl || APP_URL)}
+    `))
   }),
 
   fileUploaded: (data) => ({
     subject: `New file uploaded to ${data.projectName}`,
-    html: emailHeader + card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
-        📁 New File Uploaded
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">📁</div>
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
+        New File Uploaded
       </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px">
+      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
         <strong style="color:#a0a0b0">${data.uploaderName}</strong>
-        uploaded a file to
+        uploaded a new file to
         <strong style="color:#a0a0b0">${data.projectName}</strong>
       </p>
-      <div style="background:#1a1a24;border-radius:10px;padding:16px;margin:0 0 4px">
+      ${infoBox(`
         <p style="color:white;font-size:15px;font-weight:600;margin:0 0 4px">
-          📄 ${data.fileName}
+          📄&nbsp;${data.fileName}
         </p>
-        <p style="color:#606070;font-size:13px;margin:0">${data.fileSize}</p>
-      </div>
-      ${primaryButton('View Project →', data.projectUrl || APP_URL)}
-    `) + emailFooter
+        ${data.fileSize ? `<p style="color:#606070;font-size:13px;margin:0">${data.fileSize}</p>` : ''}
+      `)}
+      ${button('View Project →', data.projectUrl || APP_URL)}
+    `))
   }),
 
   shotAssigned: (data) => ({
     subject: `You've been assigned: ${data.shotName}`,
-    html: emailHeader + card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
-        🎯 Shot Assigned to You
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">🎯</div>
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
+        Shot Assigned to You
       </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px">
+      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
         <strong style="color:#a0a0b0">${data.assignedBy}</strong>
         assigned you a shot in
         <strong style="color:#a0a0b0">${data.projectName}</strong>
       </p>
-      <div style="background:#1a1a24;border-radius:10px;padding:16px;margin:0 0 4px">
-        <p style="color:white;font-size:16px;font-weight:700;margin:0 0 4px">
-          ${data.shotNumber ? data.shotNumber + ' ' : ''}${data.shotName}
+      ${infoBox(`
+        <p style="color:white;font-size:16px;font-weight:700;margin:0 0 6px">
+          ${data.shotNumber ? `<span style="color:#606070;font-size:13px;font-weight:400">${data.shotNumber}&nbsp;</span>` : ''}
+          ${data.shotName}
         </p>
-        ${data.dueDate ? `<p style="color:#f59e0b;font-size:13px;margin:4px 0">Due: ${data.dueDate}</p>` : ''}
-        ${data.priority && data.priority !== 'normal' ? `
-          <p style="color:${data.priority === 'urgent' ? '#ef4444' : '#f59e0b'};font-size:13px;margin:4px 0">
-            Priority: ${data.priority.toUpperCase()}
+        ${data.dueDate ? `
+          <p style="color:#f59e0b;font-size:13px;margin:4px 0">
+            📅&nbsp;Due: ${data.dueDate}
           </p>
         ` : ''}
-      </div>
-      ${primaryButton('View Shot →', data.projectUrl || APP_URL)}
-    `) + emailFooter
+        ${data.priority && data.priority !== 'normal' ? `
+          <p style="color:${data.priority === 'urgent' ? '#ef4444' : '#f59e0b'};
+                    font-size:13px;margin:4px 0;font-weight:600">
+            ⚡&nbsp;Priority: ${data.priority.toUpperCase()}
+          </p>
+        ` : ''}
+      `)}
+      ${button('View Shot →', data.projectUrl || APP_URL)}
+    `))
   }),
 
   deadlineReminder: (data) => ({
     subject: `⚠️ ${data.projectName} deadline in ${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}`,
-    html: emailHeader + card(`
-      <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">⚠️</div>
       <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 8px">
         Deadline Approaching
       </h2>
-      <p style="color:#606070;font-size:15px;margin:0 0 16px">
+      <p style="color:#606070;font-size:15px;margin:0 0 16px;line-height:1.6">
         <strong style="color:#a0a0b0">${data.projectName}</strong>
         is due in
-        <strong style="color:#f59e0b">${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}</strong>
+        <strong style="color:#f59e0b;font-size:17px">${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}</strong>
       </p>
-      <div style="background:#1a1a24;border-radius:10px;padding:16px;margin:0 0 4px">
-        <p style="color:#a0a0b0;font-size:12px;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px">Due Date</p>
-        <p style="color:white;font-size:16px;font-weight:600;margin:0">${data.dueDate}</p>
-        ${data.clientName ? `<p style="color:#606070;font-size:13px;margin:4px 0 0">Client: ${data.clientName}</p>` : ''}
-      </div>
-      ${primaryButton('Open Project →', data.projectUrl || APP_URL, '#f59e0b')}
-    `, '#f59e0b44') + emailFooter
+      ${infoBox(`
+        <p style="color:#606070;font-size:11px;margin:0 0 6px;text-transform:uppercase;
+                  letter-spacing:1px;font-weight:600">Due Date</p>
+        <p style="color:white;font-size:16px;font-weight:700;margin:0">${data.dueDate}</p>
+        ${data.clientName ? `<p style="color:#606070;font-size:13px;margin:6px 0 0">Client: ${data.clientName}</p>` : ''}
+      `)}
+      ${button('Open Project →', data.projectUrl || APP_URL, '#f59e0b')}
+    `, '#f59e0b44'))
   }),
 
   shareLink: (data) => ({
     subject: `${data.sharedBy} shared "${data.fileName}" with you`,
-    html: emailHeader + card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
-        🔗 File Shared With You
+    html: wrapper(card(`
+      <div style="font-size:36px;margin-bottom:16px">🔗</div>
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
+        File Shared With You
       </h2>
-      <p style="color:#606070;font-size:15px;margin:0 0 16px">
+      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
         <strong style="color:#a0a0b0">${data.sharedBy}</strong>
         shared a file with you:
       </p>
-      <div style="background:#1a1a24;border-radius:10px;padding:16px;margin:0 0 4px">
+      ${infoBox(`
         <p style="color:white;font-size:16px;font-weight:600;margin:0 0 4px">
-          ${data.fileName}
+          📄&nbsp;${data.fileName}
         </p>
-        ${data.message ? `<p style="color:#606070;font-size:13px;margin:8px 0 0;font-style:italic">"${data.message}"</p>` : ''}
-      </div>
-      ${primaryButton('View Shared File →', data.shareUrl)}
-      ${data.expiresAt ? `<p style="color:#404050;font-size:12px;text-align:center;margin-top:12px">Link expires: ${data.expiresAt}</p>` : ''}
-    `) + emailFooter
+        ${data.message ? `
+          <div style="border-top:1px solid #2a2a3a;margin-top:12px;padding-top:12px">
+            <p style="color:#606070;font-size:12px;margin:0 0 4px">Message:</p>
+            <p style="color:#a0a0b0;font-size:14px;margin:0;font-style:italic">
+              "${data.message}"
+            </p>
+          </div>
+        ` : ''}
+      `)}
+      ${button('View Shared File →', data.shareUrl)}
+      ${data.expiresAt ? `
+        <p style="color:#404050;font-size:12px;text-align:center;margin-top:12px">
+          Link expires: ${data.expiresAt}
+        </p>
+      ` : ''}
+    `))
   }),
 
 }
 
+// Helper to check user notification preferences
 async function shouldSendEmail(
   userId: string,
-  notificationType: string,
-  supabaseUrl: string,
-  serviceKey: string
+  notificationType: string
 ): Promise<{ send: boolean; email: string }> {
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=email,email_notifications`,
-    {
-      headers: {
-        'apikey': serviceKey,
-        'Authorization': `Bearer ${serviceKey}`,
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=email,email_notifications`,
+      {
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+        }
       }
-    }
-  )
-  const profiles = await response.json()
-  if (!profiles?.[0]) return { send: false, email: '' }
+    )
+    const profiles = await response.json()
+    if (!profiles?.[0]) return { send: false, email: '' }
 
-  const profile = profiles[0]
-  const prefs = profile.email_notifications || {}
+    const profile = profiles[0]
+    const prefs = profile.email_notifications || {}
+    const shouldSend = prefs[notificationType] !== false
 
-  return {
-    send: prefs[notificationType] !== false,
-    email: profile.email
+    return { send: shouldSend, email: profile.email }
+  } catch {
+    return { send: false, email: '' }
   }
 }
 
@@ -293,29 +353,28 @@ serve(async (req) => {
 
     let recipientEmail = to
 
+    // Check notification preferences if userId provided
     if (userId && notificationType) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const { send, email } = await shouldSendEmail(userId, notificationType, supabaseUrl, serviceKey)
+      const { send, email } = await shouldSendEmail(userId, notificationType)
       if (!send) {
         return new Response(
           JSON.stringify({ success: true, skipped: true, reason: 'User preference disabled' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      recipientEmail = to || email
+      if (!recipientEmail) recipientEmail = email
     }
 
-    if (!recipientEmail || !template) {
+    if (!recipientEmail) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: to, template' }),
+        JSON.stringify({ error: 'Missing recipient email' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (!templates[template]) {
+    if (!template || !templates[template]) {
       return new Response(
-        JSON.stringify({ error: `Unknown template: ${template}` }),
+        JSON.stringify({ error: `Invalid or missing template: ${template}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -340,10 +399,10 @@ serve(async (req) => {
 
     if (!resendResponse.ok) {
       console.error('Resend error:', result)
-      throw new Error(result.message || 'Failed to send email via Resend')
+      throw new Error(result.message || 'Resend API error')
     }
 
-    console.log(`Email sent: template=${template} to=${recipientEmail} id=${result.id}`)
+    console.log(`✅ Email sent: template=${template} to=${recipientEmail} id=${result.id}`)
 
     return new Response(
       JSON.stringify({ success: true, id: result.id }),
