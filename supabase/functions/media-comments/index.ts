@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -70,6 +71,62 @@ Deno.serve(async (req) => {
         .select()
         .single()
       if (error) return json({ error: error.message }, 500)
+
+      // Send notifications (non-fatal)
+      try {
+        const [{ data: media }, { data: commenter }] = await Promise.all([
+          supabase.from('project_media').select('user_id, name, project_id').eq('id', aid).single(),
+          supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+        ])
+
+        const formatTs = (s: number) => {
+          const m = Math.floor(s / 60)
+          const sec = Math.floor(s % 60).toString().padStart(2, '0')
+          return `${m}:${sec}`
+        }
+
+        const viewUrl = media?.project_id
+          ? `https://claude-eastape-share.vercel.app/projects/${media.project_id}/media/${aid}`
+          : `https://claude-eastape-share.vercel.app`
+
+        // Notify media owner (if not themselves)
+        if (media && media.user_id && media.user_id !== user.id) {
+          await sendEmail({
+            userId: media.user_id,
+            notificationType: 'comments',
+            template: 'commentAdded',
+            data: {
+              commenterName: commenter?.full_name || 'Someone',
+              fileName: media.name || 'your file',
+              commentBody: body.substring(0, 200),
+              timestamp: timestampSeconds != null ? formatTs(timestampSeconds) : null,
+              viewUrl,
+            }
+          })
+        }
+
+        // Check for @mentions and notify mentioned users
+        const mentions = (body as string).match(/@([a-z0-9_]+)/gi) || []
+        for (const mention of mentions) {
+          const username = mention.slice(1).toLowerCase()
+          const { data: mentionedUser } = await supabase
+            .from('profiles').select('id').ilike('username', username).maybeSingle()
+          if (mentionedUser && mentionedUser.id !== user.id) {
+            await sendEmail({
+              userId: mentionedUser.id,
+              notificationType: 'mentions',
+              template: 'mentionedInComment',
+              data: {
+                mentionerName: commenter?.full_name || 'Someone',
+                fileName: media?.name || 'a file',
+                commentBody: body.substring(0, 200),
+                viewUrl,
+              }
+            })
+          }
+        }
+      } catch {}
+
       return json({ comment: data }, 201)
     }
 

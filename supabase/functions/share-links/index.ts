@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,7 +40,7 @@ Deno.serve(async (req) => {
     // POST — create share link
     if (req.method === 'POST') {
       const body = await req.json()
-      const { project_media_id, project_file_id, project_id, allow_download, allow_comments, password, expires_at } = body
+      const { project_media_id, project_file_id, project_id, allow_download, allow_comments, password, expires_at, recipient_email, share_message, file_name } = body
 
       if (!project_media_id && !project_file_id && !project_id) {
         return json({ error: 'One of project_media_id, project_file_id, or project_id required' }, 400)
@@ -53,8 +54,32 @@ Deno.serve(async (req) => {
       }).select().single()
       if (error) return json({ error: error.message }, 500)
 
-      const baseUrl = Deno.env.get('SITE_URL') || ''
-      return json({ link, shareUrl: `${baseUrl}/share/${link.token}` })
+      const baseUrl = Deno.env.get('SITE_URL') || 'https://claude-eastape-share.vercel.app'
+      const shareUrl = `${baseUrl}/share/${link.token}`
+
+      // Send share email if recipient provided (non-fatal)
+      if (recipient_email) {
+        try {
+          const { data: sharer } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+          const displayName = file_name || (project_media_id ? 'a video' : project_file_id ? 'a file' : 'a project')
+          const expiresFormatted = expires_at
+            ? new Date(expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : null
+          await sendEmail({
+            to: recipient_email,
+            template: 'shareLink',
+            data: {
+              sharedBy: sharer?.full_name || 'Someone',
+              fileName: displayName,
+              shareUrl,
+              message: share_message || null,
+              expiresAt: expiresFormatted,
+            }
+          })
+        } catch {}
+      }
+
+      return json({ link, shareUrl })
     }
 
     // PUT — update (toggle allow_download, etc.)

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -188,6 +189,32 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabase.from('media_assets').update(updates).eq('id', id).select().single()
       if (error) return json({ error: error.message }, 500)
+
+      // Send status change email if status was updated and owner is different from changer
+      if ('status' in body && body.status !== existing.status && existing.user_id !== user.id) {
+        try {
+          const [{ data: changer }, { data: project }] = await Promise.all([
+            supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+            supabase.from('projects').select('name').eq('id', existing.project_id).single(),
+          ])
+          await sendEmail({
+            userId: existing.user_id,
+            notificationType: 'status_changes',
+            template: 'statusChanged',
+            data: {
+              changedBy: changer?.full_name || 'Someone',
+              fileName: data.name || 'your file',
+              oldStatus: existing.status || 'None',
+              newStatus: body.status,
+              projectName: project?.name || null,
+              viewUrl: existing.project_id
+                ? `https://claude-eastape-share.vercel.app/projects/${existing.project_id}/media/${id}`
+                : `https://claude-eastape-share.vercel.app`,
+            }
+          })
+        } catch {}
+      }
+
       return json({ asset: await withThumbnail(data) })
     }
 

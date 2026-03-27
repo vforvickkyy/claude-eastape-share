@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Camera, Trash, User, Buildings, EnvelopeSimple, Lock,
   CheckCircle, Warning, Eye, EyeSlash, FloppyDisk, At,
-  Spinner, XCircle, Info,
+  Spinner, XCircle, Info, Bell,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { usePlan } from "./context/PlanContext";
@@ -73,11 +73,20 @@ export default function ProfilePage() {
     setUsernameBannerDismissed(true);
   }
 
+  const [notificationPrefs, setNotificationPrefs] = useState({
+    comments: true, mentions: true, team_invites: true,
+    status_changes: true, deadlines: true, file_uploads: false,
+    shot_assigned: true, weekly_summary: false,
+  });
+
   // Load fresh profile data from server (userApi uses proper async token)
   useEffect(() => {
     if (!user) return;
     userApi.getProfile()
-      .then(d => setProfile(d))
+      .then(d => {
+        setProfile(d);
+        if (d.email_notifications) setNotificationPrefs(d.email_notifications);
+      })
       .catch(() => setProfile({
         email: user.email,
         name:  user.user_metadata?.full_name || "",
@@ -128,6 +137,11 @@ export default function ProfilePage() {
         />
         <PlanStorageSection plan={plan} navigate={navigate} />
         <AccountSection profile={profile} />
+        <NotificationsSection
+          prefs={notificationPrefs}
+          onChange={(key, val) => setNotificationPrefs(p => ({ ...p, [key]: val }))}
+          notify={notify}
+        />
         <PasswordSection notify={notify} />
         <DangerSection notify={notify} navigate={navigate} />
       </div>
@@ -556,6 +570,80 @@ function DangerSection({ notify, navigate }) {
   return (
     <Section title="Session" description="Sign out of your account on this device.">
       <button className="btn-danger" onClick={handleSignOut}>Sign Out</button>
+    </Section>
+  );
+}
+
+/* ── Email Notifications section ───────────── */
+const NOTIFICATION_PREFS = [
+  { key: "comments",       label: "Comments on my videos",  desc: "When someone comments on your files" },
+  { key: "mentions",       label: "@Mentions",              desc: "When someone mentions you in a comment" },
+  { key: "team_invites",   label: "Team invitations",       desc: "When you are invited to a project" },
+  { key: "status_changes", label: "Status changes",         desc: "When your video is approved or needs revision" },
+  { key: "shot_assigned",  label: "Shot assignments",       desc: "When a shot is assigned to you" },
+  { key: "deadlines",      label: "Deadline reminders",     desc: "3 days before project due date" },
+  { key: "file_uploads",   label: "File uploads",           desc: "When files are uploaded to your projects" },
+];
+
+function NotificationsSection({ prefs, onChange, notify }) {
+  const [saving, setSaving] = useState(false);
+
+  async function handleToggle(key, val) {
+    onChange(key, val);
+    setSaving(true);
+    try {
+      await userApi.updateProfile({ email_notifications: { ...prefs, [key]: val } });
+    } catch {
+      // Revert on failure
+      onChange(key, !val);
+      notify("error", "Failed to save notification preference.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Section
+      title="Email Notifications"
+      description="Choose which emails you receive from Eastape."
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {NOTIFICATION_PREFS.map(({ key, label, desc }) => {
+          const enabled = prefs[key] !== false;
+          return (
+            <div
+              key={key}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 0", borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <div>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: "var(--t1)" }}>{label}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--t3)" }}>{desc}</p>
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleToggle(key, !enabled)}
+                style={{
+                  width: 40, height: 22, borderRadius: 999, border: "none", cursor: "pointer",
+                  background: enabled ? "#7c3aed" : "rgba(255,255,255,0.1)",
+                  position: "relative", transition: "background 0.2s", flexShrink: 0,
+                }}
+                aria-checked={enabled}
+                role="switch"
+              >
+                <span style={{
+                  position: "absolute", top: 3, left: enabled ? 21 : 3,
+                  width: 16, height: 16, borderRadius: "50%", background: "white",
+                  transition: "left 0.2s",
+                }} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </Section>
   );
 }

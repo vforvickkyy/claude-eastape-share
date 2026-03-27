@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -230,6 +231,32 @@ Deno.serve(async (req) => {
         const { data, error } = await supabase.from('production_shots').update(updates).eq('id', id)
           .select('*, production_scenes(*), production_statuses(*)').single()
         if (error) return json({ error: error.message }, 500)
+
+        // Send shot assigned email if assigned_to changed (non-fatal)
+        if ('assigned_to' in body && body.assigned_to && body.assigned_to !== user.id) {
+          try {
+            const [{ data: assigner }, { data: project }] = await Promise.all([
+              supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+              supabase.from('projects').select('name').eq('id', existing.project_id).single(),
+            ])
+            const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            await sendEmail({
+              userId: body.assigned_to,
+              notificationType: 'shot_assigned',
+              template: 'shotAssigned',
+              data: {
+                assignedBy: assigner?.full_name || 'Someone',
+                shotName: data.title || 'Untitled Shot',
+                shotNumber: data.shot_number || null,
+                projectName: project?.name || 'a project',
+                dueDate: data.due_date ? formatDate(data.due_date) : null,
+                priority: data.custom_data?.priority || null,
+                projectUrl: `https://claude-eastape-share.vercel.app/projects/${existing.project_id}`,
+              }
+            })
+          } catch {}
+        }
+
         return json({ shot: data })
       }
       if (req.method === 'DELETE' && id) {

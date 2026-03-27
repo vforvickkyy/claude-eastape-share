@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -105,6 +106,26 @@ Deno.serve(async (req) => {
           await supabase.from('project_activity').insert({
             project_id, user_id: user.id, action: 'added_member',
             entity_type: 'member', entity_name: email,
+          })
+        } catch {}
+
+        // Send team invite email (non-fatal)
+        try {
+          const [{ data: inviterProfile }, { data: projectData }] = await Promise.all([
+            supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+            supabase.from('projects').select('name, icon, client_name').eq('id', project_id).single(),
+          ])
+          await sendEmail({
+            to: email,
+            template: 'teamInvite',
+            data: {
+              inviterName: inviterProfile?.full_name || 'Someone',
+              projectName: projectData?.name || 'a project',
+              projectIcon: projectData?.icon || '🎬',
+              role: role || 'viewer',
+              acceptUrl: `https://claude-eastape-share.vercel.app/projects/${project_id}`,
+              clientName: projectData?.client_name || null,
+            }
           })
         } catch {}
       }

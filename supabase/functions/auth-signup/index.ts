@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,6 +68,13 @@ Deno.serve(async (req) => {
 
     const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
     if (signInError) return new Response(JSON.stringify({ error: signInError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+    // Send welcome email (non-fatal)
+    await sendEmail({
+      to: email,
+      template: 'welcome',
+      data: { name: fullName || email.split('@')[0] }
+    })
 
     return new Response(JSON.stringify({ session: data.session }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (err) {

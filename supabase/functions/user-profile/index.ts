@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
     if (req.method === 'GET') {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('username, username_changed_at, role, onboarding_completed, onboarding_step, onboarding_dismissed')
+        .select('username, username_changed_at, role, onboarding_completed, onboarding_step, onboarding_dismissed, email_notifications')
         .eq('id', user.id).maybeSingle()
       return json({
         id:                   user.id,
@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
         onboarding_completed: profile?.onboarding_completed ?? false,
         onboarding_step:      profile?.onboarding_step      ?? 0,
         onboarding_dismissed: profile?.onboarding_dismissed ?? false,
+        email_notifications:  profile?.email_notifications  ?? null,
       })
     }
 
@@ -102,6 +103,7 @@ Deno.serve(async (req) => {
       if (body.onboarding_completed !== undefined) profileUpdates.onboarding_completed = body.onboarding_completed
       if (body.onboarding_step !== undefined)      profileUpdates.onboarding_step = body.onboarding_step
       if (body.onboarding_dismissed !== undefined) profileUpdates.onboarding_dismissed = body.onboarding_dismissed
+      if (body.email_notifications !== undefined)  profileUpdates.email_notifications = body.email_notifications
 
       // Username with full validation
       if (body.username !== undefined && body.username !== '') {
