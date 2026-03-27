@@ -264,6 +264,7 @@ export default function OTPVerificationPage() {
             <p style={{ color: "var(--t3)", fontSize: 13 }}>Resend in {resendCooldown}s</p>
           ) : (
             <button
+              type="button"
               onClick={handleResend}
               style={{
                 background: "none", border: "none", cursor: "pointer",

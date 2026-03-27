@@ -7,26 +7,32 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 }
 
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   try {
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
+    // Anon client used for auth flows (signUp, verifyOtp, resend)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!
     )
 
     const body = await req.json()
-    const { action, email, token } = body
+    const { action } = body
 
     // ── VERIFY OTP ────────────────────────────────────────────────────
     if (action === 'verify_otp') {
-      if (!email || !token) return new Response(JSON.stringify({ error: 'email and token required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      const { email, token } = body
+      if (!email || !token) return json({ error: 'email and token required' }, 400)
 
       const { data, error } = await supabase.auth.verifyOtp({
         email,
@@ -37,14 +43,14 @@ Deno.serve(async (req) => {
       if (error) {
         const msg = error.message?.toLowerCase() || ''
         if (msg.includes('expired') || msg.includes('invalid') || msg.includes('otp')) {
-          return new Response(JSON.stringify({ error: 'Invalid or expired code. Please request a new one.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          return json({ error: 'Invalid or expired code. Please request a new one.' }, 400)
         }
-        return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return json({ error: error.message }, 400)
       }
 
       const userId = data.user?.id
       if (userId) {
-        // Ensure profile exists with onboarding fields
+        // Ensure profile + onboarding fields exist
         await supabaseAdmin.from('profiles').upsert({
           id: userId,
           onboarding_completed: false,
@@ -69,7 +75,7 @@ Deno.serve(async (req) => {
           }, { onConflict: 'user_id' })
         }
 
-        // Send welcome email (non-fatal) — fires after OTP verified, not on signup
+        // Welcome email fires here, after OTP verified — not on signup
         await sendEmail({
           to: email,
           template: 'welcome',
@@ -77,50 +83,82 @@ Deno.serve(async (req) => {
         })
       }
 
-      return new Response(JSON.stringify({ success: true, session: data.session, user: data.user }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return json({ success: true, session: data.session, user: data.user })
     }
 
     // ── RESEND OTP ────────────────────────────────────────────────────
     if (action === 'resend_otp') {
-      if (!email) return new Response(JSON.stringify({ error: 'email required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      const { email } = body
+      if (!email) return json({ error: 'email required' }, 400)
 
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
       })
 
-      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      if (error) return json({ error: error.message }, 400)
 
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return json({ success: true })
     }
 
     // ── SIGNUP (default) ──────────────────────────────────────────────
-    const { email: signupEmail, password, fullName } = body
-    if (!signupEmail || !password) return new Response(JSON.stringify({ error: 'Email and password are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    // Uses supabase.auth.signUp() — NOT admin.createUser — so that Supabase
+    // automatically sends the OTP email when "Confirm email" is ON in dashboard.
+    const { email, password, fullName } = body
+    if (!email || !password) return json({ error: 'Email and password are required.' }, 400)
 
-    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: signupEmail,
+    const { data, error: signupError } = await supabase.auth.signUp({
+      email,
       password,
-      user_metadata: { full_name: fullName || '' },
-      email_confirm: false,  // force OTP verification
+      options: {
+        data: { full_name: fullName || '' },
+      },
     })
 
-    if (createError) {
-      const msg = createError.message?.toLowerCase() || ''
+    if (signupError) {
+      const msg = signupError.message?.toLowerCase() || ''
       if (msg.includes('already registered') || msg.includes('already been registered') || msg.includes('user already exists')) {
-        return new Response(JSON.stringify({ error: 'An account with this email already exists. Please sign in instead.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return json({ error: 'An account with this email already exists. Please sign in instead.' }, 400)
       }
-      return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return json({ error: signupError.message }, 400)
     }
 
-    // Send OTP email via Supabase (triggers "Confirm signup" email template)
-    await supabase.auth.resend({
-      type: 'signup',
-      email: signupEmail,
-    })
+    // If session is returned, email confirmations are OFF in dashboard — log in directly
+    if (data.session) {
+      if (data.user?.id) {
+        await supabaseAdmin.from('profiles').upsert({
+          id: data.user.id,
+          onboarding_completed: false,
+          onboarding_step: 0,
+          onboarding_dismissed: false,
+        }, { onConflict: 'id' })
 
-    return new Response(JSON.stringify({ success: true, email: signupEmail, requiresVerification: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        const { data: freePlan } = await supabaseAdmin
+          .from('plans').select('id').ilike('name', 'free').eq('is_active', true).single()
+
+        if (freePlan?.id) {
+          await supabaseAdmin.from('user_plans').upsert({
+            user_id: data.user.id,
+            plan_id: freePlan.id,
+            is_active: true,
+            started_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+        }
+
+        await sendEmail({
+          to: email,
+          template: 'welcome',
+          data: { name: fullName || email.split('@')[0] }
+        })
+      }
+      return json({ success: true, session: data.session, user: data.user })
+    }
+
+    // session is null → OTP was sent, user must verify
+    return json({ success: true, email, requiresVerification: true })
+
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    console.error('auth-signup error:', err)
+    return json({ error: err.message }, 500)
   }
 })
