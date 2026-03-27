@@ -9,8 +9,9 @@ export default function OTPVerificationPage() {
   const location  = useLocation();
   const { user, verifyOTP } = useAuth();
 
-  const email    = location.state?.email    || "";
-  const fullName = location.state?.fullName || "";
+  const email       = location.state?.email    || "";
+  const fullName    = location.state?.fullName || "";
+  const infoMessage = location.state?.message  || "";
 
   // Redirect guards
   useEffect(() => {
@@ -175,6 +176,17 @@ export default function OTPVerificationPage() {
           <p className="auth-card-sub">We sent a 6-digit verification code to:</p>
           <p style={{ color: "#a78bfa", fontWeight: 600, fontSize: 14, marginTop: 6 }}>{email}</p>
         </div>
+
+        {/* Info banner — shown when redirected from login with an unverified account */}
+        {infoMessage && (
+          <div style={{
+            background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)",
+            borderRadius: 10, padding: "10px 14px", marginTop: 16,
+            textAlign: "center", color: "#93c5fd", fontSize: 13,
+          }}>
+            {infoMessage}
+          </div>
+        )}
 
         {/* OTP boxes */}
         <div

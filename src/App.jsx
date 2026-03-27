@@ -23,6 +23,7 @@ import MaintenancePage     from "./MaintenancePage.jsx";
 import ProjectsPage        from "./ProjectsPage.jsx";
 import ProjectPage         from "./ProjectPage.jsx";
 import ProjectMediaAssetPage from "./ProjectMediaAssetPage.jsx";
+import ProtectedRoute        from "./components/auth/ProtectedRoute.jsx";
 
 const AdminApp       = lazy(() => import("./adminpanel/AdminApp.jsx"));
 const OnboardingPage = lazy(() => import("./OnboardingPage.jsx"));
@@ -69,29 +70,33 @@ export default function App() {
         <UploadProgressPanel />
         <Routes>
           {/* ── Root = Master Dashboard ── */}
-          <Route path="/"                         element={<DashboardPage />} />
+          <Route path="/"                         element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/dashboard"                element={<Navigate to="/" replace />} />
 
           {/* ── Drive ── */}
-          <Route path="/drive"                    element={<DrivePage />} />
-          <Route path="/drive/folder/:id"         element={<DrivePage />} />
+          <Route path="/drive"                    element={<ProtectedRoute><DrivePage /></ProtectedRoute>} />
+          <Route path="/drive/folder/:id"         element={<ProtectedRoute><DrivePage /></ProtectedRoute>} />
 
           {/* ── Projects ── */}
-          <Route path="/projects"                 element={<ProjectsPage />} />
+          <Route path="/projects"                 element={<ProtectedRoute><ProjectsPage /></ProtectedRoute>} />
           <Route
             path="/projects/:id/*"
             element={
-              <ProjectProvider>
-                <ProjectPage />
-              </ProjectProvider>
+              <ProtectedRoute>
+                <ProjectProvider>
+                  <ProjectPage />
+                </ProjectProvider>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/projects/:id/media/:mediaId"
             element={
-              <ProjectProvider>
-                <ProjectMediaAssetPage />
-              </ProjectProvider>
+              <ProtectedRoute>
+                <ProjectProvider>
+                  <ProjectMediaAssetPage />
+                </ProjectProvider>
+              </ProtectedRoute>
             }
           />
 
@@ -115,7 +120,9 @@ export default function App() {
 
           {/* ── Onboarding ── */}
           <Route path="/onboarding" element={
-            <Suspense fallback={null}><OnboardingPage /></Suspense>
+            <ProtectedRoute>
+              <Suspense fallback={null}><OnboardingPage /></Suspense>
+            </ProtectedRoute>
           } />
 
           {/* ── Auth ── */}
@@ -127,19 +134,21 @@ export default function App() {
           {/* ── Static / misc ── */}
           <Route path="/privacy"                  element={<PrivacyPolicyPage />} />
           <Route path="/terms"                    element={<TermsPage />} />
-          <Route path="/recent"                   element={<RecentPage />} />
-          <Route path="/trash"                    element={<TrashPage />} />
-          <Route path="/profile"                  element={<ProfilePage />} />
+          <Route path="/recent"                   element={<ProtectedRoute><RecentPage /></ProtectedRoute>} />
+          <Route path="/trash"                    element={<ProtectedRoute><TrashPage /></ProtectedRoute>} />
+          <Route path="/profile"                  element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/pricing"                  element={<PricingPage />} />
-          <Route path="/plans"                    element={<PricingPage inDashboard />} />
+          <Route path="/plans"                    element={<ProtectedRoute><PricingPage inDashboard /></ProtectedRoute>} />
 
           {/* ── Admin Panel ── */}
           <Route
             path="/adminpanel/*"
             element={
-              <Suspense fallback={null}>
-                <AdminApp />
-              </Suspense>
+              <ProtectedRoute>
+                <Suspense fallback={null}>
+                  <AdminApp />
+                </Suspense>
+              </ProtectedRoute>
             }
           />
         </Routes>

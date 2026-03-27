@@ -34,7 +34,11 @@ export default function LoginPage() {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      await login(email, password);
+      const result = await login(email, password);
+      if (result.requiresVerification) {
+        navigate("/verify-otp", { state: { email: result.email, message: result.message } });
+        return;
+      }
       navigate("/");
     } catch (err) {
       setError(err.message || "Login failed. Please check your credentials.");

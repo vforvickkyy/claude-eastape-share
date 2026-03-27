@@ -123,38 +123,9 @@ Deno.serve(async (req) => {
       return json({ error: signupError.message }, 400)
     }
 
-    // If session is returned, email confirmations are OFF in dashboard — log in directly
-    if (data.session) {
-      if (data.user?.id) {
-        await supabaseAdmin.from('profiles').upsert({
-          id: data.user.id,
-          onboarding_completed: false,
-          onboarding_step: 0,
-          onboarding_dismissed: false,
-        }, { onConflict: 'id' })
-
-        const { data: freePlan } = await supabaseAdmin
-          .from('plans').select('id').ilike('name', 'free').eq('is_active', true).single()
-
-        if (freePlan?.id) {
-          await supabaseAdmin.from('user_plans').upsert({
-            user_id: data.user.id,
-            plan_id: freePlan.id,
-            is_active: true,
-            started_at: new Date().toISOString(),
-          }, { onConflict: 'user_id' })
-        }
-
-        await sendEmail({
-          to: email,
-          template: 'welcome',
-          data: { name: fullName || email.split('@')[0] }
-        })
-      }
-      return json({ success: true, session: data.session, user: data.user })
-    }
-
-    // session is null → OTP was sent, user must verify
+    // SECURITY: Never return a session on signup.
+    // User must verify their email via OTP before gaining access.
+    // (When "Confirm email" is ON in Supabase Dashboard, data.session is always null here.)
     return json({ success: true, email, requiresVerification: true })
 
   } catch (err) {

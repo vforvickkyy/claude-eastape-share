@@ -37,9 +37,10 @@ async function apiPost(path, body) {
 }
 
 export function AuthProvider({ children }) {
-  const [user,    setUser]    = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user,            setUser]            = useState(null);
+  const [profile,         setProfile]         = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null);
 
   function applySession(session) {
     setUser(session?.user ?? null);
@@ -79,6 +80,12 @@ export function AuthProvider({ children }) {
       }
 
       if (!isExpired(session)) {
+        // SECURITY: reject any stored session where email was never confirmed
+        if (!session.user?.email_confirmed_at) {
+          saveSession(null);
+          if (!cancelled) { setUnverifiedEmail(session.user?.email ?? null); setLoading(false); }
+          return;
+        }
         if (!cancelled) setUser(session.user);
         try {
           await supabase.auth.setSession({
@@ -116,11 +123,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(email, password) {
-    const { session } = await apiPost("/api/auth/login", { email, password });
-    applySession(session);
+    const result = await apiPost("/api/auth/login", { email, password });
+    // Unverified user — do not create a session; send them to OTP page
+    if (result.requiresVerification) {
+      setUnverifiedEmail(result.email);
+      return result;
+    }
+    applySession(result.session);
     // Fetch profile after a brief tick so supabase.auth.setSession has fired
     setTimeout(fetchProfile, 200);
-    return session;
+    return result;
   }
 
   async function signup(email, password, fullName) {
@@ -158,7 +170,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, profile, setProfile, updateProfileLocally, login, signup, verifyOTP, logout, loginWithGoogle }}>
+    <AuthContext.Provider value={{ user, loading, profile, unverifiedEmail, setProfile, updateProfileLocally, login, signup, verifyOTP, logout, loginWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );
