@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { userApi } from "../lib/api";
+import { userApi, authApi } from "../lib/api";
 
 const SESSION_KEY = "ets_auth";
 const AuthContext = createContext(null);
@@ -124,10 +124,19 @@ export function AuthProvider({ children }) {
   }
 
   async function signup(email, password, fullName) {
-    const { session } = await apiPost("/api/auth/signup", { email, password, fullName });
-    applySession(session);
-    setTimeout(fetchProfile, 200);
-    return session;
+    // Returns { success, email, requiresVerification } — no session yet
+    const result = await apiPost("/api/auth/signup", { email, password, fullName });
+    return result;
+  }
+
+  async function verifyOTP(email, token) {
+    const result = await authApi.verifyOTP(email, token);
+    if (result.error) throw new Error(result.error);
+    if (result.session) {
+      applySession(result.session);
+      setTimeout(fetchProfile, 200);
+    }
+    return result;
   }
 
   async function loginWithGoogle() {
@@ -149,7 +158,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, profile, setProfile, updateProfileLocally, login, signup, logout, loginWithGoogle }}>
+    <AuthContext.Provider value={{ user, loading, profile, setProfile, updateProfileLocally, login, signup, verifyOTP, logout, loginWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );

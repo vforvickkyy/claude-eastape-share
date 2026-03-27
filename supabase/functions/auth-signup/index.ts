@@ -21,14 +21,88 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY')!
     )
 
-    const { email, password, fullName } = await req.json()
-    if (!email || !password) return new Response(JSON.stringify({ error: 'Email and password are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    const body = await req.json()
+    const { action, email, token } = body
+
+    // ── VERIFY OTP ────────────────────────────────────────────────────
+    if (action === 'verify_otp') {
+      if (!email || !token) return new Response(JSON.stringify({ error: 'email and token required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'signup',
+      })
+
+      if (error) {
+        const msg = error.message?.toLowerCase() || ''
+        if (msg.includes('expired') || msg.includes('invalid') || msg.includes('otp')) {
+          return new Response(JSON.stringify({ error: 'Invalid or expired code. Please request a new one.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+        return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const userId = data.user?.id
+      if (userId) {
+        // Ensure profile exists with onboarding fields
+        await supabaseAdmin.from('profiles').upsert({
+          id: userId,
+          onboarding_completed: false,
+          onboarding_step: 0,
+          onboarding_dismissed: false,
+        }, { onConflict: 'id' })
+
+        // Auto-assign Free plan
+        const { data: freePlan } = await supabaseAdmin
+          .from('plans')
+          .select('id')
+          .ilike('name', 'free')
+          .eq('is_active', true)
+          .single()
+
+        if (freePlan?.id) {
+          await supabaseAdmin.from('user_plans').upsert({
+            user_id: userId,
+            plan_id: freePlan.id,
+            is_active: true,
+            started_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+        }
+
+        // Send welcome email (non-fatal) — fires after OTP verified, not on signup
+        await sendEmail({
+          to: email,
+          template: 'welcome',
+          data: { name: data.user?.user_metadata?.full_name || email.split('@')[0] }
+        })
+      }
+
+      return new Response(JSON.stringify({ success: true, session: data.session, user: data.user }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── RESEND OTP ────────────────────────────────────────────────────
+    if (action === 'resend_otp') {
+      if (!email) return new Response(JSON.stringify({ error: 'email required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+      })
+
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── SIGNUP (default) ──────────────────────────────────────────────
+    const { email: signupEmail, password, fullName } = body
+    if (!signupEmail || !password) return new Response(JSON.stringify({ error: 'Email and password are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
     const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: signupEmail,
       password,
       user_metadata: { full_name: fullName || '' },
-      email_confirm: true,
+      email_confirm: false,  // force OTP verification
     })
 
     if (createError) {
@@ -39,44 +113,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Auto-assign Free plan to new user
-    if (created?.user?.id) {
-      const { data: freePlan } = await supabaseAdmin
-        .from('plans')
-        .select('id')
-        .ilike('name', 'free')
-        .eq('is_active', true)
-        .single()
-
-      if (freePlan?.id) {
-        await supabaseAdmin.from('user_plans').upsert({
-          user_id: created.user.id,
-          plan_id: freePlan.id,
-          is_active: true,
-          started_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' })
-      }
-
-      // Ensure onboarding fields are initialised in profiles
-      await supabaseAdmin.from('profiles').upsert({
-        id: created.user.id,
-        onboarding_completed: false,
-        onboarding_step: 0,
-        onboarding_dismissed: false,
-      }, { onConflict: 'id' })
-    }
-
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-    if (signInError) return new Response(JSON.stringify({ error: signInError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-
-    // Send welcome email (non-fatal)
-    await sendEmail({
-      to: email,
-      template: 'welcome',
-      data: { name: fullName || email.split('@')[0] }
+    // Send OTP email via Supabase (triggers "Confirm signup" email template)
+    await supabase.auth.resend({
+      type: 'signup',
+      email: signupEmail,
     })
 
-    return new Response(JSON.stringify({ session: data.session }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ success: true, email: signupEmail, requiresVerification: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }

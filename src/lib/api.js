@@ -85,9 +85,11 @@ async function del(url, params = {}, auth = false) {
 
 // ── Auth ───────────────────────────────────────────────────────────
 export const authApi = {
-  login:   (body) => post(`${BASE}/auth-login`,   body),
-  signup:  (body) => post(`${BASE}/auth-signup`,  body),
-  refresh: (body) => post(`${BASE}/auth-refresh`, body),
+  login:     (body) => post(`${BASE}/auth-login`,   body),
+  signup:    (body) => post(`${BASE}/auth-signup`,  body),
+  refresh:   (body) => post(`${BASE}/auth-refresh`, body),
+  verifyOTP: (email, token) => post(`${BASE}/auth-signup`, { action: 'verify_otp', email, token }),
+  resendOTP: (email)        => post(`${BASE}/auth-signup`, { action: 'resend_otp', email }),
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────

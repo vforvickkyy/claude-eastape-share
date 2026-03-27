@@ -8,6 +8,7 @@ import UploadProgressPanel from "./components/drive/UploadProgressPanel";
 import SharePage           from "./SharePage.jsx";
 import LoginPage           from "./LoginPage.jsx";
 import SignupPage          from "./SignupPage.jsx";
+import OTPVerificationPage from "./OTPVerificationPage.jsx";
 import PrivacyPolicyPage   from "./PrivacyPolicyPage.jsx";
 import TermsPage           from "./TermsPage.jsx";
 import DashboardPage       from "./DashboardPage.jsx";
@@ -120,6 +121,7 @@ export default function App() {
           {/* ── Auth ── */}
           <Route path="/login"                    element={<LoginPage />} />
           <Route path="/signup"                   element={<SignupPage />} />
+          <Route path="/verify-otp"               element={<OTPVerificationPage />} />
           <Route path="/auth/callback"            element={<AuthCallbackPage />} />
 
           {/* ── Static / misc ── */}

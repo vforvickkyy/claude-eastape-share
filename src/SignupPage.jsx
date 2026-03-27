@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { EnvelopeSimple, Lock, User, Warning, Eye, EyeSlash } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
+import { authApi } from "./lib/api";
 
 function GoogleIcon() {
   return (
@@ -16,7 +17,7 @@ function GoogleIcon() {
 }
 
 export default function SignupPage() {
-  const { signup, loginWithGoogle, user } = useAuth();
+  const { loginWithGoogle, user } = useAuth();
   const navigate = useNavigate();
 
   const [name,     setName]     = useState("");
@@ -25,6 +26,7 @@ export default function SignupPage() {
   const [showPw,   setShowPw]   = useState(false);
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [gLoading, setGLoading] = useState(false);
 
   useEffect(() => { if (user) navigate("/", { replace: true }); }, [user]);
@@ -33,8 +35,10 @@ export default function SignupPage() {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      await signup(email, password, name);
-      navigate("/onboarding", { replace: true });
+      const result = await authApi.signup({ email, password, fullName: name });
+      if (result.error) throw new Error(result.error);
+      setCodeSent(true);
+      setTimeout(() => navigate("/verify-otp", { state: { email, fullName: name } }), 600);
     } catch (err) {
       setError(err.message || "Sign up failed. Please try again.");
     } finally { setLoading(false); }
@@ -129,11 +133,11 @@ export default function SignupPage() {
           </div>
 
           <motion.button
-            type="submit" className="upload-btn" disabled={loading || gLoading}
+            type="submit" className="upload-btn" disabled={loading || gLoading || codeSent}
             whileHover={!loading ? { scale: 1.01 } : {}}
             whileTap={!loading ? { scale: 0.99 } : {}}
           >
-            {loading ? <><span className="spinner" /> Creating account…</> : "Create Account"}
+            {codeSent ? "Code sent! Redirecting…" : loading ? <><span className="spinner" /> Creating account…</> : "Create Account"}
           </motion.button>
         </form>
 
