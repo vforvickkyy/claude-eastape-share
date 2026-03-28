@@ -75,12 +75,12 @@ Deno.serve(async (req) => {
       .eq('id', link.id)
       .then(() => {})
 
-    // Wasabi credentials
-    const wEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
-    const wBucket   = Deno.env.get('WASABI_BUCKET') || ''
-    const wKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
-    const wSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
-    const wRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
+    // Wasabi credentials (try all naming conventions used across the project)
+    const wEndpoint = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '') || 'https://s3.ap-southeast-1.wasabisys.com'
+    const wBucket   = Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? ''
+    const wKey      = Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY') ?? ''
+    const wSecret   = Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_KEY') ?? ''
+    const wRegion   = Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'ap-southeast-1'
 
     async function signMedia(media: any) {
       let videoUrl: string | null = null
@@ -103,9 +103,9 @@ Deno.serve(async (req) => {
       let comments: unknown[] = []
       if (link.allow_comments) {
         const { data: rows } = await supabase
-          .from('media_comments')
+          .from('project_media_comments')
           .select('*, profiles:user_id(full_name, avatar_url)')
-          .eq('asset_id', asset.id)
+          .eq('media_id', asset.id)
           .order('created_at')
         comments = rows || []
       }
