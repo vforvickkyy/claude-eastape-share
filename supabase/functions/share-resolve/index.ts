@@ -10,6 +10,41 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
+const enc = new TextEncoder()
+function hex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer> {
+  const raw = typeof key === 'string' ? enc.encode(key) : new Uint8Array(key)
+  const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return crypto.subtle.sign('HMAC', k, enc.encode(msg))
+}
+async function presignGet(endpoint: string, bucket: string, key: string, accessKeyId: string, secretAccessKey: string, region: string, expiresIn = 14400): Promise<string> {
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const credentialScope = `${date}/${region}/s3/aws4_request`
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential', `${accessKeyId}/${credentialScope}`)
+  qp.set('X-Amz-Date', datetime)
+  qp.set('X-Amz-Expires', String(expiresIn))
+  qp.set('X-Amz-SignedHeaders', 'host')
+  const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+  const kDate = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion = await hmac(kDate, region)
+  const kService = await hmac(kRegion, 's3')
+  const kSign = await hmac(kService, 'aws4_request')
+  const sig = hex(await hmac(kSign, stringToSign))
+  return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405)
@@ -23,54 +58,87 @@ Deno.serve(async (req) => {
 
     const { data: link, error } = await supabase
       .from('share_links')
-      .select('*, project_media(*), project_files(id, name, file_size, mime_type, wasabi_key), projects(id, name, color, icon)')
+      .select('*, project_media(*), projects(id, name, color, icon)')
       .eq('token', token)
       .single()
 
     if (error || !link) return json({ error: 'Share link not found' }, 404)
     if (link.expires_at && new Date(link.expires_at) < new Date()) return json({ error: 'Share link expired' }, 410)
-    if (link.password && link.password !== password) return json({ error: 'Password required', requires_password: true }, 401)
+    if (link.password) {
+      if (!password) return json({ error: 'Password required', passwordRequired: true }, 401)
+      if (link.password !== password) return json({ error: 'Incorrect password' }, 401)
+    }
 
-    // Increment view count
-    supabase.from('share_links').update({ view_count: (link.view_count || 0) + 1 }).eq('id', link.id).then(() => {})
+    // Increment view count (non-blocking)
+    supabase.from('share_links')
+      .update({ view_count: (link.view_count || 0) + 1, last_accessed_at: new Date().toISOString() })
+      .eq('id', link.id)
+      .then(() => {})
 
-    // If it's a project-level share, return the project's media list
-    if (link.project_id && !link.project_media_id && !link.project_file_id) {
+    // Wasabi credentials
+    const wEndpoint = Deno.env.get('WASABI_ENDPOINT') || 'https://s3.ap-southeast-1.wasabisys.com'
+    const wBucket   = Deno.env.get('WASABI_BUCKET') || ''
+    const wKey      = Deno.env.get('WASABI_ACCESS_KEY') || ''
+    const wSecret   = Deno.env.get('WASABI_SECRET_KEY') || ''
+    const wRegion   = Deno.env.get('WASABI_REGION') || 'ap-southeast-1'
+
+    async function signMedia(media: any) {
+      let videoUrl: string | null = null
+      let thumbnailUrl: string | null = null
+      if (media.wasabi_key && wKey) {
+        try { videoUrl = await presignGet(wEndpoint, wBucket, media.wasabi_key, wKey, wSecret, wRegion) } catch {}
+      }
+      const thumbKey = media.wasabi_thumbnail_key ||
+        (media.type === 'image' || media.mime_type?.startsWith('image/') ? media.wasabi_key : null)
+      if (thumbKey && wKey) {
+        try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
+      }
+      return { ...media, videoUrl, thumbnailUrl }
+    }
+
+    // ── Single media asset share ──────────────────────────────────────
+    if (link.project_media_id && link.project_media) {
+      const asset = await signMedia(link.project_media)
+
+      let comments: unknown[] = []
+      if (link.allow_comments) {
+        const { data: rows } = await supabase
+          .from('media_comments')
+          .select('*, profiles:user_id(full_name, avatar_url)')
+          .eq('asset_id', asset.id)
+          .order('created_at')
+        comments = rows || []
+      }
+
+      return json({
+        asset,
+        allowDownload: link.allow_download ?? true,
+        allowComments: link.allow_comments ?? false,
+        comments,
+      })
+    }
+
+    // ── Project-level share ───────────────────────────────────────────
+    if (link.project_id && !link.project_media_id) {
       const { data: assets } = await supabase
         .from('project_media')
-        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, status, created_at')
+        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, file_size, status')
         .eq('project_id', link.project_id)
         .eq('is_trashed', false)
         .order('created_at', { ascending: false })
 
+      const enriched = await Promise.all((assets || []).map(signMedia))
+
       return json({
-        link: { ...link, password: undefined },
         type: 'project',
         project: link.projects,
-        assets: assets || [],
-      })
-    }
-
-    // If it's a media share
-    if (link.project_media_id && link.project_media) {
-      return json({
-        link: { ...link, password: undefined },
-        type: 'media',
-        media: link.project_media,
-      })
-    }
-
-    // If it's a file share
-    if (link.project_file_id && link.project_files) {
-      return json({
-        link: { ...link, password: undefined },
-        type: 'file',
-        file: link.project_files,
+        assets: enriched,
+        allowDownload: link.allow_download ?? true,
       })
     }
 
     return json({ error: 'Invalid share link' }, 400)
   } catch (err) {
-    return json({ error: err.message }, 500)
+    return json({ error: (err as Error).message }, 500)
   }
 })

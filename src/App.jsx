@@ -5,7 +5,6 @@ import { PlanProvider } from "./context/PlanContext";
 import { ProjectProvider } from "./context/ProjectContext";
 import { UploadProvider } from "./context/UploadContext";
 import UploadProgressPanel from "./components/drive/UploadProgressPanel";
-import SharePage           from "./SharePage.jsx";
 import LoginPage           from "./LoginPage.jsx";
 import SignupPage          from "./SignupPage.jsx";
 import OTPVerificationPage from "./OTPVerificationPage.jsx";
@@ -114,9 +113,6 @@ export default function App() {
 
           {/* ── Upload → redirect to Drive ── */}
           <Route path="/upload"                   element={<Navigate to="/drive" replace />} />
-
-          {/* ── Public share pages ── */}
-          <Route path="/share/:token"             element={<SharePage />} />
 
           {/* ── Onboarding ── */}
           <Route path="/onboarding" element={

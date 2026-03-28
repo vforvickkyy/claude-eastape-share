@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Link, Copy, CheckCircle, Trash, X } from "@phosphor-icons/react";
-import { userApiFetch } from "../../lib/userApi";
+import { shareLinksApi } from "../../lib/api.js";
 
 export default function ShareModal({ asset, onClose }) {
   const [links,       setLinks]       = useState([]);
@@ -19,7 +19,7 @@ export default function ShareModal({ asset, onClose }) {
   const [password,      setPassword]      = useState("");
 
   useEffect(() => {
-    userApiFetch(`/api/media/share?assetId=${asset.id}`)
+    shareLinksApi.list({ mediaId: asset.id })
       .then(d => setLinks(d.links || []))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -28,15 +28,12 @@ export default function ShareModal({ asset, onClose }) {
   async function generate() {
     setGenerating(true);
     try {
-      const data = await userApiFetch("/api/media/share", {
-        method: "POST",
-        body: JSON.stringify({
-          assetId:      asset.id,
-          allowDownload,
-          allowComments,
-          expiresAt:    expiresAt || null,
-          password:     password  || null,
-        }),
+      const data = await shareLinksApi.create({
+        project_media_id: asset.id,
+        allow_download:   allowDownload,
+        allow_comments:   allowComments,
+        expires_at:       expiresAt || null,
+        password:         password  || null,
       });
       setLinks(ls => [data.link, ...ls]);
     } catch (err) { console.error(err); }
@@ -44,7 +41,7 @@ export default function ShareModal({ asset, onClose }) {
   }
 
   async function revoke(id) {
-    await userApiFetch(`/api/media/share?id=${id}`, { method: "DELETE" });
+    await shareLinksApi.delete(id);
     setLinks(ls => ls.filter(l => l.id !== id));
   }
 

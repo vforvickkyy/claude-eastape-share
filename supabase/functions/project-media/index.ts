@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendEmail } from '../_shared/sendEmail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -114,7 +115,7 @@ Deno.serve(async (req) => {
     // PUT — update (status, name, etc.)
     if (req.method === 'PUT') {
       if (!mediaId) return json({ error: 'id required' }, 400)
-      const { data: media } = await supabase.from('project_media').select('user_id, project_id').eq('id', mediaId).single()
+      const { data: media } = await supabase.from('project_media').select('user_id, project_id, status, name').eq('id', mediaId).single()
       if (!media) return json({ error: 'Not found' }, 404)
 
       // Check access (owner or member with edit/review rights)
@@ -139,6 +140,30 @@ Deno.serve(async (req) => {
 
       const { data: updated, error } = await supabase.from('project_media').update(updates).eq('id', mediaId).select().single()
       if (error) return json({ error: error.message }, 500)
+
+      // Send status change email if status changed and changer is not the owner (non-fatal)
+      if (body.status && body.status !== media.status && media.user_id && media.user_id !== user.id) {
+        try {
+          const [{ data: changer }, { data: project }] = await Promise.all([
+            supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+            supabase.from('projects').select('name').eq('id', media.project_id).single(),
+          ])
+          sendEmail({
+            userId: media.user_id,
+            notificationType: 'status_changes',
+            template: 'statusChanged',
+            data: {
+              changedBy: changer?.full_name || 'Someone',
+              fileName: media.name || 'your file',
+              oldStatus: media.status || 'None',
+              newStatus: body.status,
+              projectName: project?.name || null,
+              viewUrl: `https://claude-eastape-share.vercel.app/projects/${media.project_id}/media/${mediaId}`,
+            }
+          }).catch(err => console.error('Status email failed:', err))
+        } catch {}
+      }
+
       return json({ media: updated })
     }
 

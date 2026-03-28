@@ -488,7 +488,8 @@ Deno.serve(async (req) => {
       if (req.method !== 'PATCH') return json({ error: 'Method not allowed' }, 405)
       const sid = shotId || url.searchParams.get('shot_id')
       if (!sid) return json({ error: 'shot_id required' }, 400)
-      const { data: existing } = await supabase.from('production_shots').select('project_id').eq('id', sid).single()
+      const { data: existing } = await supabase.from('production_shots')
+        .select('project_id, assigned_to, title, shot_number, due_date, custom_data').eq('id', sid).single()
       if (!existing) return json({ error: 'Not found' }, 404)
       if (!(await canAccess(existing.project_id))) return json({ error: 'Forbidden' }, 403)
       const body = await req.json()
@@ -497,6 +498,34 @@ Deno.serve(async (req) => {
       for (const k of allowed) if (k in body) updates[k] = body[k]
       const { data, error } = await supabase.from('production_shots').update(updates).eq('id', sid).select().single()
       if (error) return json({ error: error.message }, 500)
+
+      // Send shot assigned email if assigned_to changed to a different user (non-fatal)
+      if ('assigned_to' in body && body.assigned_to &&
+          body.assigned_to !== existing.assigned_to &&
+          body.assigned_to !== user.id) {
+        try {
+          const [{ data: assigner }, { data: project }] = await Promise.all([
+            supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+            supabase.from('projects').select('name').eq('id', existing.project_id).single(),
+          ])
+          const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          sendEmail({
+            userId: body.assigned_to,
+            notificationType: 'shot_assigned',
+            template: 'shotAssigned',
+            data: {
+              assignedBy: assigner?.full_name || 'Someone',
+              shotName: existing.title || 'Untitled Shot',
+              shotNumber: existing.shot_number || null,
+              projectName: project?.name || 'a project',
+              dueDate: existing.due_date ? formatDate(existing.due_date) : null,
+              priority: existing.custom_data?.priority || null,
+              projectUrl: `https://claude-eastape-share.vercel.app/projects/${existing.project_id}`,
+            }
+          }).catch(err => console.error('Shot assigned email failed:', err))
+        } catch {}
+      }
+
       return json({ shot: data })
     }
 
