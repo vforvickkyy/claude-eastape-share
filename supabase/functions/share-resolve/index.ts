@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     if (link.project_id && !link.project_media_id) {
       const { data: assets } = await supabase
         .from('project_media')
-        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, file_size, status')
+        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, file_size, status, cloudflare_uid, cloudflare_status')
         .eq('project_id', link.project_id)
         .eq('is_trashed', false)
         .order('created_at', { ascending: false })

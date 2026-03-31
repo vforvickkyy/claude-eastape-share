@@ -265,15 +265,31 @@ export default function MediaSharePage() {
           </div>
 
           <div className="asset-player share-player">
-            {asset?.wasabi_status === 'ready' && asset?.videoUrl ? (
+            {asset?.wasabi_status === 'ready' && (asset?.videoUrl || asset?.cloudflare_uid) ? (
               isVideo ? (
-                <VideoPlayer
-                  ref={playerRef}
-                  src={asset.videoUrl}
-                  mimeType={asset.mime_type}
-                  poster={asset.thumbnailUrl || undefined}
-                  onTimeUpdate={setCurrentTime}
-                />
+                asset?.cloudflare_uid && asset?.cloudflare_status === 'ready' ? (
+                  <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', background: '#000', position: 'relative' }}>
+                    <iframe
+                      src={`https://iframe.cloudflarestream.com/${asset.cloudflare_uid}?autoplay=false&letterboxColor=transparent&primaryColor=%237c3aed`}
+                      style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', top: 0, left: 0 }}
+                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : asset?.videoUrl ? (
+                  <VideoPlayer
+                    ref={playerRef}
+                    src={asset.videoUrl}
+                    mimeType={asset.mime_type}
+                    poster={asset.thumbnailUrl || undefined}
+                    onTimeUpdate={setCurrentTime}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' }}>
+                    <FileVideo size={48} weight="thin" style={{ color: 'var(--t3)' }} />
+                    <p style={{ color: 'var(--t3)' }}>No preview available</p>
+                  </div>
+                )
               ) : isImage ? (
                 <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
               ) : isAudio ? (
@@ -384,6 +400,18 @@ function AssetMediaPlayer({ asset }) {
   }
 
   if (isVideo) {
+    if (asset.cloudflare_uid && asset.cloudflare_status === 'ready') {
+      return (
+        <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative' }}>
+          <iframe
+            src={`https://iframe.cloudflarestream.com/${asset.cloudflare_uid}?autoplay=true&letterboxColor=transparent&primaryColor=%237c3aed`}
+            style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', top: 0, left: 0 }}
+            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )
+    }
     return (
       <VideoPlayer
         src={asset.videoUrl}
