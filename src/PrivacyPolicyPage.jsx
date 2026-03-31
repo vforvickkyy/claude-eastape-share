@@ -24,9 +24,9 @@ export default function PrivacyPolicyPage() {
           <section className="legal-section">
             <h2>1. Overview</h2>
             <p>
-              Eastape Share ("we", "our", or "us") is committed to protecting your privacy. This
+              Eastape Studio ("we", "our", or "us") is committed to protecting your privacy. This
               Privacy Policy explains how we collect, use, and safeguard information when you use
-              our file-sharing service at Eastape Share. By using the service, you agree to the
+              our file-sharing service at Eastape Studio. By using the service, you agree to the
               practices described in this policy.
             </p>
           </section>

@@ -24,7 +24,7 @@ export default function TermsPage() {
           <section className="legal-section">
             <h2>1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Eastape Share ("the Service"), you agree to be bound by these
+              By accessing or using Eastape Studio ("the Service"), you agree to be bound by these
               Terms &amp; Conditions ("Terms"). If you do not agree to these Terms, please do not use
               the Service. These Terms apply to all users of the Service.
             </p>
@@ -33,7 +33,7 @@ export default function TermsPage() {
           <section className="legal-section">
             <h2>2. Description of Service</h2>
             <p>
-              Eastape Share is a file-sharing platform that allows users to upload files and
+              Eastape Studio is a file-sharing platform that allows users to upload files and
               generate shareable download links. The Service is provided by Eastape Films and is
               currently intended for private, authorised use only.
             </p>
@@ -60,7 +60,7 @@ export default function TermsPage() {
             <h2>4. File Ownership &amp; Responsibility</h2>
             <p>
               You retain full ownership of the files you upload. By uploading files, you grant
-              Eastape Share a limited, non-exclusive licence to store and serve your files solely
+              Eastape Studio a limited, non-exclusive licence to store and serve your files solely
               for the purpose of providing the Service to you.
             </p>
             <p>

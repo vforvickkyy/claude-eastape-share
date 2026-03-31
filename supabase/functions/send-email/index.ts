@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -320,23 +321,23 @@ async function shouldSendEmail(
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
   try {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=email,email_notifications`,
-      {
-        headers: {
-          'apikey': serviceKey,
-          'Authorization': `Bearer ${serviceKey}`,
-        }
-      }
-    )
-    const profiles = await response.json()
-    if (!profiles?.[0]) return { send: false, email: '' }
+    const supabase = createClient(supabaseUrl, serviceKey)
 
-    const profile = profiles[0]
-    const prefs = profile.email_notifications || {}
+    // Get email from auth.users (profiles table has no email column)
+    const { data: { user } } = await supabase.auth.admin.getUserById(userId)
+    if (!user?.email) return { send: false, email: '' }
+
+    // Get notification preferences from profiles
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email_notifications')
+      .eq('id', userId)
+      .single()
+
+    const prefs = profile?.email_notifications || {}
     const shouldSend = prefs[notificationType] !== false
 
-    return { send: shouldSend, email: profile.email }
+    return { send: shouldSend, email: user.email }
   } catch {
     return { send: false, email: '' }
   }

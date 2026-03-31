@@ -89,8 +89,8 @@ export default function SiteHeader({ extra }) {
 function LogoSlot() {
   const [hasLogo, setHasLogo] = React.useState(true);
   return hasLogo ? (
-    <img src="/logo.png" alt="Eastape Share" className="logo-img" onError={() => setHasLogo(false)} />
+    <img src="/logo.png" alt="Eastape Studio" className="logo-img" onError={() => setHasLogo(false)} />
   ) : (
-    <div className="logo-text-fallback"><span className="logo-dot" />Eastape Share</div>
+    <div className="logo-text-fallback"><span className="logo-dot" />Eastape Studio</div>
   );
 }

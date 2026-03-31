@@ -216,10 +216,10 @@ export default function UploadPage() {
           transition={{ duration: 0.65, ease: [0.22,1,0.36,1] }}
         >
           <h1 className="hero-title">
-            Share Files<br />
-            <span className="hero-title-accent">Securely &amp; Instantly</span>
+            Your Creative Studio<br />
+            <span className="hero-title-accent">Organised &amp; Delivered</span>
           </h1>
-          <p className="hero-desc">Fast, encrypted transfers. No limits. No friction.</p>
+          <p className="hero-desc">Production management, file sharing, and video review for creative teams.</p>
           <div className="hero-features">
             <div className="hero-feature"><span className="hero-feature-dot"/>Direct upload — no server middleman</div>
             <div className="hero-feature"><span className="hero-feature-dot"/>Links expire automatically after 7 days</div>
