@@ -66,7 +66,13 @@ export default function ProjectMediaPage() {
 
   async function handleDelete(id) {
     if (!confirm("Delete this asset?")) return;
+    const asset = assets.find(a => a.id === id);
     await projectMediaApi.delete(id).catch(() => {});
+    if (asset?.cloudflare_uid) {
+      import("./lib/api").then(({ cloudflareApi }) =>
+        cloudflareApi.deleteVideo(asset.cloudflare_uid).catch(() => {})
+      );
+    }
     setAssets(as => as.filter(a => a.id !== id));
   }
 
@@ -257,8 +263,12 @@ export default function ProjectMediaPage() {
                     className="mpv-card-thumb"
                     onClick={() => navigate(`/projects/${projectId}/media/${asset.id}`)}
                   >
-                    {asset.thumbnailUrl ? (
-                      <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = "none"; }} />
+                    {(asset.cloudflare_thumbnail_url || asset.thumbnailUrl) ? (
+                      <img
+                        src={asset.cloudflare_thumbnail_url || asset.thumbnailUrl}
+                        alt={asset.name}
+                        onError={e => { e.target.style.display = "none"; }}
+                      />
                     ) : (
                       <div className="mpv-card-icon">{typeIcon(asset.type, asset.mime_type)}</div>
                     )}
@@ -270,6 +280,32 @@ export default function ProjectMediaPage() {
                     {asset.status && STATUS_COLORS[asset.status] && (
                       <span className={`media-status-badge ${STATUS_COLORS[asset.status].class}`}>
                         {STATUS_COLORS[asset.status].label}
+                      </span>
+                    )}
+                    {(asset.cloudflare_status === "processing" || asset.cloudflare_status === "pending") && (
+                      <span style={{
+                        position: "absolute", top: 8, right: 8,
+                        background: "rgba(124,58,237,0.9)", backdropFilter: "blur(8px)",
+                        borderRadius: "999px", padding: "3px 10px",
+                        fontSize: 11, fontWeight: 600, color: "white",
+                        display: "flex", alignItems: "center", gap: 4,
+                      }}>
+                        <span style={{
+                          width: 6, height: 6, borderRadius: "50%", background: "white",
+                          animation: "cf-pulse 1.5s infinite",
+                        }} />
+                        Processing
+                        <style>{`@keyframes cf-pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
+                      </span>
+                    )}
+                    {asset.cloudflare_status === "error" && (
+                      <span style={{
+                        position: "absolute", top: 8, right: 8,
+                        background: "rgba(239,68,68,0.9)", backdropFilter: "blur(8px)",
+                        borderRadius: "999px", padding: "3px 10px",
+                        fontSize: 11, fontWeight: 600, color: "white",
+                      }}>
+                        Stream Error
                       </span>
                     )}
                     {asset.wasabi_status === "processing" && (

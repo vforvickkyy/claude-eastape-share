@@ -13,6 +13,7 @@ import CommentsPanel from './components/media/CommentsPanel'
 import VersionsPanel from './components/media/VersionsPanel'
 import ShareModal from './components/media/ShareModal'
 import VideoPlayer from './components/media/VideoPlayer'
+import CloudflareVideoPlayer from './components/media/CloudflareVideoPlayer'
 import { projectMediaApi, shareLinksApi, formatSize } from './lib/api'
 import './styles/videojs-theme.css'
 
@@ -245,15 +246,32 @@ export default function ProjectMediaAssetPage() {
         <div className="asset-player-wrap">
           {asset.wasabi_status === 'ready' ? (
             <>
-              {isVideo && videoSrc ? (
+              {isVideo ? (
                 <div className="asset-player">
-                  <VideoPlayer
-                    ref={playerRef}
-                    src={videoSrc}
-                    mimeType={asset.mime_type}
-                    poster={thumbSrc}
-                    onTimeUpdate={setCurrentTime}
-                  />
+                  {asset.cloudflare_uid && asset.cloudflare_status !== 'none' ? (
+                    <CloudflareVideoPlayer
+                      mediaId={asset.id}
+                      cloudflareUid={asset.cloudflare_uid}
+                      cloudflareStatus={asset.cloudflare_status}
+                      fallbackUrl={videoSrc}
+                      onStatusChange={(newStatus) =>
+                        setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
+                      }
+                    />
+                  ) : videoSrc ? (
+                    <VideoPlayer
+                      ref={playerRef}
+                      src={videoSrc}
+                      mimeType={asset.mime_type}
+                      poster={thumbSrc}
+                      onTimeUpdate={setCurrentTime}
+                    />
+                  ) : (
+                    <div className="asset-player asset-player-processing">
+                      <span className="spinner" style={{ width: 32, height: 32 }} />
+                      <p style={{ marginTop: 12 }}>Loading…</p>
+                    </div>
+                  )}
                 </div>
               ) : isImage && videoSrc ? (
                 <div className="asset-player" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', borderRadius: 12, overflow: 'hidden' }}>

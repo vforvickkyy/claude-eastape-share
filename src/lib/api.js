@@ -230,6 +230,18 @@ export const mediaApi = {
   mediaGetPublicUrl:   (id, shareToken, type) => projectMediaApi.getPublicUrl(id, shareToken, type),
 }
 
+// ── Cloudflare Stream ──────────────────────────────────────────────
+export const cloudflareApi = {
+  getUploadUrl: (fileSize, fileName, mediaId) =>
+    post(`${BASE}/cloudflare-stream`, { action: 'get_upload_url', file_size: fileSize, file_name: fileName, media_id: mediaId }, true),
+
+  getStatus: (uid, mediaId) =>
+    post(`${BASE}/cloudflare-stream`, { action: 'get_status', uid, media_id: mediaId }, true),
+
+  deleteVideo: (uid) =>
+    post(`${BASE}/cloudflare-stream`, { action: 'delete', uid }, true),
+}
+
 // ── Production Management ──────────────────────────────────────────
 const PROD = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/production`
 export const productionApi = {

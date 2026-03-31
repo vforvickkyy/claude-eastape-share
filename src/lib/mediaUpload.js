@@ -1,11 +1,20 @@
 /**
- * mediaUpload.js — Wasabi S3 media upload utilities
+ * mediaUpload.js — Wasabi S3 + Cloudflare Stream upload utilities
  */
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
 function getToken() {
   try { return JSON.parse(localStorage.getItem('ets_auth'))?.access_token } catch { return null }
+}
+
+async function getTokenAsync() {
+  try {
+    const { supabase } = await import('./supabaseClient.js')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) return session.access_token
+  } catch {}
+  return getToken()
 }
 
 /** Extract a video frame as base64 JPEG */
@@ -100,13 +109,15 @@ export function uploadToWasabi(presignedUrl, file, onProgress) {
 
 /**
  * Full upload orchestrator:
- * 1. Get presigned URL from presign edge function
- * 2. Generate thumbnail
- * 3. Upload to Wasabi with progress
- * 4. Confirm upload + send thumbnail to media-confirm-upload
+ * 1. Get presigned URL from presign edge function (creates DB record)
+ * 2. Generate thumbnail + duration
+ * 3. For video files: get Cloudflare direct upload URL simultaneously
+ * 4. Upload to Wasabi (with progress) + Cloudflare simultaneously
+ * 5. Confirm upload + save thumbnail + cloudflare fields
  */
 export async function uploadMediaFile(file, projectId, folderId, onProgress) {
-  const token = getToken()
+  const token = await getTokenAsync()
+  const isVideo = file.type.startsWith('video/')
 
   // 1. Get presigned URL + pre-create DB record
   const presignRes = await fetch(`${BASE}/presign`, {
@@ -129,15 +140,14 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
     throw err
   }
 
-  // Support both old (camelCase) and new (snake_case) response shapes
   const uploadUrl = presignData.uploadUrl || presignData.upload_url
   const assetId   = presignData.assetId   || presignData.asset_id || presignData.media_id
 
-  // 2. Generate thumbnail
+  // 2. Generate thumbnail + duration
   let thumbnailBase64 = null
   let duration = null
 
-  if (file.type.startsWith('video/')) {
+  if (isVideo) {
     ;[thumbnailBase64, duration] = await Promise.all([
       generateVideoThumbnail(file),
       getVideoDuration(file),
@@ -146,14 +156,60 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
     thumbnailBase64 = await generateImageThumbnail(file)
   }
 
-  // 3. Upload to Wasabi
-  await uploadToWasabi(uploadUrl, file, onProgress)
+  // 3. For video files: get Cloudflare direct upload URL
+  let cloudflareUploadUrl = null
+  let cloudflareUid = null
 
-  // 4. Confirm + save thumbnail
+  if (isVideo) {
+    try {
+      const cfRes = await fetch(`${BASE}/cloudflare-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'get_upload_url', file_size: file.size, file_name: file.name, media_id: assetId }),
+      })
+      if (cfRes.ok) {
+        const cfData = await cfRes.json()
+        if (cfData.success) {
+          cloudflareUploadUrl = cfData.upload_url
+          cloudflareUid = cfData.uid
+        }
+      }
+    } catch (err) {
+      console.error('Cloudflare upload URL failed (non-fatal):', err)
+    }
+  }
+
+  // 4. Upload to Wasabi + Cloudflare simultaneously
+  const uploadPromises = [
+    uploadToWasabi(uploadUrl, file, onProgress),
+  ]
+
+  if (isVideo && cloudflareUploadUrl) {
+    uploadPromises.push(
+      fetch(cloudflareUploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      }).catch(err => {
+        console.error('Cloudflare upload failed (non-fatal):', err)
+        return null
+      })
+    )
+  }
+
+  await Promise.allSettled(uploadPromises)
+
+  // 5. Confirm upload
   const confirmRes = await fetch(`${BASE}/media-confirm-upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ asset_id: assetId, thumbnail_base64: thumbnailBase64, duration }),
+    body: JSON.stringify({
+      asset_id: assetId,
+      thumbnail_base64: thumbnailBase64,
+      duration,
+      cloudflare_uid: cloudflareUid,
+      cloudflare_status: cloudflareUid ? 'processing' : 'none',
+    }),
   })
 
   if (!confirmRes.ok) {
