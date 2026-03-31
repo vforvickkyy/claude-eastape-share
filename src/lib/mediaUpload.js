@@ -185,11 +185,14 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
   ]
 
   if (isVideo && cloudflareUploadUrl) {
+    // Cloudflare direct_upload URL expects multipart/form-data POST with file field
+    const cfForm = new FormData()
+    cfForm.append('file', file)
     uploadPromises.push(
       fetch(cloudflareUploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
+        method: 'POST',
+        body: cfForm,
+        // No Content-Type header — browser sets multipart boundary automatically
       }).catch(err => {
         console.error('Cloudflare upload failed (non-fatal):', err)
         return null
