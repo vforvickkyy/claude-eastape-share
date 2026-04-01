@@ -6,21 +6,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   PaperPlaneTilt, CheckCircle, ArrowBendDownRight, Clock,
 } from "@phosphor-icons/react";
-import { userApiFetch } from "../../lib/userApi";
+import { mediaApi } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
 export default function CommentsPanel({ assetId, currentTime, onSeek }) {
   const { user } = useAuth();
-  const [comments,  setComments]  = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [body,      setBody]      = useState("");
-  const [replyTo,   setReplyTo]   = useState(null);
+  const [comments,   setComments]  = useState([]);
+  const [loading,    setLoading]   = useState(true);
+  const [body,       setBody]      = useState("");
+  const [replyTo,    setReplyTo]   = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
     if (!assetId) return;
-    userApiFetch(`/api/media/comments?assetId=${assetId}`)
+    setLoading(true);
+    mediaApi.getComments(assetId)
       .then(d => setComments(d.comments || []))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -31,14 +32,11 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
     if (!body.trim()) return;
     setSubmitting(true);
     try {
-      const data = await userApiFetch("/api/media/comments", {
-        method: "POST",
-        body: JSON.stringify({
-          assetId,
-          body: body.trim(),
-          timestampSeconds: currentTime > 0 ? parseFloat(currentTime.toFixed(2)) : null,
-          parentCommentId: replyTo || null,
-        }),
+      const data = await mediaApi.createComment({
+        assetId,
+        body: body.trim(),
+        timestampSeconds: currentTime > 0 ? parseFloat(currentTime.toFixed(2)) : null,
+        parentCommentId: replyTo || null,
       });
       setComments(cs => [...cs, data.comment]);
       setBody("");
@@ -52,15 +50,11 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
   }
 
   async function toggleResolve(comment) {
-    const updated = await userApiFetch(`/api/media/comments?id=${comment.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ resolved: !comment.resolved }),
-    });
+    await mediaApi.updateComment(comment.id, { resolved: !comment.resolved });
     setComments(cs => cs.map(c => c.id === comment.id ? { ...c, resolved: !c.resolved } : c));
   }
 
-  // Build thread tree (top-level + children)
-  const topLevel  = comments.filter(c => !c.parent_comment_id);
+  const topLevel   = comments.filter(c => !c.parent_comment_id);
   const childrenOf = id => comments.filter(c => c.parent_comment_id === id);
 
   return (
@@ -183,6 +177,7 @@ function formatDuration(s) {
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
+
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);

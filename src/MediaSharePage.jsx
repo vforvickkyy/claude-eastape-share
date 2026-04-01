@@ -25,7 +25,39 @@ export default function MediaSharePage() {
   const [guestName,  setGuestName]  = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const playerRef = useRef(null);
+  const playerRef   = useRef(null);  // VideoJS ref
+  const cfIframeRef = useRef(null);  // Cloudflare iframe ref
+
+  // Listen for timeupdate postMessages from Cloudflare Stream iframe
+  useEffect(() => {
+    function onMessage(e) {
+      try {
+        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (d?.event === 'timeupdate' && typeof d.currentTime === 'number') {
+          setCurrentTime(d.currentTime);
+        }
+      } catch {}
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  function cfPost(msg) {
+    cfIframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), '*');
+  }
+
+  function onCfIframeLoad() {
+    cfPost({ event: 'addEventListener', type: 'timeupdate' });
+  }
+
+  // Unified seek — works for both VideoJS and Cloudflare
+  function seekPlayer(seconds) {
+    if (playerRef.current?.seekTo) {
+      playerRef.current.seekTo(seconds);
+    } else {
+      cfPost({ event: 'seek', time: seconds });
+    }
+  }
 
   // Folder/project preview modal — track by index for prev/next
   const [previewIdx, setPreviewIdx] = useState(null);
@@ -270,10 +302,12 @@ export default function MediaSharePage() {
                 asset?.cloudflare_uid && asset?.cloudflare_status === 'ready' ? (
                   <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', background: '#000', position: 'relative' }}>
                     <iframe
-                      src={`https://iframe.cloudflarestream.com/${asset.cloudflare_uid}?autoplay=false&letterboxColor=transparent&primaryColor=%237c3aed`}
+                      ref={cfIframeRef}
+                      src={`https://iframe.cloudflarestream.com/${asset.cloudflare_uid}?autoplay=false&letterboxColor=transparent&primaryColor=%237c3aed&enablejsapi=1`}
                       style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', top: 0, left: 0 }}
                       allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
                       allowFullScreen
+                      onLoad={onCfIframeLoad}
                     />
                   </div>
                 ) : asset?.videoUrl ? (
@@ -339,7 +373,7 @@ export default function MediaSharePage() {
                       {c.timestamp_seconds != null && (
                         <button
                           className="share-comment-ts"
-                          onClick={() => playerRef.current?.seekTo(c.timestamp_seconds)}
+                          onClick={() => seekPlayer(c.timestamp_seconds)}
                         >
                           {formatDuration(c.timestamp_seconds)}
                         </button>

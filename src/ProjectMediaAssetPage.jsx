@@ -250,10 +250,12 @@ export default function ProjectMediaAssetPage() {
                 <div className="asset-player">
                   {asset.cloudflare_uid && asset.cloudflare_status !== 'none' ? (
                     <CloudflareVideoPlayer
+                      ref={playerRef}
                       mediaId={asset.id}
                       cloudflareUid={asset.cloudflare_uid}
                       cloudflareStatus={asset.cloudflare_status}
                       fallbackUrl={videoSrc}
+                      onTimeUpdate={setCurrentTime}
                       onStatusChange={(newStatus) =>
                         setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
                       }
