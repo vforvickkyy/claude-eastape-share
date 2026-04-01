@@ -255,10 +255,10 @@ export default function MediaSharePage() {
 
   return (
     <PageShell>
-      <div className="share-public-asset-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start', maxWidth: 1280, margin: '0 auto' }}>
+      <div className="share-public-asset-layout">
 
         {/* Left: Player + Notes */}
-        <div className="share-public-player-wrap" style={{ flex: 1, minWidth: 0 }}>
+        <div className="share-public-player-wrap">
           <div className="share-public-meta">
             <h1 className="share-public-asset-name">{asset?.name}</h1>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -328,7 +328,7 @@ export default function MediaSharePage() {
 
         {/* Comments column (right) */}
         {allowComments && (
-        <div className="share-comments-sidebar" style={{ width: 360, flexShrink: 0 }}>
+        <div className="share-comments-sidebar">
           <div className="share-comments-header">
             <ChatCircle size={15} weight="duotone" />
             <span>Comments ({comments.length})</span>
