@@ -108,6 +108,22 @@ export function AuthProvider({ children }) {
 
     init();
 
+    // Listen for Supabase auth events (Google OAuth callback writes session via supabase.auth)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      if (session?.user) {
+        // Only update if we don't already have this user (avoids overwriting richer session)
+        setUser(prev => {
+          if (!prev || prev.id !== session.user.id) {
+            saveSession(session);
+            return session.user;
+          }
+          return prev;
+        });
+        fetchProfile();
+      }
+    });
+
     const interval = setInterval(() => {
       const current = loadSession();
       if (!current?.refresh_token) return;
@@ -119,7 +135,7 @@ export function AuthProvider({ children }) {
       }
     }, 4 * 60 * 1000);
 
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => { cancelled = true; clearInterval(interval); subscription?.unsubscribe?.(); };
   }, []);
 
   async function login(email, password) {

@@ -72,6 +72,18 @@ Deno.serve(async (req) => {
 
     // GET — list or single
     if (req.method === 'GET') {
+      // Versions list for a specific asset
+      if (mediaId && url.searchParams.get('versions') === '1') {
+        const { data: media } = await supabase.from('project_media').select('user_id, project_id, version, wasabi_key, wasabi_thumbnail_key, cloudflare_uid, cloudflare_status, duration, file_size, created_at').eq('id', mediaId).single()
+        if (!media) return json({ error: 'Not found' }, 404)
+        if (media.user_id !== user.id) {
+          const { data: member } = await supabase.from('project_members').select('role').eq('project_id', media.project_id).eq('user_id', user.id).eq('accepted', true).single()
+          if (!member) return json({ error: 'Forbidden' }, 403)
+        }
+        const { data: versions } = await supabase.from('project_media_versions').select('*').eq('media_id', mediaId).order('version_number', { ascending: false })
+        return json({ versions: versions || [], current_version: media.version || 1 })
+      }
+
       if (mediaId) {
         const { data: media, error } = await supabase.from('project_media').select('*').eq('id', mediaId).single()
         if (error || !media) return json({ error: 'Not found' }, 404)
@@ -115,7 +127,7 @@ Deno.serve(async (req) => {
     // PUT — update (status, name, etc.)
     if (req.method === 'PUT') {
       if (!mediaId) return json({ error: 'id required' }, 400)
-      const { data: media } = await supabase.from('project_media').select('user_id, project_id, status, name').eq('id', mediaId).single()
+      const { data: media } = await supabase.from('project_media').select('user_id, project_id, status, name, version, wasabi_key, wasabi_thumbnail_key, cloudflare_uid, cloudflare_status, duration, file_size').eq('id', mediaId).single()
       if (!media) return json({ error: 'Not found' }, 404)
 
       // Check access (owner or member with edit/review rights)
@@ -125,9 +137,25 @@ Deno.serve(async (req) => {
       }
 
       const body = await req.json()
-      const allowed = ['name', 'status', 'wasabi_status', 'wasabi_thumbnail_key', 'duration', 'width', 'height', 'folder_id']
+      const allowed = ['name', 'status', 'wasabi_status', 'wasabi_key', 'wasabi_thumbnail_key', 'cloudflare_uid', 'cloudflare_status', 'duration', 'width', 'height', 'folder_id', 'file_size', 'mime_type', 'notes']
       const updates: any = { updated_at: new Date().toISOString() }
       for (const key of allowed) if (body[key] !== undefined) updates[key] = body[key]
+
+      // Version bump: save current state to versions table, then apply new file fields
+      if (body.version_bump) {
+        await supabase.from('project_media_versions').insert({
+          media_id: mediaId,
+          version_number: media.version || 1,
+          wasabi_key: media.wasabi_key,
+          wasabi_thumbnail_key: media.wasabi_thumbnail_key,
+          cloudflare_uid: media.cloudflare_uid,
+          cloudflare_status: media.cloudflare_status,
+          duration: media.duration,
+          file_size: media.file_size,
+          uploaded_by: user.id,
+        })
+        updates.version = ((media.version as number) || 1) + 1
+      }
 
       // Log status change
       if (body.status) {

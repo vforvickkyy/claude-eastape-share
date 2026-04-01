@@ -126,6 +126,8 @@ export const projectMediaApi = {
   getDownloadUrl: (id)   => get(`${BASE}/download`, { media_id: id, type: 'download' }, true),
   getPublicUrl:   (id, shareToken, type = 'view') =>
     get(`${BASE}/download`, { media_id: id, share_token: shareToken, type }),
+  getVersions: (id) => get(`${BASE}/project-media`, { id, versions: '1' }, true),
+  versionBump: (id, body) => put(`${BASE}/project-media`, { id }, { version_bump: true, ...body }, true),
 }
 
 // ── Project Files ──────────────────────────────────────────────────
