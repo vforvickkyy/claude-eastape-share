@@ -7,6 +7,7 @@ import {
   PaperPlaneTilt, CheckCircle, ArrowBendDownRight, Clock,
 } from "@phosphor-icons/react";
 import { mediaApi } from "../../lib/api";
+import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 
 export default function CommentsPanel({ assetId, currentTime, onSeek }) {
@@ -19,14 +20,32 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
   const [submitError, setSubmitError] = useState(null);
   const bottomRef = useRef(null);
 
+  function loadComments() {
+    return mediaApi.getComments(assetId)
+      .then(d => setComments(d.comments || []))
+      .catch(console.error);
+  }
+
   useEffect(() => {
     if (!assetId) return;
     setLoading(true);
-    mediaApi.getComments(assetId)
-      .then(d => setComments(d.comments || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    loadComments().finally(() => setLoading(false));
   }, [assetId]);
+
+  // Realtime subscription — refetch on any change so profiles are always populated
+  useEffect(() => {
+    if (!assetId || !supabase) return;
+    const channel = supabase
+      .channel(`comments-${assetId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'project_media_comments',
+        filter: `media_id=eq.${assetId}`,
+      }, () => { loadComments(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [assetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(e) {
     e.preventDefault();

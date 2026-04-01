@@ -9,6 +9,7 @@ import {
 import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
 import { mediaApi } from "./lib/api.js";
+import { supabase } from "./lib/supabaseClient";
 import VideoPlayer from "./components/media/VideoPlayer";
 import CloudflareVideoPlayer from "./components/media/CloudflareVideoPlayer";
 import "./styles/videojs-theme.css";
@@ -53,6 +54,33 @@ export default function MediaSharePage() {
       setState("error");
     }
   }
+
+  // Realtime subscription — subscribe once we know the asset ID
+  const assetIdRef = useRef(null);
+  useEffect(() => {
+    if (!data?.asset?.id || !supabase) return;
+    const assetId = data.asset.id;
+    if (assetIdRef.current === assetId) return; // already subscribed
+    assetIdRef.current = assetId;
+
+    const channel = supabase
+      .channel(`share-comments-${assetId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'project_media_comments',
+        filter: `media_id=eq.${assetId}`,
+      }, (payload) => {
+        const c = payload.new;
+        setComments(cs => {
+          if (cs.some(x => x.id === c.id)) return cs; // already added optimistically
+          return [...cs, c];
+        });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); assetIdRef.current = null; };
+  }, [data?.asset?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDownload() {
     try {
