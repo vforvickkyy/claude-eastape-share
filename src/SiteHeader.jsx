@@ -20,7 +20,7 @@ export default function SiteHeader({ extra }) {
   async function handleLogout() {
     setOpen(false);
     await logout();
-    navigate("/");
+    navigate("/login");
   }
 
   const displayName = user?.user_metadata?.full_name || user?.email || "";

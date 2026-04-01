@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   DownloadSimple, Lock, Warning, MusicNote, File,
   FileImage, FileVideo, ChatCircle, PaperPlaneTilt, X,
-  CaretLeft, CaretRight,
+  CaretLeft, CaretRight, ArrowBendDownRight,
 } from "@phosphor-icons/react";
 import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
@@ -281,142 +281,158 @@ export default function MediaSharePage() {
   const isImage = asset?.type === 'image' || asset?.mime_type?.startsWith('image/')
   const isAudio = asset?.type === 'audio' || asset?.mime_type?.startsWith('audio/')
 
+  const topLevel  = comments.filter(c => !c.parent_comment_id);
+  const repliesOf = id => comments.filter(c => c.parent_comment_id === id);
+  const commentName = c => c.profiles?.full_name || c.guest_name || "Anonymous";
+
   return (
-    <PageShell>
-      <div className="share-public-asset-layout">
+    <div className="share-fullscreen">
+      {/* ── Top bar ── */}
+      <div className="share-topbar">
+        <div className="share-topbar-left">
+          <img src="/logo.png" alt="Eastape Studio" style={{ height: 28 }} onError={e => e.target.style.display='none'} />
+          <span className="share-topbar-name">{asset?.name}</span>
+          {asset?.duration && <span className="share-topbar-meta">{formatDuration(asset.duration)}</span>}
+          {asset?.file_size && <span className="share-topbar-meta">{formatSize(asset.file_size)}</span>}
+        </div>
+        <div className="share-topbar-right">
+          {allowDownload && asset?.wasabi_key && (
+            <button className="btn-ghost" style={{ fontSize: 13 }} onClick={handleDownload}>
+              <DownloadSimple size={14} /> Download
+            </button>
+          )}
+        </div>
+      </div>
 
-        {/* Left: Player + Notes */}
-        <div className="share-public-player-wrap">
-          <div className="share-public-meta">
-            <h1 className="share-public-asset-name">{asset?.name}</h1>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              {asset?.duration && (
-                <span style={{ color: "var(--t3)", fontSize: 12 }}>{formatDuration(asset.duration)}</span>
-              )}
-              {asset?.file_size && (
-                <span style={{ color: "var(--t3)", fontSize: 12 }}>{formatSize(asset.file_size)}</span>
-              )}
-              {allowDownload && asset?.wasabi_key && (
-                <button className="btn-ghost" style={{ fontSize: 13 }} onClick={handleDownload}>
-                  <DownloadSimple size={14} /> Download
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="asset-player share-player">
-            {isVideo ? (
-              asset?.cloudflare_uid ? (
-                <CloudflareVideoPlayer
-                  ref={playerRef}
-                  mediaId={asset.id}
-                  cloudflareUid={asset.cloudflare_uid}
-                  cloudflareStatus={asset.cloudflare_status}
-                  fallbackUrl={asset.videoUrl}
-                  onTimeUpdate={setCurrentTime}
-                />
-              ) : asset?.videoUrl ? (
-                <VideoPlayer
-                  ref={playerRef}
-                  src={asset.videoUrl}
-                  mimeType={asset.mime_type}
-                  poster={asset.thumbnailUrl || undefined}
-                  onTimeUpdate={setCurrentTime}
-                />
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' }}>
-                  <FileVideo size={48} weight="thin" style={{ color: 'var(--t3)' }} />
-                  <p style={{ color: 'var(--t3)' }}>No preview available</p>
-                </div>
-              )
-            ) : isImage ? (
-              <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-            ) : isAudio ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100%' }}>
-                <MusicNote size={48} weight="duotone" style={{ color: 'var(--purple-l)' }} />
-                <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
-                <audio controls src={asset.videoUrl} style={{ width: '100%', maxWidth: 400 }} />
-              </div>
+      {/* ── Body ── */}
+      <div className="share-body">
+        {/* Player area */}
+        <div className="share-player-area">
+          {isVideo ? (
+            asset?.cloudflare_uid ? (
+              <CloudflareVideoPlayer
+                ref={playerRef}
+                mediaId={asset.id}
+                cloudflareUid={asset.cloudflare_uid}
+                cloudflareStatus={asset.cloudflare_status}
+                fallbackUrl={asset.videoUrl}
+                onTimeUpdate={setCurrentTime}
+              />
+            ) : asset?.videoUrl ? (
+              <VideoPlayer
+                ref={playerRef}
+                src={asset.videoUrl}
+                mimeType={asset.mime_type}
+                poster={asset.thumbnailUrl || undefined}
+                onTimeUpdate={setCurrentTime}
+              />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: '100%' }}>
-                <File size={48} weight="duotone" style={{ color: 'var(--t3)' }} />
-                <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
-                {allowDownload && <button className="btn-primary-sm" onClick={handleDownload}><DownloadSimple size={14} /> Download</button>}
-              </div>
-            )}
-          </div>
+              <div className="share-no-preview"><FileVideo size={48} weight="thin" /><p>No preview available</p></div>
+            )
+          ) : isImage ? (
+            <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+          ) : isAudio ? (
+            <div className="share-audio-wrap">
+              <MusicNote size={48} weight="duotone" style={{ color: 'var(--purple-l)' }} />
+              <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
+              <audio controls src={asset.videoUrl} style={{ width: '100%', maxWidth: 480 }} />
+            </div>
+          ) : (
+            <div className="share-no-preview">
+              <File size={48} weight="duotone" style={{ color: 'var(--t3)' }} />
+              <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
+              {allowDownload && <button className="btn-primary-sm" onClick={handleDownload}><DownloadSimple size={14} /> Download</button>}
+            </div>
+          )}
 
-          {/* Notes */}
           {asset?.notes && (
-            <div className="share-asset-notes">
+            <div className="share-asset-notes" style={{ marginTop: 12 }}>
               <p className="share-asset-notes-text">{asset.notes}</p>
             </div>
           )}
         </div>
 
-        {/* Comments column (right) */}
+        {/* Comments sidebar */}
         {allowComments && (
-        <div className="share-comments-sidebar">
-          <div className="share-comments-header">
-            <ChatCircle size={15} weight="duotone" />
-            <span>Comments ({comments.length})</span>
-          </div>
+          <div className="share-comments-sidebar">
+            <div className="share-comments-header">
+              <ChatCircle size={15} weight="duotone" />
+              <span>Comments ({comments.length})</span>
+            </div>
 
-          <div className="share-comments-list">
-            {comments.length === 0 ? (
-              <p style={{ color: "var(--t3)", fontSize: 12, padding: "12px 0" }}>No comments yet. Be the first!</p>
-            ) : (
-              comments.map(c => (
-                <div key={c.id} className="share-comment-item">
-                  <div className="share-comment-meta">
-                    {c.timestamp_seconds != null && (
-                      <button
-                        className="share-comment-ts"
-                        onClick={() => seekPlayer(c.timestamp_seconds)}
-                      >
-                        {formatDuration(c.timestamp_seconds)}
-                      </button>
-                    )}
-                    <span className="share-comment-author">{c.profiles?.full_name || c.guest_name || "Anonymous"}</span>
+            <div className="share-comments-list">
+              {topLevel.length === 0 ? (
+                <p style={{ color: "var(--t3)", fontSize: 12, padding: "8px 0" }}>No comments yet. Be the first!</p>
+              ) : (
+                topLevel.map(c => (
+                  <div key={c.id} className="share-comment-thread">
+                    {/* Top-level comment */}
+                    <div className="share-comment-item" onClick={() => c.timestamp_seconds != null && seekPlayer(c.timestamp_seconds)} style={{ cursor: c.timestamp_seconds != null ? 'pointer' : 'default' }}>
+                      <div className="share-comment-meta">
+                        <div className="share-comment-avatar">{commentName(c).charAt(0).toUpperCase()}</div>
+                        <span className="share-comment-author">{commentName(c)}</span>
+                        {c.timestamp_seconds != null && (
+                          <button className="share-comment-ts" onClick={e => { e.stopPropagation(); seekPlayer(c.timestamp_seconds); }}>
+                            {formatDuration(c.timestamp_seconds)}
+                          </button>
+                        )}
+                      </div>
+                      <p className="share-comment-body">{c.body}</p>
+                    </div>
+
+                    {/* Replies */}
+                    {repliesOf(c.id).map(r => (
+                      <div key={r.id} className="share-comment-reply">
+                        <ArrowBendDownRight size={11} style={{ color: 'var(--t3)', flexShrink: 0, marginTop: 2 }} />
+                        <div className="share-comment-item" onClick={() => r.timestamp_seconds != null && seekPlayer(r.timestamp_seconds)} style={{ cursor: r.timestamp_seconds != null ? 'pointer' : 'default', flex: 1 }}>
+                          <div className="share-comment-meta">
+                            <div className="share-comment-avatar" style={{ width: 20, height: 20, fontSize: 9 }}>{commentName(r).charAt(0).toUpperCase()}</div>
+                            <span className="share-comment-author">{commentName(r)}</span>
+                            {r.timestamp_seconds != null && (
+                              <button className="share-comment-ts" onClick={e => { e.stopPropagation(); seekPlayer(r.timestamp_seconds); }}>
+                                {formatDuration(r.timestamp_seconds)}
+                              </button>
+                            )}
+                          </div>
+                          <p className="share-comment-body">{r.body}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="share-comment-body">{c.body}</p>
-                </div>
-              ))
-            )}
-          </div>
+                ))
+              )}
+            </div>
 
-          <form className="share-comment-form" onSubmit={postComment}>
-            {submitError && (
-              <p style={{ color: '#f87171', fontSize: 12, margin: '0 0 6px' }}>{submitError}</p>
-            )}
-            {currentTime > 0 && (
-              <span className="share-comment-time-hint">Comment at {formatDuration(currentTime)}</span>
-            )}
-            <input
-              className="form-input"
-              placeholder="Your name (optional)"
-              value={guestName}
-              onChange={e => setGuestName(e.target.value)}
-              disabled={submitting}
-              style={{ marginBottom: 6 }}
-            />
-            <div style={{ display: "flex", gap: 8 }}>
+            <form className="share-comment-form" onSubmit={postComment}>
+              {submitError && <p style={{ color: '#f87171', fontSize: 12, margin: '0 0 4px' }}>{submitError}</p>}
+              {currentTime > 0 && (
+                <span className="share-comment-time-hint">At {formatDuration(currentTime)}</span>
+              )}
               <input
                 className="form-input"
-                placeholder="Leave a comment…"
-                value={newComment}
-                onChange={e => setNewComment(e.target.value)}
+                placeholder="Your name (optional)"
+                value={guestName}
+                onChange={e => setGuestName(e.target.value)}
                 disabled={submitting}
+                style={{ marginBottom: 6 }}
               />
-              <button type="submit" className="btn-primary-sm" disabled={submitting || !newComment.trim()}>
-                <PaperPlaneTilt size={14} />
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="form-input"
+                  placeholder="Leave a comment…"
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  disabled={submitting}
+                />
+                <button type="submit" className="btn-primary-sm" disabled={submitting || !newComment.trim()}>
+                  <PaperPlaneTilt size={14} />
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
-    </PageShell>
   );
 }
 
