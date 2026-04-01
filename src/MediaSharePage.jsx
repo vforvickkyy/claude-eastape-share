@@ -10,6 +10,7 @@ import SiteHeader from "./SiteHeader";
 import { formatSize } from "./lib/userApi";
 import { mediaApi } from "./lib/api.js";
 import VideoPlayer from "./components/media/VideoPlayer";
+import CloudflareVideoPlayer from "./components/media/CloudflareVideoPlayer";
 import "./styles/videojs-theme.css";
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
@@ -24,39 +25,13 @@ export default function MediaSharePage() {
   const [newComment, setNewComment] = useState("");
   const [guestName,  setGuestName]  = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const playerRef   = useRef(null);  // VideoJS ref
-  const cfIframeRef = useRef(null);  // Cloudflare iframe ref
+  const playerRef = useRef(null);  // VideoJS or CloudflareVideoPlayer ref
 
-  // Listen for timeupdate postMessages from Cloudflare Stream iframe
-  useEffect(() => {
-    function onMessage(e) {
-      try {
-        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (d?.event === 'timeupdate' && typeof d.currentTime === 'number') {
-          setCurrentTime(d.currentTime);
-        }
-      } catch {}
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, []);
-
-  function cfPost(msg) {
-    cfIframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), '*');
-  }
-
-  function onCfIframeLoad() {
-    cfPost({ event: 'addEventListener', type: 'timeupdate' });
-  }
-
-  // Unified seek — works for both VideoJS and Cloudflare
+  // Unified seek — works for both VideoJS and CloudflareVideoPlayer (both expose seekTo)
   function seekPlayer(seconds) {
-    if (playerRef.current?.seekTo) {
-      playerRef.current.seekTo(seconds);
-    } else {
-      cfPost({ event: 'seek', time: seconds });
-    }
+    playerRef.current?.seekTo?.(seconds);
   }
 
   // Folder/project preview modal — track by index for prev/next
@@ -94,6 +69,7 @@ export default function MediaSharePage() {
     e.preventDefault();
     if (!newComment.trim()) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch(`${BASE}/media-comments`, {
         method: 'POST',
@@ -101,7 +77,7 @@ export default function MediaSharePage() {
         body: JSON.stringify({
           assetId: data?.asset?.id,
           body: newComment.trim(),
-          timestampSeconds: currentTime > 0 ? Math.floor(currentTime) : null,
+          timestampSeconds: currentTime > 0 ? parseFloat(currentTime.toFixed(2)) : null,
           shareToken: token,
           guestName: guestName.trim() || 'Anonymous',
         }),
@@ -110,8 +86,12 @@ export default function MediaSharePage() {
       if (d.comment) {
         setComments(cs => [...cs, { ...d.comment, guest_name: guestName.trim() || 'Anonymous' }]);
         setNewComment("");
+      } else {
+        setSubmitError(d.error || "Failed to post comment. Please try again.");
       }
-    } catch {}
+    } catch {
+      setSubmitError("Failed to post comment. Please try again.");
+    }
     setSubmitting(false);
   }
 
@@ -275,10 +255,10 @@ export default function MediaSharePage() {
 
   return (
     <PageShell>
-      <div className="share-public-asset-layout">
+      <div className="share-public-asset-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start', maxWidth: 1280, margin: '0 auto' }}>
 
-        {/* Player */}
-        <div className="share-public-player-wrap">
+        {/* Left: Player + Notes */}
+        <div className="share-public-player-wrap" style={{ flex: 1, minWidth: 0 }}>
           <div className="share-public-meta">
             <h1 className="share-public-asset-name">{asset?.name}</h1>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -297,123 +277,117 @@ export default function MediaSharePage() {
           </div>
 
           <div className="asset-player share-player">
-            {asset?.wasabi_status === 'ready' && (asset?.videoUrl || asset?.cloudflare_uid) ? (
-              isVideo ? (
-                asset?.cloudflare_uid && asset?.cloudflare_status === 'ready' ? (
-                  <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', background: '#000', position: 'relative' }}>
-                    <iframe
-                      ref={cfIframeRef}
-                      src={`https://iframe.cloudflarestream.com/${asset.cloudflare_uid}?autoplay=false&letterboxColor=transparent&primaryColor=%237c3aed&enablejsapi=1`}
-                      style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', top: 0, left: 0 }}
-                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                      onLoad={onCfIframeLoad}
-                    />
-                  </div>
-                ) : asset?.videoUrl ? (
-                  <VideoPlayer
-                    ref={playerRef}
-                    src={asset.videoUrl}
-                    mimeType={asset.mime_type}
-                    poster={asset.thumbnailUrl || undefined}
-                    onTimeUpdate={setCurrentTime}
-                  />
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' }}>
-                    <FileVideo size={48} weight="thin" style={{ color: 'var(--t3)' }} />
-                    <p style={{ color: 'var(--t3)' }}>No preview available</p>
-                  </div>
-                )
-              ) : isImage ? (
-                <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-              ) : isAudio ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100%' }}>
-                  <MusicNote size={48} weight="duotone" style={{ color: 'var(--purple-l)' }} />
-                  <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
-                  <audio controls src={asset.videoUrl} style={{ width: '100%', maxWidth: 400 }} />
-                </div>
+            {isVideo ? (
+              asset?.cloudflare_uid ? (
+                <CloudflareVideoPlayer
+                  ref={playerRef}
+                  mediaId={asset.id}
+                  cloudflareUid={asset.cloudflare_uid}
+                  cloudflareStatus={asset.cloudflare_status}
+                  fallbackUrl={asset.videoUrl}
+                  onTimeUpdate={setCurrentTime}
+                />
+              ) : asset?.videoUrl ? (
+                <VideoPlayer
+                  ref={playerRef}
+                  src={asset.videoUrl}
+                  mimeType={asset.mime_type}
+                  poster={asset.thumbnailUrl || undefined}
+                  onTimeUpdate={setCurrentTime}
+                />
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: '100%' }}>
-                  <File size={48} weight="duotone" style={{ color: 'var(--t3)' }} />
-                  <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
-                  {allowDownload && <button className="btn-primary-sm" onClick={handleDownload}><DownloadSimple size={14} /> Download</button>}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' }}>
+                  <FileVideo size={48} weight="thin" style={{ color: 'var(--t3)' }} />
+                  <p style={{ color: 'var(--t3)' }}>No preview available</p>
                 </div>
               )
+            ) : isImage ? (
+              <img src={asset.videoUrl} alt={asset.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            ) : isAudio ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100%' }}>
+                <MusicNote size={48} weight="duotone" style={{ color: 'var(--purple-l)' }} />
+                <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
+                <audio controls src={asset.videoUrl} style={{ width: '100%', maxWidth: 400 }} />
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' }}>
-                <FileVideo size={48} weight="thin" style={{ color: 'var(--t3)' }} />
-                <p style={{ color: 'var(--t3)' }}>No preview available</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: '100%' }}>
+                <File size={48} weight="duotone" style={{ color: 'var(--t3)' }} />
+                <p style={{ color: 'var(--t2)' }}>{asset.name}</p>
+                {allowDownload && <button className="btn-primary-sm" onClick={handleDownload}><DownloadSimple size={14} /> Download</button>}
               </div>
             )}
           </div>
+
+          {/* Notes */}
+          {asset?.notes && (
+            <div className="share-asset-notes">
+              <p className="share-asset-notes-text">{asset.notes}</p>
+            </div>
+          )}
         </div>
 
-        {/* Notes */}
-        {asset?.notes && (
-          <div className="share-asset-notes">
-            <p className="share-asset-notes-text">{asset.notes}</p>
-          </div>
-        )}
-
-        {/* Comments */}
+        {/* Comments column (right) */}
         {allowComments && (
-          <div className="share-public-comments">
-            <div className="share-comments-header">
-              <ChatCircle size={15} weight="duotone" />
-              <span>Comments ({comments.length})</span>
-            </div>
+        <div className="share-comments-sidebar" style={{ width: 360, flexShrink: 0 }}>
+          <div className="share-comments-header">
+            <ChatCircle size={15} weight="duotone" />
+            <span>Comments ({comments.length})</span>
+          </div>
 
-            <div className="share-comments-list">
-              {comments.length === 0 ? (
-                <p style={{ color: "var(--t3)", fontSize: 12, padding: "12px 0" }}>No comments yet. Be the first!</p>
-              ) : (
-                comments.map(c => (
-                  <div key={c.id} className="share-comment-item">
-                    <div className="share-comment-meta">
-                      {c.timestamp_seconds != null && (
-                        <button
-                          className="share-comment-ts"
-                          onClick={() => seekPlayer(c.timestamp_seconds)}
-                        >
-                          {formatDuration(c.timestamp_seconds)}
-                        </button>
-                      )}
-                      <span className="share-comment-author">{c.profiles?.full_name || c.guest_name || "Anonymous"}</span>
-                    </div>
-                    <p className="share-comment-body">{c.body}</p>
+          <div className="share-comments-list">
+            {comments.length === 0 ? (
+              <p style={{ color: "var(--t3)", fontSize: 12, padding: "12px 0" }}>No comments yet. Be the first!</p>
+            ) : (
+              comments.map(c => (
+                <div key={c.id} className="share-comment-item">
+                  <div className="share-comment-meta">
+                    {c.timestamp_seconds != null && (
+                      <button
+                        className="share-comment-ts"
+                        onClick={() => seekPlayer(c.timestamp_seconds)}
+                      >
+                        {formatDuration(c.timestamp_seconds)}
+                      </button>
+                    )}
+                    <span className="share-comment-author">{c.profiles?.full_name || c.guest_name || "Anonymous"}</span>
                   </div>
-                ))
-              )}
-            </div>
+                  <p className="share-comment-body">{c.body}</p>
+                </div>
+              ))
+            )}
+          </div>
 
-            <form className="share-comment-form" onSubmit={postComment}>
-              {currentTime > 0 && (
-                <span className="share-comment-time-hint">Comment at {formatDuration(currentTime)}</span>
-              )}
+          <form className="share-comment-form" onSubmit={postComment}>
+            {submitError && (
+              <p style={{ color: '#f87171', fontSize: 12, margin: '0 0 6px' }}>{submitError}</p>
+            )}
+            {currentTime > 0 && (
+              <span className="share-comment-time-hint">Comment at {formatDuration(currentTime)}</span>
+            )}
+            <input
+              className="form-input"
+              placeholder="Your name (optional)"
+              value={guestName}
+              onChange={e => setGuestName(e.target.value)}
+              disabled={submitting}
+              style={{ marginBottom: 6 }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
               <input
                 className="form-input"
-                placeholder="Your name (optional)"
-                value={guestName}
-                onChange={e => setGuestName(e.target.value)}
+                placeholder="Leave a comment…"
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
                 disabled={submitting}
-                style={{ marginBottom: 6 }}
               />
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  className="form-input"
-                  placeholder="Leave a comment…"
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  disabled={submitting}
-                />
-                <button type="submit" className="btn-primary-sm" disabled={submitting || !newComment.trim()}>
-                  <PaperPlaneTilt size={14} />
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
+              <button type="submit" className="btn-primary-sm" disabled={submitting || !newComment.trim()}>
+                <PaperPlaneTilt size={14} />
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
     </PageShell>
   );
 }

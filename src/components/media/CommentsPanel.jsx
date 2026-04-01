@@ -16,6 +16,7 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
   const [body,       setBody]      = useState("");
   const [replyTo,    setReplyTo]   = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
     e.preventDefault();
     if (!body.trim()) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const data = await mediaApi.createComment({
         assetId,
@@ -44,6 +46,7 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (err) {
       console.error(err);
+      setSubmitError("Failed to post comment. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -84,6 +87,9 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
 
           {/* Compose */}
           <form className="comment-compose" onSubmit={submit}>
+            {submitError && (
+              <div style={{ color: '#f87171', fontSize: 12, padding: '4px 0', marginBottom: 4 }}>{submitError}</div>
+            )}
             {currentTime > 0 && (
               <div className="comment-timestamp-hint">
                 <Clock size={12} /> At {formatDuration(currentTime)}

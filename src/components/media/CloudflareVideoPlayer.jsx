@@ -10,8 +10,7 @@ import { cloudflareApi } from '../../lib/api'
  *   ref.pause()
  *   ref.play()
  *
- * Communicates with the Cloudflare Stream iframe via postMessage
- * using the Stream Player API:
+ * Uses the official Cloudflare Stream SDK for reliable timeupdate events:
  * https://developers.cloudflare.com/stream/viewing-videos/using-the-stream-player/using-the-player-api/
  */
 const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
@@ -23,48 +22,85 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
   onTimeUpdate,
 }, ref) {
   const [status, setStatus] = useState(initialStatus || 'processing')
-  const iframeRef  = useRef(null)
-  const intervalRef = useRef(null)
+  const iframeRef     = useRef(null)
+  const playerSdkRef  = useRef(null)   // Cloudflare Stream SDK player instance
+  const intervalRef   = useRef(null)
   const currentTimeRef = useRef(0)
 
-  // ── postMessage helpers ──────────────────────────────────────────
+  // ── postMessage fallback ─────────────────────────────────────────
   function cfPost(msg) {
     iframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), '*')
   }
 
   // ── Imperative handle (same API as VideoPlayer) ──────────────────
   useImperativeHandle(ref, () => ({
-    seekTo:         (t) => cfPost({ event: 'seek', time: t }),
-    getCurrentTime: ()  => currentTimeRef.current,
-    pause:          ()  => cfPost({ event: 'pause' }),
-    play:           ()  => cfPost({ event: 'play' }),
+    seekTo: (t) => {
+      if (playerSdkRef.current) {
+        playerSdkRef.current.currentTime = t
+      } else {
+        cfPost({ event: 'seek', time: t })
+      }
+    },
+    getCurrentTime: () => currentTimeRef.current,
+    pause: () => {
+      if (playerSdkRef.current) playerSdkRef.current.pause()
+      else cfPost({ event: 'pause' })
+    },
+    play: () => {
+      if (playerSdkRef.current) playerSdkRef.current.play()
+      else cfPost({ event: 'play' })
+    },
   }))
 
-  // ── Listen for timeupdate messages from the iframe ───────────────
+  // ── Load Cloudflare Stream SDK script (once per page) ────────────
   useEffect(() => {
     if (status !== 'ready') return
+    const existing = document.querySelector('script[data-cf-stream-sdk]')
+    if (existing) return  // already loaded
 
-    function onMessage(e) {
-      try {
-        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-        if (data?.event === 'timeupdate' && typeof data.currentTime === 'number') {
-          currentTimeRef.current = data.currentTime
-          onTimeUpdate?.(data.currentTime)
-        }
-      } catch {}
-    }
+    const script = document.createElement('script')
+    script.src = 'https://embed.cloudflarestream.com/embed/sdk.latest.js'
+    script.setAttribute('data-cf-stream-sdk', '1')
+    document.head.appendChild(script)
+    // no cleanup — SDK script stays loaded for the lifetime of the page
+  }, [status])
 
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [status, onTimeUpdate])
-
-  // Request timeupdate events from the player once the iframe loads
+  // ── Initialize SDK player once iframe fires onLoad ───────────────
   function onIframeLoad() {
-    // Tell the Cloudflare player to send us timeupdate events
-    cfPost({ event: 'addEventListener', type: 'timeupdate' })
-    cfPost({ event: 'addEventListener', type: 'play' })
-    cfPost({ event: 'addEventListener', type: 'pause' })
+    // Poll until window.Stream is available (SDK script may still be loading)
+    let attempts = 0
+    const tryInit = () => {
+      if (window.Stream && iframeRef.current) {
+        try {
+          const player = window.Stream(iframeRef.current)
+          playerSdkRef.current = player
+          player.addEventListener('timeupdate', () => {
+            const t = player.currentTime
+            currentTimeRef.current = t
+            onTimeUpdate?.(t)
+          })
+        } catch (e) {
+          console.warn('Cloudflare Stream SDK init failed, falling back to postMessage', e)
+          cfPost({ event: 'addEventListener', type: 'timeupdate' })
+        }
+      } else if (attempts < 20) {
+        attempts++
+        setTimeout(tryInit, 250)
+      } else {
+        // SDK never loaded — fall back to postMessage
+        cfPost({ event: 'addEventListener', type: 'timeupdate' })
+      }
+    }
+    tryInit()
   }
+
+  // Cleanup SDK player on unmount
+  useEffect(() => {
+    return () => {
+      playerSdkRef.current = null
+      clearInterval(intervalRef.current)
+    }
+  }, [])
 
   // ── Poll for processing status ───────────────────────────────────
   useEffect(() => {
@@ -159,12 +195,12 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     )
   }
 
-  // ── Ready — Cloudflare iframe with Stream API enabled ────────────
+  // ── Ready — Cloudflare iframe with Stream SDK ────────────────────
   return (
     <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', background: '#000', position: 'relative' }}>
       <iframe
         ref={iframeRef}
-        src={`https://iframe.cloudflarestream.com/${cloudflareUid}?autoplay=false&letterboxColor=transparent&primaryColor=%237c3aed&enablejsapi=1`}
+        src={`https://iframe.cloudflarestream.com/${cloudflareUid}?autoplay=false&letterboxColor=transparent&primaryColor=%237c3aed`}
         style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', top: 0, left: 0 }}
         allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
         allowFullScreen
