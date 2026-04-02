@@ -10,7 +10,7 @@ const WATERMARK_POSITIONS = {
   'bottom-right': { bottom: 44, right: 12 },
 }
 
-const VideoPlayer = forwardRef(({ src, mimeType, poster, onTimeUpdate, onReady }, ref) => {
+const VideoPlayer = forwardRef(({ src, mimeType, poster, initialTime, onTimeUpdate, onReady }, ref) => {
   const videoRef  = useRef(null)
   const playerRef = useRef(null)
   const styleRef  = useRef(null)
@@ -88,8 +88,13 @@ const VideoPlayer = forwardRef(({ src, mimeType, poster, onTimeUpdate, onReady }
     if (playerRef.current && src) {
       playerRef.current.src([{ src, type: mimeType || 'video/mp4' }])
       if (poster) playerRef.current.poster(poster)
+      if (initialTime > 0) {
+        playerRef.current.one('loadedmetadata', () => {
+          playerRef.current?.currentTime(initialTime)
+        })
+      }
     }
-  }, [src, poster])
+  }, [src, poster]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup
   useEffect(() => {

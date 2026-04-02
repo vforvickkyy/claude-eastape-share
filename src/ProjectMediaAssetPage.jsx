@@ -39,6 +39,7 @@ export default function ProjectMediaAssetPage() {
   const [videoSrc,       setVideoSrc]      = useState(null)
   const [thumbSrc,       setThumbSrc]      = useState(null)
   const [previewVersion, setPreviewVersion] = useState(null)  // null = current version
+  const [seekTarget,     setSeekTarget]    = useState(0)      // seconds to seek to after version switch
   const [tab,            setTab]           = useState('comments')
   const [currentTime,    setCurrentTime]   = useState(0)
   const [editName,       setEditName]      = useState(false)
@@ -151,15 +152,17 @@ export default function ProjectMediaAssetPage() {
     playerRef.current?.seekTo(seconds)
   }
 
-  async function handlePreviewVersion(versionData) {
+  async function handlePreviewVersion(versionData, seekSeconds = 0) {
     if (!versionData) {
       // Restore current version
+      setSeekTarget(0)
       setPreviewVersion(null)
       if (asset?.wasabi_status === 'ready') fetchPlaybackUrl(asset)
       return
     }
+    setSeekTarget(seekSeconds)
     setPreviewVersion(versionData)
-    // For Cloudflare videos, the player updates via cloudflareUid prop — no URL needed
+    // For Cloudflare videos, the player re-mounts via key change — startTime handles seek
     // For Wasabi-only files, fetch a presigned URL for the version's wasabi_key
     if (!versionData.cloudflare_uid && versionData.wasabi_key) {
       try {
@@ -280,6 +283,7 @@ export default function ProjectMediaAssetPage() {
                       cloudflareUid={effectiveAsset.cloudflare_uid}
                       cloudflareStatus={effectiveAsset.cloudflare_status}
                       fallbackUrl={videoSrc}
+                      startTime={seekTarget}
                       onTimeUpdate={setCurrentTime}
                       onStatusChange={(newStatus) =>
                         !previewVersion && setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
@@ -291,6 +295,7 @@ export default function ProjectMediaAssetPage() {
                       src={videoSrc}
                       mimeType={asset.mime_type}
                       poster={thumbSrc}
+                      initialTime={seekTarget}
                       onTimeUpdate={setCurrentTime}
                     />
                   ) : (
@@ -384,7 +389,8 @@ export default function ProjectMediaAssetPage() {
             {tab === 'versions' && (
               <VersionsPanel
                 asset={asset}
-                onVersionUploaded={newAsset => { setAsset(newAsset); setPreviewVersion(null) }}
+                currentTime={currentTime}
+                onVersionUploaded={newAsset => { setAsset(newAsset); setPreviewVersion(null); setSeekTarget(0) }}
                 onPreviewVersion={handlePreviewVersion}
               />
             )}

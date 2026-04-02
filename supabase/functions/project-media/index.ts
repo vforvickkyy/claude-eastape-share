@@ -124,6 +124,24 @@ Deno.serve(async (req) => {
       return json({ assets: enriched })
     }
 
+    // PATCH — update a version label
+    if (req.method === 'PATCH') {
+      const versionId = url.searchParams.get('version_id')
+      if (!versionId) return json({ error: 'version_id required' }, 400)
+      const { data: version } = await supabase.from('project_media_versions').select('media_id').eq('id', versionId).single()
+      if (!version) return json({ error: 'Not found' }, 404)
+      const { data: media } = await supabase.from('project_media').select('user_id, project_id').eq('id', version.media_id).single()
+      if (!media) return json({ error: 'Not found' }, 404)
+      if (media.user_id !== user.id) {
+        const { data: member } = await supabase.from('project_members').select('role').eq('project_id', media.project_id).eq('user_id', user.id).eq('accepted', true).single()
+        if (!member) return json({ error: 'Forbidden' }, 403)
+      }
+      const body = await req.json()
+      const { error: patchErr } = await supabase.from('project_media_versions').update({ label: body.label ?? null }).eq('id', versionId)
+      if (patchErr) return json({ error: patchErr.message }, 500)
+      return json({ ok: true })
+    }
+
     // PUT — update (status, name, etc.)
     if (req.method === 'PUT') {
       if (!mediaId) return json({ error: 'id required' }, 400)
@@ -195,8 +213,18 @@ Deno.serve(async (req) => {
       return json({ media: updated })
     }
 
-    // DELETE — soft delete (trash)
+    // DELETE — soft delete asset (trash) or hard delete a specific version
     if (req.method === 'DELETE') {
+      const versionId = url.searchParams.get('version_id')
+      if (versionId) {
+        const { data: version } = await supabase.from('project_media_versions').select('media_id').eq('id', versionId).single()
+        if (!version) return json({ error: 'Not found' }, 404)
+        const { data: media } = await supabase.from('project_media').select('user_id, project_id').eq('id', version.media_id).single()
+        if (!media) return json({ error: 'Not found' }, 404)
+        if (media.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
+        await supabase.from('project_media_versions').delete().eq('id', versionId)
+        return json({ ok: true })
+      }
       if (!mediaId) return json({ error: 'id required' }, 400)
       const { data: media } = await supabase.from('project_media').select('user_id, project_id').eq('id', mediaId).single()
       if (!media) return json({ error: 'Not found' }, 404)

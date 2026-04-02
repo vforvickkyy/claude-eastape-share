@@ -18,6 +18,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
   cloudflareUid,
   cloudflareStatus: initialStatus,
   fallbackUrl,
+  startTime,
   onStatusChange,
   onTimeUpdate,
 }, ref) {
@@ -74,6 +75,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
         try {
           const player = window.Stream(iframeRef.current)
           playerSdkRef.current = player
+          if (startTime > 0) player.currentTime = startTime
           player.addEventListener('timeupdate', () => {
             const t = player.currentTime
             currentTimeRef.current = t

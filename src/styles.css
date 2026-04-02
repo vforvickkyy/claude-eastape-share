@@ -2812,6 +2812,28 @@ input  { font-family: var(--font-body); }
 .version-date {
   font-size: 11px; color: var(--t3); display: flex; align-items: center; white-space: nowrap;
 }
+.version-item-right {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.version-action-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 4px; border: none;
+  background: transparent; color: var(--t3); cursor: pointer;
+  opacity: 0; transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.version-item:hover .version-action-btn { opacity: 1; }
+.version-action-btn:hover { background: rgba(255,255,255,0.08); color: var(--t1); }
+.version-action-btn.danger:hover { background: rgba(239,68,68,0.15); color: #f87171; }
+.version-label-text {
+  font-size: 11px; color: var(--t2); max-width: 100px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.version-label-edit { display: flex; align-items: center; gap: 3px; }
+.version-label-input {
+  font-size: 11px; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--t1); padding: 2px 6px; width: 110px; outline: none;
+}
+.version-label-input:focus { border-color: var(--purple); }
 
 /* ═══════════════════════════════════════════════════════════════
    MEDIA — Upload panel (slide-in)

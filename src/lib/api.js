@@ -197,6 +197,8 @@ export const projectMediaApi = {
       ...(wasabiKey     ? { wasabi_key:       wasabiKey }     : {}),
       ...(wasabiThumbKey ? { wasabi_thumb_key: wasabiThumbKey } : {}),
     }, true),
+  deleteVersion:      (versionId)        => del(`${BASE}/project-media`, { version_id: versionId }, true),
+  updateVersionLabel: (versionId, label) => patch(`${BASE}/project-media`, { version_id: versionId }, { label }, true),
 }
 
 // ── Project Files ──────────────────────────────────────────────────
