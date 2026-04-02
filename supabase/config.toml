@@ -352,7 +352,6 @@ allow_dynamic_registration = false
 
 
 [functions.deadline-reminders]
-schedule = "0 9 * * *"
 
 [edge_runtime]
 enabled = true

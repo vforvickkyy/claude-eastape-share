@@ -59,23 +59,31 @@ export default function VersionsPanel({ asset, onVersionUploaded, onPreviewVersi
     const uploadFn = async (onProgress) => {
       const isVideo = file.type.startsWith('video/')
       const isImage = file.type.startsWith('image/')
-      const token = JSON.parse(localStorage.getItem('ets_auth') || '{}')?.access_token
+      // Get token from supabase session (auto-refreshes), fall back to ets_auth
+      const { supabase: sb } = await import('../../lib/supabaseClient')
+      const { data: { session } } = await sb.auth.getSession().catch(() => ({ data: {} }))
+      const token = session?.access_token || JSON.parse(localStorage.getItem('ets_auth') || '{}')?.access_token
 
       // 1. Get presigned Wasabi upload URL (creates a TEMP asset)
+      // presign expects: filename, filesize, mimetype (not file_name etc.)
       const presignRes = await fetch(`${BASE}/presign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           upload_type: 'project_media',
-          file_name:   file.name,
-          file_size:   file.size,
-          mime_type:   file.type,
+          filename:    file.name,
+          filesize:    file.size,
+          mimetype:    file.type,
           project_id:  asset.project_id,
           folder_id:   asset.folder_id || null,
         }),
       })
-      if (!presignRes.ok) throw new Error('Failed to get upload URL')
-      const { upload_url: uploadUrl, wasabi_key, wasabi_thumbnail_key, asset_id: tempAssetId } = await presignRes.json()
+      if (!presignRes.ok) {
+        const errBody = await presignRes.json().catch(() => ({}))
+        throw new Error(errBody.error || 'Failed to get upload URL')
+      }
+      // presign returns: uploadUrl, assetId, wasabiKey, thumbnailKey
+      const { uploadUrl, assetId: tempAssetId, wasabiKey, thumbnailKey } = await presignRes.json()
 
       onProgress(5)
 
@@ -119,9 +127,10 @@ export default function VersionsPanel({ asset, onVersionUploaded, onPreviewVersi
       onProgress(96)
 
       // 5. Version-bump the ORIGINAL asset
+      // wasabiKey / thumbnailKey are the field names returned by presign
       const bumped = await projectMediaApi.versionBump(asset.id, {
-        wasabi_key,
-        wasabi_thumbnail_key: wasabi_thumbnail_key || null,
+        wasabi_key:           wasabiKey,
+        wasabi_thumbnail_key: thumbnailKey || null,
         cloudflare_uid:       cloudflareUid    || null,
         cloudflare_status:    cloudflareUid ? 'processing' : (asset.cloudflare_status || 'none'),
         duration:             duration        || null,
