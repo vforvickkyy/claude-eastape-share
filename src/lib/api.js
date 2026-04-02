@@ -128,6 +128,12 @@ export const projectMediaApi = {
     get(`${BASE}/download`, { media_id: id, share_token: shareToken, type }),
   getVersions: (id) => get(`${BASE}/project-media`, { id, versions: '1' }, true),
   versionBump: (id, body) => put(`${BASE}/project-media`, { id }, { version_bump: true, ...body }, true),
+  getVersionViewUrl: (mediaId, wasabiKey, wasabiThumbKey) =>
+    get(`${BASE}/download`, {
+      media_id: mediaId, type: 'view',
+      ...(wasabiKey     ? { wasabi_key:       wasabiKey }     : {}),
+      ...(wasabiThumbKey ? { wasabi_thumb_key: wasabiThumbKey } : {}),
+    }, true),
 }
 
 // ── Project Files ──────────────────────────────────────────────────

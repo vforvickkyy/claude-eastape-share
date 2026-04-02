@@ -152,11 +152,14 @@ Deno.serve(async (req) => {
         if (!member) return json({ error: 'Forbidden' }, 403)
       }
 
+      // Allow presigning a specific wasabi_key (e.g. a previous version key) — still auth-gated via mediaId
+      const wasabiKey      = url.searchParams.get('wasabi_key')      || media.wasabi_key
+      const thumbnailKey   = url.searchParams.get('wasabi_thumb_key') || media.wasabi_thumbnail_key
       const mediaUrl = dlType === 'view'
-        ? await presignGetSimple(ENDPOINT, BUCKET, media.wasabi_key, ACCESS, SECRET, REGION, 14400)
-        : await presignGet(ENDPOINT, BUCKET, media.wasabi_key, media.name, ACCESS, SECRET, REGION, 3600)
-      const thumbnailUrl = media.wasabi_thumbnail_key
-        ? await presignGetSimple(ENDPOINT, BUCKET, media.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 3600)
+        ? await presignGetSimple(ENDPOINT, BUCKET, wasabiKey, ACCESS, SECRET, REGION, 14400)
+        : await presignGet(ENDPOINT, BUCKET, wasabiKey, media.name, ACCESS, SECRET, REGION, 3600)
+      const thumbnailUrl = thumbnailKey
+        ? await presignGetSimple(ENDPOINT, BUCKET, thumbnailKey, ACCESS, SECRET, REGION, 3600)
         : null
       return json({ url: mediaUrl, thumbnailUrl, asset: media })
     }

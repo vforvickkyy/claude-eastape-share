@@ -30,30 +30,37 @@ export function UploadProvider({ children }) {
     activeRef.current++
     updItem(item.id, { status: 'uploading' })
     try {
-      const { uploads: presigned } = await driveFilesApi.presign({
-        files: [{ name: item.name, size: item.size, type: item.file.type || 'application/octet-stream' }],
-        folderId: item.folderId || undefined,
-      })
-      const { presignedUrl } = presigned[0]
+      if (item.uploadFn) {
+        // Custom upload function — used for version bumps, etc.
+        await item.uploadFn((pct) => updItem(item.id, { progress: pct }))
+        updItem(item.id, { progress: 100, status: 'done' })
+        item.onItemComplete?.()
+      } else {
+        const { uploads: presigned } = await driveFilesApi.presign({
+          files: [{ name: item.name, size: item.size, type: item.file.type || 'application/octet-stream' }],
+          folderId: item.folderId || undefined,
+        })
+        const { presignedUrl } = presigned[0]
 
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhrRefs.current[item.id] = xhr
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) updItem(item.id, { progress: Math.round(e.loaded / e.total * 100) })
-        }
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            updItem(item.id, { progress: 100, status: 'done' })
-            resolve()
-          } else reject(new Error(`Upload failed (HTTP ${xhr.status})`))
-        }
-        xhr.onerror = () => reject(new Error('Network error'))
-        xhr.onabort = () => reject(new Error('cancelled'))
-        xhr.open('PUT', presignedUrl)
-        xhr.setRequestHeader('Content-Type', item.file.type || 'application/octet-stream')
-        xhr.send(item.file)
-      })
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          xhrRefs.current[item.id] = xhr
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) updItem(item.id, { progress: Math.round(e.loaded / e.total * 100) })
+          }
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              updItem(item.id, { progress: 100, status: 'done' })
+              resolve()
+            } else reject(new Error(`Upload failed (HTTP ${xhr.status})`))
+          }
+          xhr.onerror = () => reject(new Error('Network error'))
+          xhr.onabort = () => reject(new Error('cancelled'))
+          xhr.open('PUT', presignedUrl)
+          xhr.setRequestHeader('Content-Type', item.file.type || 'application/octet-stream')
+          xhr.send(item.file)
+        })
+      }
     } catch (err) {
       if (err.message !== 'cancelled') updItem(item.id, { status: 'error', error: err.message })
     } finally {
@@ -101,6 +108,28 @@ export function UploadProvider({ children }) {
       status: 'pending',
       error: null,
     }
+  }
+
+  /** Add a single item with a fully custom async upload function.
+   *  uploadFn: async (onProgress: (pct: number) => void) => void
+   *  onItemComplete: called when this specific item finishes successfully
+   */
+  function addCustomUpload(name, size, uploadFn, onItemComplete) {
+    clearTimeout(autoHideTimer.current)
+    setIsMinimized(false)
+    const item = {
+      id: crypto.randomUUID(),
+      name,
+      size: size || 0,
+      file: null,
+      folderId: null,
+      progress: 0,
+      status: 'pending',
+      error: null,
+      uploadFn,
+      onItemComplete,
+    }
+    enqueueItems([item])
   }
 
   /** Main entry — call from DrivePage with file list + current folder files */
@@ -172,6 +201,7 @@ export function UploadProvider({ children }) {
       activeCount, doneCount, totalCount, overallPct,
       isVisible: uploads.length > 0 || !!pendingDuplicates,
       addFiles,
+      addCustomUpload,
       cancelUpload,
       clearCompleted,
       dismissAll,

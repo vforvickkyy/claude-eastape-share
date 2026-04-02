@@ -34,20 +34,21 @@ export default function ProjectMediaAssetPage() {
     ? `/projects/${projectId}/manage`
     : `/projects/${projectId}/files`
 
-  const [asset,       setAsset]      = useState(null)
-  const [loading,     setLoading]    = useState(true)
-  const [videoSrc,    setVideoSrc]   = useState(null)
-  const [thumbSrc,    setThumbSrc]   = useState(null)
-  const [tab,         setTab]        = useState('comments')
-  const [currentTime, setCurrentTime] = useState(0)
-  const [editName,    setEditName]   = useState(false)
-  const [nameVal,     setNameVal]    = useState('')
-  const [copied,      setCopied]     = useState(false)
-  const [showShare,   setShowShare]  = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [editNotes,   setEditNotes]  = useState(false)
-  const [notesVal,    setNotesVal]   = useState('')
-  const [siblings,    setSiblings]   = useState([])
+  const [asset,          setAsset]         = useState(null)
+  const [loading,        setLoading]       = useState(true)
+  const [videoSrc,       setVideoSrc]      = useState(null)
+  const [thumbSrc,       setThumbSrc]      = useState(null)
+  const [previewVersion, setPreviewVersion] = useState(null)  // null = current version
+  const [tab,            setTab]           = useState('comments')
+  const [currentTime,    setCurrentTime]   = useState(0)
+  const [editName,       setEditName]      = useState(false)
+  const [nameVal,        setNameVal]       = useState('')
+  const [copied,         setCopied]        = useState(false)
+  const [showShare,      setShowShare]     = useState(false)
+  const [sidebarOpen,    setSidebarOpen]   = useState(true)
+  const [editNotes,      setEditNotes]     = useState(false)
+  const [notesVal,       setNotesVal]      = useState('')
+  const [siblings,       setSiblings]      = useState([])
 
   const playerRef = useRef(null)
 
@@ -150,7 +151,30 @@ export default function ProjectMediaAssetPage() {
     playerRef.current?.seekTo(seconds)
   }
 
+  async function handlePreviewVersion(versionData) {
+    if (!versionData) {
+      // Restore current version
+      setPreviewVersion(null)
+      if (asset?.wasabi_status === 'ready') fetchPlaybackUrl(asset)
+      return
+    }
+    setPreviewVersion(versionData)
+    // For Cloudflare videos, the player updates via cloudflareUid prop — no URL needed
+    // For Wasabi-only files, fetch a presigned URL for the version's wasabi_key
+    if (!versionData.cloudflare_uid && versionData.wasabi_key) {
+      try {
+        const { url, thumbnailUrl } = await projectMediaApi.getVersionViewUrl(
+          mediaId, versionData.wasabi_key, versionData.wasabi_thumbnail_key || null
+        )
+        setVideoSrc(url)
+        if (thumbnailUrl) setThumbSrc(thumbnailUrl)
+      } catch {}
+    }
+  }
+
   const statusMeta = STATUS_OPTIONS.find(s => s.value === asset?.status) || STATUS_OPTIONS[0]
+  // When previewing a previous version, overlay its fields on the current asset
+  const effectiveAsset = previewVersion ? { ...asset, ...previewVersion } : asset
   const isVideo = asset?.type === 'video' || asset?.mime_type?.startsWith('video/')
   const isImage = asset?.type === 'image' || asset?.mime_type?.startsWith('image/')
   const isAudio = asset?.type === 'audio' || asset?.mime_type?.startsWith('audio/')
@@ -248,16 +272,17 @@ export default function ProjectMediaAssetPage() {
             <>
               {isVideo ? (
                 <div className="asset-player">
-                  {asset.cloudflare_uid && asset.cloudflare_status !== 'none' ? (
+                  {effectiveAsset.cloudflare_uid && effectiveAsset.cloudflare_status !== 'none' ? (
                     <CloudflareVideoPlayer
                       ref={playerRef}
+                      key={effectiveAsset.cloudflare_uid}
                       mediaId={asset.id}
-                      cloudflareUid={asset.cloudflare_uid}
-                      cloudflareStatus={asset.cloudflare_status}
+                      cloudflareUid={effectiveAsset.cloudflare_uid}
+                      cloudflareStatus={effectiveAsset.cloudflare_status}
                       fallbackUrl={videoSrc}
                       onTimeUpdate={setCurrentTime}
                       onStatusChange={(newStatus) =>
-                        setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
+                        !previewVersion && setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
                       }
                     />
                   ) : videoSrc ? (
@@ -357,7 +382,11 @@ export default function ProjectMediaAssetPage() {
               <CommentsPanel assetId={mediaId} currentTime={currentTime} onSeek={seekTo} />
             )}
             {tab === 'versions' && (
-              <VersionsPanel asset={asset} onVersionUploaded={newAsset => setAsset(newAsset)} />
+              <VersionsPanel
+                asset={asset}
+                onVersionUploaded={newAsset => { setAsset(newAsset); setPreviewVersion(null) }}
+                onPreviewVersion={handlePreviewVersion}
+              />
             )}
             {tab === 'info' && (
               <InfoPanel asset={asset} onStatusChange={changeStatus} />
