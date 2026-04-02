@@ -6,10 +6,31 @@ import { supabase } from './supabaseClient'
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
+// ── Token management ────────────────────────────────────────────────────────
+
+// Attempt a forced token refresh via Supabase SDK.
+// Returns the new access token, or null if refresh fails.
+async function forceRefreshToken() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('ets_auth') || '{}')
+    const refreshToken = stored?.refresh_token
+
+    // Try Supabase SDK refresh first
+    const { data, error } = await supabase.auth.refreshSession(
+      refreshToken ? { refresh_token: refreshToken } : undefined
+    )
+    if (!error && data?.session?.access_token) {
+      // Persist the refreshed session
+      localStorage.setItem('ets_auth', JSON.stringify(data.session))
+      return data.session.access_token
+    }
+  } catch {}
+  return null
+}
+
 // Returns the current access token.
-// Prefers supabase.auth.getSession() which auto-refreshes for all users
-// (works after AuthContext syncs email/password sessions via setSession).
-// Falls back to ets_auth directly for any edge case.
+// Uses supabase.auth.getSession() which auto-refreshes when possible.
+// Falls back to ets_auth directly for edge cases.
 async function getToken() {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -18,14 +39,40 @@ async function getToken() {
   try { return JSON.parse(localStorage.getItem('ets_auth'))?.access_token ?? null } catch { return null }
 }
 
-async function authHeaders() {
-  return { Authorization: `Bearer ${await getToken()}` }
+async function authHeaders(token) {
+  return { Authorization: `Bearer ${token ?? await getToken()}` }
+}
+
+// On a 401, attempt one token refresh and return new headers.
+// If refresh fails, redirect to login and throw.
+async function handle401() {
+  const newToken = await forceRefreshToken()
+  if (newToken) return { Authorization: `Bearer ${newToken}` }
+  // Refresh failed — clear session and redirect to login
+  localStorage.removeItem('ets_auth')
+  window.location.href = '/login'
+  throw new Error('Session expired')
+}
+
+// ── HTTP helpers (auth=true adds Bearer token; retries once on 401) ─────────
+
+async function fetchWithAuth(fetchFn) {
+  const res = await fetchFn()
+  if (res.status === 401) {
+    // Attempt refresh and retry once
+    const retryHeaders = await handle401()
+    return fetchFn(retryHeaders)
+  }
+  return res
 }
 
 async function post(url, body, auth = false) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, await authHeaders())
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+  const token = auth ? await getToken() : null
+  const makeReq = async (overrideHeaders) => {
+    const headers = { 'Content-Type': 'application/json', ...(auth ? (overrideHeaders || await authHeaders(token)) : {}) }
+    return fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+  }
+  const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
   const data = await res.json()
   if (!res.ok) {
     const err = new Error(data.error || 'Request failed')
@@ -36,48 +83,64 @@ async function post(url, body, auth = false) {
 }
 
 async function get(url, params = {}, auth = false) {
-  const headers = {}
-  if (auth) Object.assign(headers, await authHeaders())
+  const token = auth ? await getToken() : null
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
-  const res = await fetch(qs ? `${url}?${qs}` : url, { headers })
+  const fullUrl = qs ? `${url}?${qs}` : url
+  const makeReq = async (overrideHeaders) => {
+    const headers = auth ? (overrideHeaders || await authHeaders(token)) : {}
+    return fetch(fullUrl, { headers })
+  }
+  const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
 }
 
 async function put(url, params = {}, body = {}, auth = false) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, await authHeaders())
+  const token = auth ? await getToken() : null
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
-  const res = await fetch(qs ? `${url}?${qs}` : url, { method: 'PUT', headers, body: JSON.stringify(body) })
+  const fullUrl = qs ? `${url}?${qs}` : url
+  const makeReq = async (overrideHeaders) => {
+    const headers = { 'Content-Type': 'application/json', ...(auth ? (overrideHeaders || await authHeaders(token)) : {}) }
+    return fetch(fullUrl, { method: 'PUT', headers, body: JSON.stringify(body) })
+  }
+  const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
 }
 
 async function patch(url, params = {}, body = {}, auth = false) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, await authHeaders())
+  const token = auth ? await getToken() : null
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
-  const res = await fetch(qs ? `${url}?${qs}` : url, { method: 'PATCH', headers, body: JSON.stringify(body) })
+  const fullUrl = qs ? `${url}?${qs}` : url
+  const makeReq = async (overrideHeaders) => {
+    const headers = { 'Content-Type': 'application/json', ...(auth ? (overrideHeaders || await authHeaders(token)) : {}) }
+    return fetch(fullUrl, { method: 'PATCH', headers, body: JSON.stringify(body) })
+  }
+  const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
 }
 
 async function del(url, params = {}, auth = false) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (auth) Object.assign(headers, await authHeaders())
+  const token = auth ? await getToken() : null
   const qs = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
   ).toString()
-  const res = await fetch(qs ? `${url}?${qs}` : url, { method: 'DELETE', headers })
+  const fullUrl = qs ? `${url}?${qs}` : url
+  const makeReq = async (overrideHeaders) => {
+    const headers = { 'Content-Type': 'application/json', ...(auth ? (overrideHeaders || await authHeaders(token)) : {}) }
+    return fetch(fullUrl, { method: 'DELETE', headers })
+  }
+  const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
