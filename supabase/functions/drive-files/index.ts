@@ -10,6 +10,35 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
+const enc = new TextEncoder()
+function hex(buf: ArrayBuffer) { return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('') }
+async function hmac(key: ArrayBuffer | string, msg: string) {
+  const raw = typeof key === 'string' ? enc.encode(key) : new Uint8Array(key)
+  const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return crypto.subtle.sign('HMAC', k, enc.encode(msg))
+}
+async function presignViewUrl(endpoint: string, bucket: string, key: string, access: string, secret: string, region: string, expiresIn = 7200) {
+  const now = new Date()
+  const date = now.toISOString().slice(0,10).replace(/-/g,'')
+  const datetime = date + 'T' + now.toISOString().slice(11,19).replace(/:/g,'') + 'Z'
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const scope = `${date}/${region}/s3/aws4_request`
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm','AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential',`${access}/${scope}`)
+  qp.set('X-Amz-Date', datetime)
+  qp.set('X-Amz-Expires', String(expiresIn))
+  qp.set('X-Amz-SignedHeaders','host')
+  const sorted = Array.from(qp.entries()).sort(([a],[b]) => a<b?-1:1)
+  const cqs = sorted.map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const cr = ['GET',`/${bucket}/${encodedKey}`,cqs,`host:${host}\n`,'host','UNSIGNED-PAYLOAD'].join('\n')
+  const hb = await crypto.subtle.digest('SHA-256', enc.encode(cr))
+  const sts = ['AWS4-HMAC-SHA256',datetime,scope,hex(hb)].join('\n')
+  const kD = await hmac(`AWS4${secret}`,date), kR = await hmac(kD,region), kS = await hmac(kR,'s3'), kSi = await hmac(kS,'aws4_request')
+  return `${endpoint}/${bucket}/${encodedKey}?${cqs}&X-Amz-Signature=${hex(await hmac(kSi,sts))}`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -25,6 +54,13 @@ Deno.serve(async (req) => {
     const fileId   = url.searchParams.get('id')
     const folderId = url.searchParams.get('folderId')
     const trashed  = url.searchParams.get('trashed') === 'true'
+
+    const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
+    const BUCKET   = Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? ''
+    const ACCESS   = Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? ''
+    const SECRET   = Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? ''
+    const REGION   = Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1'
+    const canSign  = !!(ENDPOINT && BUCKET && ACCESS && SECRET)
 
     // GET ?resource=storage — storage usage summary
     if (req.method === 'GET' && url.searchParams.get('resource') === 'storage') {
@@ -55,14 +91,25 @@ Deno.serve(async (req) => {
       }
       const { data: files, error } = await q
       if (error) return json({ error: error.message }, 500)
-      return json({ files: files || [] })
+
+      // Presign thumbnail URLs for image/video files
+      const enriched = canSign
+        ? await Promise.all((files || []).map(async (f: any) => {
+            const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
+            if (!thumbKey) return f
+            const thumbnailUrl = await presignViewUrl(ENDPOINT, BUCKET, thumbKey, ACCESS, SECRET, REGION).catch(() => null)
+            return { ...f, thumbnailUrl }
+          }))
+        : (files || [])
+
+      return json({ files: enriched })
     }
 
     // PUT — rename, move, trash, restore
     if (req.method === 'PUT') {
       if (!fileId) return json({ error: 'id required' }, 400)
       const body = await req.json()
-      const allowed = ['name', 'folder_id', 'is_trashed', 'trashed_at']
+      const allowed = ['name', 'folder_id', 'is_trashed', 'trashed_at', 'thumbnail_key']
       const updates: any = { updated_at: new Date().toISOString() }
       for (const key of allowed) if (body[key] !== undefined) updates[key] = body[key]
       if (body.is_trashed === false) updates.trashed_at = null

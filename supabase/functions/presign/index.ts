@@ -189,18 +189,24 @@ Deno.serve(async (req) => {
       const ext      = safeName.split('.').pop()?.toLowerCase() || 'bin'
       const wasabiKey = `drive/${user.id}/${fileId}.${ext}`
       const ct = file.type || 'application/octet-stream'
-      const uploadUrl = await presignPut(ENDPOINT, BUCKET, wasabiKey, ACCESS, SECRET, REGION)
+      const isMedia = ct.startsWith('image/') || ct.startsWith('video/')
+      const thumbnailKey = isMedia ? `drive/thumbnails/${fileId}.jpg` : null
+      const [uploadUrl, thumbnailUploadUrl] = await Promise.all([
+        presignPut(ENDPOINT, BUCKET, wasabiKey, ACCESS, SECRET, REGION),
+        thumbnailKey ? presignPut(ENDPOINT, BUCKET, thumbnailKey, ACCESS, SECRET, REGION) : Promise.resolve(null),
+      ])
 
       const { error: dbErr } = await supabase.from('drive_files').insert({
         id: fileId, user_id: user.id, folder_id: folderId || null,
         name: safeName, wasabi_key: wasabiKey, file_size: file.size || 0, mime_type: ct,
+        thumbnail_key: thumbnailKey,
       })
       if (dbErr) throw new Error('DB error: ' + dbErr.message)
 
-      return { fileId, name: file.name, safeName, wasabiKey, uploadUrl, size: file.size }
+      return { fileId, name: file.name, safeName, wasabiKey, thumbnailKey, uploadUrl, thumbnailUploadUrl, size: file.size }
     }))
 
-    return json({ uploads: uploads.map(u => ({ name: u.name, presignedUrl: u.uploadUrl, size: u.size, fileId: u.fileId })) })
+    return json({ uploads: uploads.map(u => ({ name: u.name, presignedUrl: u.uploadUrl, thumbnailPresignedUrl: u.thumbnailUploadUrl, size: u.size, fileId: u.fileId, thumbnailKey: u.thumbnailKey })) })
   } catch (err) {
     return json({ error: err.message }, 500)
   }

@@ -12,6 +12,7 @@ import DriveFileGrid from './components/drive/DriveFileGrid'
 import DriveFileList from './components/drive/DriveFileList'
 import NewFolderModal from './components/NewFolderModal'
 import DuplicateModal from './components/drive/DuplicateModal'
+import DriveShareModal from './components/drive/DriveShareModal'
 import { driveFilesApi, driveFoldersApi } from './lib/api'
 import { getFileCategory } from './components/drive/FileTypeIcon'
 
@@ -63,6 +64,7 @@ export default function DrivePage() {
   const [showSortMenu,   setShowSortMenu]  = useState(false)
   const [dragActive,     setDragActive]    = useState(false)
   const [storage,        setStorage]       = useState(null) // { used_bytes, limit_bytes }
+  const [shareTarget,    setShareTarget]   = useState(null) // { id, name, type: 'file'|'folder' }
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/login', { replace: true })
@@ -211,12 +213,14 @@ export default function DrivePage() {
   const viewProps = {
     files: processed,
     folders,
-    onFolderClick: f => navigate(`/drive/folder/${f.id}`),
-    onTrash:  handleTrash,
-    onDelete: handleDelete,
-    onRename: handleRename,
-    onMove:   handleMove,
+    onFolderClick:  f => navigate(`/drive/folder/${f.id}`),
+    onTrash:        handleTrash,
+    onDelete:       handleDelete,
+    onRename:       handleRename,
+    onMove:         handleMove,
     onFolderDelete: handleFolderDelete,
+    onShare:        f => setShareTarget({ id: f.id, name: f.name, type: 'file' }),
+    onShareFolder:  f => setShareTarget({ id: f.id, name: f.name, type: 'folder' }),
     sort, setSort,
   }
 
@@ -433,6 +437,12 @@ export default function DrivePage() {
             parentId={folderId || null}
             onCreated={folder => { setFolders(f => [folder, ...f]); setShowNewFolder(false) }}
             onClose={() => setShowNewFolder(false)}
+          />
+        )}
+        {shareTarget && (
+          <DriveShareModal
+            target={shareTarget}
+            onClose={() => setShareTarget(null)}
           />
         )}
         <DuplicateModal />

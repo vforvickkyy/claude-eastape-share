@@ -2,9 +2,10 @@ import React from 'react'
 import {
   FolderSimple, DotsThree, PencilSimple, Trash,
   DownloadSimple, ArrowSquareOut, CaretUp, CaretDown,
+  Link, Check,
 } from '@phosphor-icons/react'
 import FileTypeIcon from './FileTypeIcon'
-import { driveFilesApi } from '../../lib/api'
+import { driveFilesApi, shareLinksApi } from '../../lib/api'
 
 function formatSize(bytes) {
   if (!bytes) return '—'
@@ -43,8 +44,22 @@ async function downloadFile(file) {
   } catch {}
 }
 
+async function quickCopyLink(target, isFolder) {
+  try {
+    const opts = { allow_download: true, file_name: target.name }
+    const data = isFolder
+      ? await shareLinksApi.createForDriveFolder(target.id, opts)
+      : await shareLinksApi.createForDriveFile(target.id, opts)
+    const url = `${window.location.origin}/share/${data.link.token}`
+    await navigator.clipboard.writeText(url)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function CtxMenu({ x, y, items, ctxRef }) {
-  const left = x + 190 > window.innerWidth  ? x - 190 : x
+  const left = x + 200 > window.innerWidth  ? x - 200 : x
   const top  = y + items.length * 34 + 16 > window.innerHeight ? y - items.length * 34 - 8 : y
   return (
     <div ref={ctxRef} className="card-menu-dropdown ctx-fixed" style={{ left, top }} onContextMenu={e => e.preventDefault()}>
@@ -78,9 +93,10 @@ function SortArrow({ col, sort, setSort }) {
   )
 }
 
-export default function DriveFileList({ files, folders, onFolderClick, onTrash, onDelete, onRename, onFolderDelete, sort, setSort }) {
-  const [ctxMenu,  setCtxMenu]  = React.useState(null)
-  const [renaming, setRenaming] = React.useState(null)
+export default function DriveFileList({ files, folders, onFolderClick, onTrash, onDelete, onRename, onFolderDelete, onShare, onShareFolder, sort, setSort }) {
+  const [ctxMenu,   setCtxMenu]   = React.useState(null)
+  const [renaming,  setRenaming]  = React.useState(null)
+  const [copyFlash, setCopyFlash] = React.useState(null)
   const ctxRef   = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -104,20 +120,35 @@ export default function DriveFileList({ files, folders, onFolderClick, onTrash, 
     if (name) await onRename?.(id, name)
   }
 
+  async function handleCopyLink(target, isFolder) {
+    setCtxMenu(null)
+    const ok = await quickCopyLink(target, isFolder)
+    if (ok) {
+      setCopyFlash(target.id)
+      setTimeout(() => setCopyFlash(null), 2000)
+    }
+  }
+
   function fileMenuItems(file) {
     return [
-      { icon: <DownloadSimple size={13} />, label: 'Download',       onClick: () => { downloadFile(file); setCtxMenu(null) } },
-      { icon: <ArrowSquareOut size={13} />, label: 'Open in new tab', onClick: () => { driveFilesApi.getDownloadUrl(file.id).then(({ url }) => window.open(url, '_blank')).catch(() => {}); setCtxMenu(null) } },
+      { icon: <DownloadSimple size={13} />, label: 'Download',         onClick: () => { downloadFile(file); setCtxMenu(null) } },
+      { icon: <ArrowSquareOut size={13} />, label: 'Open in new tab',  onClick: () => { driveFilesApi.getDownloadUrl(file.id).then(({ url }) => window.open(url, '_blank')).catch(() => {}); setCtxMenu(null) } },
       { divider: true },
-      { icon: <PencilSimple size={13} />,   label: 'Rename',          onClick: () => { setRenaming({ id: file.id, value: file.name }); setCtxMenu(null) } },
+      { icon: <Link size={13} />,           label: 'Copy link',        onClick: () => handleCopyLink(file, false) },
+      { icon: <Link size={13} />,           label: 'Share settings…',  onClick: () => { onShare?.(file); setCtxMenu(null) } },
       { divider: true },
-      { icon: <Trash size={13} />,          label: 'Move to trash',   danger: true, onClick: () => { onTrash?.(file.id); setCtxMenu(null) } },
+      { icon: <PencilSimple size={13} />,   label: 'Rename',           onClick: () => { setRenaming({ id: file.id, value: file.name }); setCtxMenu(null) } },
+      { divider: true },
+      { icon: <Trash size={13} />,          label: 'Move to trash',    danger: true, onClick: () => { onTrash?.(file.id); setCtxMenu(null) } },
       { icon: <Trash size={13} />,          label: 'Delete permanently', danger: true, onClick: () => { onDelete?.(file.id); setCtxMenu(null) } },
     ]
   }
 
   function folderMenuItems(folder) {
     return [
+      { icon: <Link size={13} />,  label: 'Copy link',        onClick: () => handleCopyLink(folder, true) },
+      { icon: <Link size={13} />,  label: 'Share settings…',  onClick: () => { onShareFolder?.(folder); setCtxMenu(null) } },
+      { divider: true },
       { icon: <Trash size={13} />, label: 'Delete folder', danger: true, onClick: () => { onFolderDelete?.(folder.id); setCtxMenu(null) } },
     ]
   }
@@ -159,6 +190,9 @@ export default function DriveFileList({ files, folders, onFolderClick, onTrash, 
               </td>
               <td style={tdStyle}>
                 <span style={{ fontWeight: 600, color: 'var(--t1)' }}>{folder.name}</span>
+                {copyFlash === folder.id && (
+                  <span className="drive-copy-flash inline"><Check size={10} /> Copied!</span>
+                )}
               </td>
               <td style={tdStyle}>Folder</td>
               <td style={tdStyle}>—</td>
@@ -183,7 +217,11 @@ export default function DriveFileList({ files, folders, onFolderClick, onTrash, 
                 onDoubleClick={() => downloadFile(file)}
               >
                 <td style={{ ...tdStyle, paddingLeft: 8 }}>
-                  <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={28} />
+                  {file.thumbnailUrl ? (
+                    <img src={file.thumbnailUrl} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} loading="lazy" />
+                  ) : (
+                    <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={28} />
+                  )}
                 </td>
                 <td style={tdStyle}>
                   {isRenaming ? (
@@ -200,7 +238,12 @@ export default function DriveFileList({ files, folders, onFolderClick, onTrash, 
                       onClick={e => e.stopPropagation()}
                     />
                   ) : (
-                    <span style={{ color: 'var(--t1)' }} title={file.name}>{file.name}</span>
+                    <>
+                      <span style={{ color: 'var(--t1)' }} title={file.name}>{file.name}</span>
+                      {copyFlash === file.id && (
+                        <span className="drive-copy-flash inline"><Check size={10} /> Copied!</span>
+                      )}
+                    </>
                   )}
                 </td>
                 <td style={tdStyle}>{mimeLabel(file.mime_type, file.name)}</td>

@@ -1,10 +1,10 @@
 import React from 'react'
 import {
   FolderSimple, DotsThree, ArrowSquareOut, PencilSimple,
-  Trash, X, Check, DownloadSimple,
+  Trash, X, Check, DownloadSimple, Link, Copy,
 } from '@phosphor-icons/react'
 import FileTypeIcon from './FileTypeIcon'
-import { driveFilesApi } from '../../lib/api'
+import { driveFilesApi, shareLinksApi } from '../../lib/api'
 
 function formatSize(bytes) {
   if (!bytes) return '—'
@@ -29,8 +29,22 @@ async function downloadFile(file) {
   } catch {}
 }
 
+async function quickCopyLink(target, isFolder) {
+  try {
+    const opts = { allow_download: true, file_name: target.name }
+    const data = isFolder
+      ? await shareLinksApi.createForDriveFolder(target.id, opts)
+      : await shareLinksApi.createForDriveFile(target.id, opts)
+    const url = `${window.location.origin}/share/${data.link.token}`
+    await navigator.clipboard.writeText(url)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function CtxMenu({ x, y, items, ctxRef }) {
-  const left = x + 190 > window.innerWidth  ? x - 190 : x
+  const left = x + 200 > window.innerWidth  ? x - 200 : x
   const top  = y + items.length * 34 + 16 > window.innerHeight ? y - items.length * 34 - 8 : y
   return (
     <div ref={ctxRef} className="card-menu-dropdown ctx-fixed" style={{ left, top }} onContextMenu={e => e.preventDefault()}>
@@ -45,9 +59,10 @@ function CtxMenu({ x, y, items, ctxRef }) {
   )
 }
 
-export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, onDelete, onRename, onFolderDelete }) {
+export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, onDelete, onRename, onFolderDelete, onShare, onShareFolder }) {
   const [ctxMenu,   setCtxMenu]   = React.useState(null)
-  const [renaming,  setRenaming]  = React.useState(null) // { id, value }
+  const [renaming,  setRenaming]  = React.useState(null)
+  const [copyFlash, setCopyFlash] = React.useState(null) // id of item just link-copied
   const ctxRef = React.useRef(null)
 
   React.useEffect(() => {
@@ -68,20 +83,35 @@ export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, 
     if (name) await onRename?.(id, name)
   }
 
+  async function handleCopyLink(target, isFolder) {
+    setCtxMenu(null)
+    const ok = await quickCopyLink(target, isFolder)
+    if (ok) {
+      setCopyFlash(target.id)
+      setTimeout(() => setCopyFlash(null), 2000)
+    }
+  }
+
   function fileMenuItems(file) {
     return [
-      { icon: <DownloadSimple size={13} />, label: 'Download',      onClick: () => { downloadFile(file); setCtxMenu(null) } },
-      { icon: <ArrowSquareOut size={13} />, label: 'Open in new tab', onClick: () => { driveFilesApi.getDownloadUrl(file.id).then(({ url }) => window.open(url, '_blank')).catch(() => {}); setCtxMenu(null) } },
+      { icon: <DownloadSimple size={13} />, label: 'Download',         onClick: () => { downloadFile(file); setCtxMenu(null) } },
+      { icon: <ArrowSquareOut size={13} />, label: 'Open in new tab',  onClick: () => { driveFilesApi.getDownloadUrl(file.id).then(({ url }) => window.open(url, '_blank')).catch(() => {}); setCtxMenu(null) } },
       { divider: true },
-      { icon: <PencilSimple size={13} />,   label: 'Rename',         onClick: () => { setRenaming({ id: file.id, value: file.name }); setCtxMenu(null) } },
+      { icon: <Link size={13} />,           label: 'Copy link',        onClick: () => handleCopyLink(file, false) },
+      { icon: <Link size={13} />,           label: 'Share settings…',  onClick: () => { onShare?.(file); setCtxMenu(null) } },
       { divider: true },
-      { icon: <Trash size={13} />,          label: 'Move to trash',  danger: true, onClick: () => { onTrash?.(file.id); setCtxMenu(null) } },
+      { icon: <PencilSimple size={13} />,   label: 'Rename',           onClick: () => { setRenaming({ id: file.id, value: file.name }); setCtxMenu(null) } },
+      { divider: true },
+      { icon: <Trash size={13} />,          label: 'Move to trash',    danger: true, onClick: () => { onTrash?.(file.id); setCtxMenu(null) } },
       { icon: <Trash size={13} />,          label: 'Delete permanently', danger: true, onClick: () => { onDelete?.(file.id); setCtxMenu(null) } },
     ]
   }
 
   function folderMenuItems(folder) {
     return [
+      { icon: <Link size={13} />,  label: 'Copy link',        onClick: () => handleCopyLink(folder, true) },
+      { icon: <Link size={13} />,  label: 'Share settings…',  onClick: () => { onShareFolder?.(folder); setCtxMenu(null) } },
+      { divider: true },
       { icon: <Trash size={13} />, label: 'Delete folder', danger: true, onClick: () => { onFolderDelete?.(folder.id); setCtxMenu(null) } },
     ]
   }
@@ -113,6 +143,9 @@ export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, 
             <span className="file-card-name">{folder.name}</span>
             <span className="file-card-meta">{formatDate(folder.created_at)}</span>
           </div>
+          {copyFlash === folder.id && (
+            <span className="drive-copy-flash"><Check size={11} /> Copied!</span>
+          )}
           <button className="card-menu-btn" onClick={e => openFromBtn(e, { isFolder: true, folderId: folder.id })}>
             <DotsThree size={18} weight="bold" />
           </button>
@@ -122,6 +155,7 @@ export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, 
       {/* Files */}
       {files?.map(file => {
         const isRenaming = renaming?.id === file.id
+        const hasThumbnail = !!file.thumbnailUrl
         return (
           <div
             key={file.id}
@@ -129,8 +163,17 @@ export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, 
             onContextMenu={e => openAt(e, { isFolder: false, fileId: file.id })}
             onDoubleClick={() => downloadFile(file)}
           >
-            <div className="file-card-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 72 }}>
-              <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={44} />
+            <div className="file-card-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 72, overflow: 'hidden', borderRadius: hasThumbnail ? 8 : 0 }}>
+              {hasThumbnail ? (
+                <img
+                  src={file.thumbnailUrl}
+                  alt={file.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}
+                  loading="lazy"
+                />
+              ) : (
+                <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={44} />
+              )}
             </div>
             <div className="file-card-info">
               {isRenaming ? (
@@ -151,6 +194,9 @@ export default function DriveFileGrid({ files, folders, onFolderClick, onTrash, 
               )}
               <span className="file-card-meta">{formatSize(file.file_size)} · {formatDate(file.created_at)}</span>
             </div>
+            {copyFlash === file.id && (
+              <span className="drive-copy-flash"><Check size={11} /> Copied!</span>
+            )}
             <button className="card-menu-btn" onClick={e => openFromBtn(e, { isFolder: false, fileId: file.id })}>
               <DotsThree size={18} weight="bold" />
             </button>

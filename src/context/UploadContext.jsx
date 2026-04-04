@@ -40,7 +40,7 @@ export function UploadProvider({ children }) {
           files: [{ name: item.name, size: item.size, type: item.file.type || 'application/octet-stream' }],
           folderId: item.folderId || undefined,
         })
-        const { presignedUrl } = presigned[0]
+        const { presignedUrl, thumbnailPresignedUrl, fileId } = presigned[0]
 
         await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest()
@@ -60,6 +60,27 @@ export function UploadProvider({ children }) {
           xhr.setRequestHeader('Content-Type', item.file.type || 'application/octet-stream')
           xhr.send(item.file)
         })
+
+        // Generate + upload thumbnail for images/videos (non-blocking)
+        if (thumbnailPresignedUrl && fileId) {
+          const mime = item.file.type || ''
+          if (mime.startsWith('image/') || mime.startsWith('video/')) {
+            import('../lib/mediaUpload').then(async ({ generateVideoThumbnail, generateImageThumbnail }) => {
+              try {
+                const base64 = mime.startsWith('video/')
+                  ? await generateVideoThumbnail(item.file)
+                  : await generateImageThumbnail(item.file)
+                if (base64) {
+                  const byteStr = atob(base64.split(',')[1])
+                  const arr = new Uint8Array(byteStr.length)
+                  for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i)
+                  const blob = new Blob([arr], { type: 'image/jpeg' })
+                  await fetch(thumbnailPresignedUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
+                }
+              } catch {}
+            }).catch(() => {})
+          }
+        }
       }
     } catch (err) {
       if (err.message !== 'cancelled') updItem(item.id, { status: 'error', error: err.message })

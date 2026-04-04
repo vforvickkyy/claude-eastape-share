@@ -1894,6 +1894,18 @@ input  { font-family: var(--font-body); }
   right: unset;
   left: unset;
 }
+/* "Link copied!" flash badge on drive cards/rows */
+.drive-copy-flash {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  background: rgba(16,185,129,0.9); color: #fff; border-radius: 99px;
+  font-size: 10px; font-weight: 600; padding: 2px 8px;
+  display: flex; align-items: center; gap: 4px; white-space: nowrap;
+  pointer-events: none; z-index: 2;
+}
+.drive-copy-flash.inline {
+  position: static; transform: none; margin-left: 8px;
+  background: rgba(16,185,129,0.2); color: #34d399;
+}
 .ctx-divider {
   height: 1px;
   background: var(--border);

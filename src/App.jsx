@@ -17,6 +17,7 @@ import TrashPage           from "./TrashPage.jsx";
 import ProfilePage         from "./ProfilePage.jsx";
 import PricingPage         from "./PricingPage.jsx";
 import MediaSharePage      from "./MediaSharePage.jsx";
+import DriveSharePage      from "./DriveSharePage.jsx";
 import AuthCallbackPage    from "./AuthCallbackPage.jsx";
 import MaintenancePage     from "./MaintenancePage.jsx";
 import ProjectsPage        from "./ProjectsPage.jsx";
@@ -104,6 +105,7 @@ export default function App() {
           <Route path="/media/project/:id"        element={<LegacyProjectRedirect />} />
           <Route path="/media/asset/:id"          element={<Navigate to="/projects" replace />} />
           <Route path="/media/share/:token"       element={<MediaSharePage />} />
+          <Route path="/share/:token"             element={<DriveSharePage />} />
           <Route path="/media/recent"             element={<Navigate to="/projects" replace />} />
           <Route path="/media/shared"             element={<Navigate to="/projects" replace />} />
 

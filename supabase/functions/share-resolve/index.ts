@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
 
     const { data: link, error } = await supabase
       .from('share_links')
-      .select('*, project_media(*), projects(id, name, color, icon)')
+      .select('*, project_media(*), projects(id, name, color, icon), drive_files(id, name, mime_type, file_size, wasabi_key, thumbnail_key), drive_folders(id, name)')
       .eq('token', token)
       .single()
 
@@ -133,6 +133,56 @@ Deno.serve(async (req) => {
         type: 'project',
         project: link.projects,
         assets: enriched,
+        allowDownload: link.allow_download ?? true,
+      })
+    }
+
+    // ── Drive file share ──────────────────────────────────────────────
+    if (link.drive_file_id && link.drive_files) {
+      const f = link.drive_files
+      let downloadUrl: string | null = null
+      let thumbnailUrl: string | null = null
+      if (f.wasabi_key && wKey) {
+        try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion) } catch {}
+      }
+      const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
+      if (thumbKey && wKey) {
+        try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
+      }
+      return json({
+        type: 'drive_file',
+        file: { ...f, downloadUrl, thumbnailUrl },
+        allowDownload: link.allow_download ?? true,
+      })
+    }
+
+    // ── Drive folder share ────────────────────────────────────────────
+    if (link.drive_folder_id && link.drive_folders) {
+      const folder = link.drive_folders
+      const { data: files } = await supabase
+        .from('drive_files')
+        .select('id, name, mime_type, file_size, wasabi_key, thumbnail_key, created_at')
+        .eq('folder_id', link.drive_folder_id)
+        .eq('is_trashed', false)
+        .order('created_at', { ascending: false })
+
+      const enriched = await Promise.all((files || []).map(async (f: any) => {
+        let downloadUrl: string | null = null
+        let thumbnailUrl: string | null = null
+        if (f.wasabi_key && wKey) {
+          try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion) } catch {}
+        }
+        const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
+        if (thumbKey && wKey) {
+          try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
+        }
+        return { ...f, downloadUrl, thumbnailUrl }
+      }))
+
+      return json({
+        type: 'drive_folder',
+        folder,
+        files: enriched,
         allowDownload: link.allow_download ?? true,
       })
     }
