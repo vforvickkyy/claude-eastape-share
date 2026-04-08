@@ -1311,9 +1311,10 @@ function RenameInput({ inputRef, value, onChange, onSave, onCancel }) {
 
 // ── Thumbnail / Icon ─────────────────────────────────────────────────────────
 function FileThumbnail({ file, size = 140 }) {
+  const [imgErr, setImgErr] = useState(false)
   const mime = file.mime_type || ''
-  if (file.thumbnailUrl) {
-    return <img src={file.thumbnailUrl} alt={file.name} style={{ width: '100%', height: size, objectFit: 'cover', display: 'block' }} loading="lazy" />
+  if (file.thumbnailUrl && !imgErr) {
+    return <img src={file.thumbnailUrl} alt={file.name} style={{ width: '100%', height: size, objectFit: 'cover', display: 'block' }} loading="lazy" onError={() => setImgErr(true)} />
   }
   const bg = mime.startsWith('video/') ? 'linear-gradient(135deg,#1a1030,#0a0a14)' : mime.startsWith('audio/') ? 'linear-gradient(135deg,#0a1e14,#0a0a14)' : mime === 'application/pdf' ? 'linear-gradient(135deg,#1e0a0a,#0a0a14)' : 'linear-gradient(135deg,#0d1520,#0a0a14)'
   return (
@@ -1321,6 +1322,15 @@ function FileThumbnail({ file, size = 140 }) {
       <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={40} />
     </div>
   )
+}
+
+// Inline thumbnail for list view rows
+function ListThumb({ file }) {
+  const [err, setErr] = useState(false)
+  if (file.thumbnailUrl && !err) {
+    return <img src={file.thumbnailUrl} alt="" style={{ width: 26, height: 26, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} loading="lazy" onError={() => setErr(true)} />
+  }
+  return <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={26} />
 }
 
 // ── Grid View ────────────────────────────────────────────────────────────────
@@ -1564,9 +1574,7 @@ function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, s
               </td>
               <td style={{ ...tdStyle, fontWeight: 600, color: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  {file.thumbnailUrl
-                    ? <img src={file.thumbnailUrl} alt="" style={{ width: 26, height: 26, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} loading="lazy" />
-                    : <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={26} />}
+                  <ListThumb file={file} />
                   {isRenaming ? <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} /> : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</span>}
                 </div>
               </td>
