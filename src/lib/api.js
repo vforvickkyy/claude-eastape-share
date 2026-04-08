@@ -227,12 +227,27 @@ export const activityApi = {
 
 // ── Drive Files ────────────────────────────────────────────────────
 export const driveFilesApi = {
-  list:       (params = {}) => get(`${BASE}/drive-files`, params, true),
-  update:     (id, body)    => put(`${BASE}/drive-files`, { id }, body, true),
-  delete:     (id)          => del(`${BASE}/drive-files`, { id }, true),
-  presign:    (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'drive' }, true),
-  getDownloadUrl: (id)      => get(`${BASE}/download`, { drive_id: id }, true),
-  getStorage: ()            => get(`${BASE}/drive-files`, { resource: 'storage' }, true),
+  list:           (params = {}) => get(`${BASE}/drive-files`, params, true),
+  update:         (id, body)    => put(`${BASE}/drive-files`, { id }, body, true),
+  delete:         (id)          => del(`${BASE}/drive-files`, { id }, true),
+  presign:        (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'drive' }, true),
+  getDownloadUrl: (id)          => get(`${BASE}/download`, { drive_id: id }, true),
+  getStorage:     ()            => get(`${BASE}/drive-files`, { resource: 'storage' }, true),
+  // New actions (PATCH-based mutations)
+  rename:          (id, name)      => patch(`${BASE}/drive-files`, {}, { action: 'rename', id, name }, true),
+  renameFolder:    (id, name)      => patch(`${BASE}/drive-files`, {}, { action: 'rename_folder', id, name }, true),
+  move:            (id, folderId)  => patch(`${BASE}/drive-files`, {}, { action: 'move', id, folder_id: folderId || null }, true),
+  moveMultiple:    (ids, folderId) => patch(`${BASE}/drive-files`, {}, { action: 'move_multiple', ids, folder_id: folderId || null }, true),
+  restore:         (id)            => patch(`${BASE}/drive-files`, {}, { action: 'restore', id }, true),
+  permanentDelete: (id)            => patch(`${BASE}/drive-files`, {}, { action: 'permanent_delete', id }, true),
+  emptyTrash:      ()              => patch(`${BASE}/drive-files`, {}, { action: 'empty_trash' }, true),
+  trashFolder:     (id)            => patch(`${BASE}/drive-files`, {}, { action: 'trash_folder', id }, true),
+  createFolder:    (name, parentId)=> patch(`${BASE}/drive-files`, {}, { action: 'create_folder', name, parent_id: parentId || null }, true),
+  getFolderTree:   ()              => get(`${BASE}/drive-files`, { action: 'folder_tree' }, true),
+  getRecent:       (limit = 20)    => get(`${BASE}/drive-files`, { action: 'recent', limit }, true),
+  getTrash:        ()              => get(`${BASE}/drive-files`, { action: 'trash' }, true),
+  getStorageUsage: ()              => get(`${BASE}/drive-files`, { action: 'storage_usage' }, true),
+  search:          (query)         => get(`${BASE}/drive-files`, { action: 'search', query }, true),
 }
 
 // ── Drive Folders ──────────────────────────────────────────────────

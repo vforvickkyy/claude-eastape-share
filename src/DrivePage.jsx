@@ -1,32 +1,81 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+/**
+ * DrivePage — Google Drive-style file manager.
+ * Views: myDrive | recent | trash
+ * Features: sidebar folder tree, grid/list, sort/filter, context menu,
+ *           inline rename, bulk select, file preview, move modal, keyboard shortcuts.
+ */
+import React, {
+  useState, useEffect, useCallback, useRef, useMemo,
+} from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  CloudArrowUp, FolderSimplePlus, SquaresFour, Rows,
-  House, CaretRight, CaretDown, Check, UploadSimple,
+  FolderSimple, SquaresFour, Rows, House, CaretRight, CaretDown,
+  MagnifyingGlass, Plus, UploadSimple, FolderSimplePlus, DotsThree,
+  DownloadSimple, PencilSimple, Trash, ArrowClockwise, ArrowSquareOut,
+  Check, X, CloudArrowUp, Clock, Funnel, Link, SortAscending,
+  Warning, ArrowLeft,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import { useUpload } from './context/UploadContext'
 import DashboardLayout from './DashboardLayout'
-import DriveFileGrid from './components/drive/DriveFileGrid'
-import DriveFileList from './components/drive/DriveFileList'
-import NewFolderModal from './components/NewFolderModal'
+import ContextMenu from './components/drive/ContextMenu'
+import FilePreview from './components/drive/FilePreview'
+import MoveFolderModal from './components/drive/MoveFolderModal'
+import FileTypeIcon, { getFileCategory } from './components/drive/FileTypeIcon'
 import DuplicateModal from './components/drive/DuplicateModal'
-import DriveShareModal from './components/drive/DriveShareModal'
-import { driveFilesApi, driveFoldersApi } from './lib/api'
-import { getFileCategory } from './components/drive/FileTypeIcon'
+import { driveFilesApi, driveFoldersApi, shareLinksApi } from './lib/api'
+import { showToast } from './components/ui/Toast'
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function fmtBytes(b) {
+  if (!b) return '0 B'
+  if (b < 1024) return `${b} B`
+  if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`
+  if (b < 1024 ** 3) return `${(b / 1024 ** 2).toFixed(1)} MB`
+  return `${(b / 1024 ** 3).toFixed(2)} GB`
+}
+function fmtRel(iso) {
+  if (!iso) return '—'
+  const d = (Date.now() - new Date(iso)) / 1000
+  if (d < 60)      return 'just now'
+  if (d < 3600)    return `${Math.round(d / 60)}m ago`
+  if (d < 86400)   return `${Math.round(d / 3600)}h ago`
+  if (d < 604800)  return `${Math.round(d / 86400)}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+function fmtDate(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+function buildTree(folders, parentId = null) {
+  return (folders || [])
+    .filter(f => (f.parent_id || null) === parentId)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(f => ({ ...f, children: buildTree(folders, f.id) }))
+}
+function getFolderPath(allFolders, folderId) {
+  const path = []
+  let cur = folderId
+  const map = Object.fromEntries((allFolders || []).map(f => [f.id, f]))
+  let safety = 0
+  while (cur && map[cur] && safety++ < 20) {
+    path.unshift({ id: cur, name: map[cur].name })
+    cur = map[cur].parent_id
+  }
+  return path
+}
 
 const SORT_OPTS = [
-  { value: 'name-asc',  label: '↑ Name A→Z' },
-  { value: 'name-desc', label: '↓ Name Z→A' },
-  { divider: true },
-  { value: 'size-desc', label: '↓ Size: Largest' },
-  { value: 'size-asc',  label: '↑ Size: Smallest' },
-  { divider: true },
-  { value: 'date-desc', label: '↓ Date: Newest' },
-  { value: 'date-asc',  label: '↑ Date: Oldest' },
+  { value: 'name-asc',  label: 'Name A→Z' },
+  { value: 'name-desc', label: 'Name Z→A' },
+  null,
+  { value: 'size-desc', label: 'Size: Largest' },
+  { value: 'size-asc',  label: 'Size: Smallest' },
+  null,
+  { value: 'date-desc', label: 'Date: Newest' },
+  { value: 'date-asc',  label: 'Date: Oldest' },
 ]
-
 const FILTER_OPTS = [
   { value: 'all',      label: 'All' },
   { value: 'video',    label: '🎬 Video' },
@@ -36,430 +85,1344 @@ const FILTER_OPTS = [
   { value: 'other',    label: '📦 Other' },
 ]
 
-function fmtBytes(bytes) {
-  if (!bytes) return '0 B'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`
+// ── Skeleton loading cards ─────────────────────────────────────────────────────
+function SkeletonGrid() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} style={{ height: 200, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+          <div className="drive-skeleton" style={{ height: 140 }} />
+          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="drive-skeleton" style={{ height: 12, borderRadius: 4, width: '80%' }} />
+            <div className="drive-skeleton" style={{ height: 10, borderRadius: 4, width: '50%' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+function SkeletonList() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} style={{ height: 44, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px' }}>
+          <div className="drive-skeleton" style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0 }} />
+          <div className="drive-skeleton" style={{ height: 13, flex: 1, borderRadius: 4 }} />
+          <div className="drive-skeleton" style={{ width: 80, height: 12, borderRadius: 4 }} />
+          <div className="drive-skeleton" style={{ width: 60, height: 12, borderRadius: 4 }} />
+        </div>
+      ))}
+    </div>
+  )
 }
 
+// ── Sidebar folder tree (recursive) ──────────────────────────────────────────
+function FolderTreeItem({ node, depth, currentFolderId, expandedSet, onToggle, onNavigate, onRename, onTrash, onNewSubfolder }) {
+  const [showCtx, setShowCtx] = useState(false)
+  const [ctxPos,  setCtxPos]  = useState({ x: 0, y: 0 })
+  const isActive   = currentFolderId === node.id
+  const isExpanded = expandedSet.has(node.id)
+
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center',
+          paddingLeft: 8 + depth * 14, paddingRight: 4,
+          height: 30, borderRadius: 7, cursor: 'pointer',
+          background: isActive ? 'rgba(124,58,237,0.18)' : 'transparent',
+          color: isActive ? '#fff' : 'rgba(255,255,255,0.7)',
+          position: 'relative',
+        }}
+        onClick={() => onNavigate(node)}
+        onContextMenu={e => { e.preventDefault(); setCtxPos({ x: e.clientX, y: e.clientY }); setShowCtx(true) }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+      >
+        <button
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: node.children?.length ? 1 : 0.2 }}
+          onClick={e => { e.stopPropagation(); onToggle(node.id) }}
+        >
+          <CaretRight size={11} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: 'rgba(255,255,255,0.5)' }} />
+        </button>
+        <FolderSimple size={15} weight="duotone" color={isActive ? '#fbbf24' : '#d97706'} style={{ marginRight: 6, flexShrink: 0 }} />
+        <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{node.name}</span>
+        <button
+          className="sidebar-dots-btn"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px', borderRadius: 4, color: 'rgba(255,255,255,0.4)', flexShrink: 0, display: 'flex' }}
+          onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setCtxPos({ x: r.left, y: r.bottom + 4 }); setShowCtx(true) }}
+        >
+          <DotsThree size={15} weight="bold" />
+        </button>
+      </div>
+
+      {isExpanded && node.children?.map(child => (
+        <FolderTreeItem key={child.id} node={child} depth={depth + 1} currentFolderId={currentFolderId} expandedSet={expandedSet} onToggle={onToggle} onNavigate={onNavigate} onRename={onRename} onTrash={onTrash} onNewSubfolder={onNewSubfolder} />
+      ))}
+
+      {showCtx && (
+        <ContextMenu x={ctxPos.x} y={ctxPos.y} onClose={() => setShowCtx(false)} items={[
+          { icon: <PencilSimple size={14} />, label: 'Rename',          onClick: () => { setShowCtx(false); onRename(node) } },
+          { icon: <FolderSimplePlus size={14} />, label: 'New subfolder', onClick: () => { setShowCtx(false); onNewSubfolder(node.id) } },
+          { divider: true },
+          { icon: <Trash size={14} />, label: 'Move to Trash', danger: true, onClick: () => { setShowCtx(false); onTrash(node) } },
+        ]} />
+      )}
+    </>
+  )
+}
+
+// ── Main DrivePage ─────────────────────────────────────────────────────────────
 export default function DrivePage() {
   const { user, loading: authLoading } = useAuth()
-  const navigate    = useNavigate()
-  const { id: folderId } = useParams()
-  const { addFiles } = useUpload()
-  const fileInputRef = useRef(null)
-  const dragCounter  = useRef(0)
+  const navigate     = useNavigate()
+  const { id: urlFolderId } = useParams()
+  const [searchParams] = useSearchParams()
+  const { addFiles, pendingDuplicates, resolveDuplicates, dismissDuplicates } = useUpload()
+  const fileInputRef   = useRef(null)
+  const folderInputRef = useRef(null)
+  const dragCounter    = useRef(0)
 
-  const [files,          setFiles]         = useState([])
-  const [folders,        setFolders]       = useState([])
-  const [folderName,     setFolderName]    = useState('Root')
-  const [loading,        setLoading]       = useState(true)
-  const [view,           setView]          = useState(() => localStorage.getItem('drive-view') || 'grid')
-  const [sort,           setSort]          = useState(() => localStorage.getItem(`drive-sort-${folderId || 'root'}`) || 'name-asc')
-  const [filter,         setFilter]        = useState('all')
-  const [search,         setSearch]        = useState('')
-  const [showNewFolder,  setShowNewFolder] = useState(false)
-  const [showSortMenu,   setShowSortMenu]  = useState(false)
-  const [dragActive,     setDragActive]    = useState(false)
-  const [storage,        setStorage]       = useState(null) // { used_bytes, limit_bytes }
-  const [shareTarget,    setShareTarget]   = useState(null) // { id, name, type: 'file'|'folder' }
+  // ── View state ──────────────────────────────────────────────────────────────
+  const viewParam = searchParams.get('view') // 'recent' | 'trash' | null
+  const currentView = viewParam === 'recent' ? 'recent' : viewParam === 'trash' ? 'trash' : 'myDrive'
+  const currentFolderId = currentView === 'myDrive' ? (urlFolderId || null) : null
 
+  // ── UI state ────────────────────────────────────────────────────────────────
+  const [viewMode,  setViewMode]  = useState(() => localStorage.getItem('drive-view-mode') || 'grid')
+  const [sortBy,    setSortBy]    = useState(() => localStorage.getItem('drive-sort-by')   || 'name')
+  const [sortDir,   setSortDir]   = useState(() => localStorage.getItem('drive-sort-dir')  || 'asc')
+  const [filter,    setFilter]    = useState('all')
+  const [search,    setSearch]    = useState('')
+  const [showSortMenu, setShowSortMenu] = useState(false)
+  const [showNewMenu,  setShowNewMenu]  = useState(false)
+  const [isPageDrag,   setIsPageDrag]  = useState(false)
+  const sortMenuRef = useRef(null)
+  const newMenuRef  = useRef(null)
+
+  // ── Data ────────────────────────────────────────────────────────────────────
+  const [files,      setFiles]      = useState([])
+  const [folders,    setFolders]    = useState([])
+  const [allFolders, setAllFolders] = useState([])
+  const [isLoading,  setIsLoading]  = useState(true)
+  const [loadError,  setLoadError]  = useState(null)
+  const [storage,    setStorage]    = useState(null) // { used_bytes, limit_bytes, used_gb, limit_gb }
+
+  // ── Selection ────────────────────────────────────────────────────────────────
+  const [selected, setSelected] = useState(new Set()) // Set<string> — 'file-id' or 'folder-id'
+
+  // ── Rename ──────────────────────────────────────────────────────────────────
+  const [renamingId,   setRenamingId]   = useState(null)
+  const [renamingType, setRenamingType] = useState(null)
+  const [renameVal,    setRenameVal]    = useState('')
+  const renameInputRef = useRef(null)
+
+  // ── New folder ──────────────────────────────────────────────────────────────
+  const [showNewFolderIn, setShowNewFolderIn] = useState(null) // parent folder id
+  const [newFolderName,   setNewFolderName]   = useState('')
+  const newFolderInputRef = useRef(null)
+
+  // ── Context menu ────────────────────────────────────────────────────────────
+  const [ctxMenu, setCtxMenu] = useState(null) // { x, y, item, itemType }
+
+  // ── Preview ─────────────────────────────────────────────────────────────────
+  const [previewFiles, setPreviewFiles]   = useState(null)
+  const [previewIndex, setPreviewIndex]   = useState(0)
+
+  // ── Move modal ───────────────────────────────────────────────────────────────
+  const [moveItems, setMoveItems] = useState(null) // items to move
+
+  // ── Sidebar expanded folders ─────────────────────────────────────────────────
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('drive-sidebar-expanded') || '[]')) }
+    catch { return new Set() }
+  })
+
+  // ── Persist prefs ────────────────────────────────────────────────────────────
+  useEffect(() => { localStorage.setItem('drive-view-mode', viewMode) }, [viewMode])
+  useEffect(() => { localStorage.setItem('drive-sort-by',   sortBy)   }, [sortBy])
+  useEffect(() => { localStorage.setItem('drive-sort-dir',  sortDir)  }, [sortDir])
+  useEffect(() => {
+    localStorage.setItem('drive-sidebar-expanded', JSON.stringify([...sidebarExpanded]))
+  }, [sidebarExpanded])
+
+  // ── Auth guard ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!authLoading && !user) navigate('/login', { replace: true })
   }, [user, authLoading])
 
-  const load = useCallback(async () => {
+  // ── Load folder tree (always) ─────────────────────────────────────────────
+  const loadFolderTree = useCallback(() => {
     if (!user) return
-    setLoading(true)
-    try {
-      const [filesRes, foldersRes] = await Promise.all([
-        driveFilesApi.list(folderId ? { folderId } : {}),
-        driveFoldersApi.list(folderId || null),
-      ])
-      setFiles(filesRes.files || [])
-      setFolders(foldersRes.folders || [])
-    } catch {}
-    setLoading(false)
-  }, [user, folderId])
-
-  useEffect(() => { load() }, [load])
-
-  // Load folder name for breadcrumb
-  useEffect(() => {
-    if (!folderId) { setFolderName('Root'); return }
-    driveFoldersApi.list(null).then(d => {
-      const f = (d.folders || []).find(x => x.id === folderId)
-      setFolderName(f?.name || 'Folder')
-    }).catch(() => {})
-  }, [folderId])
-
-  // Load storage usage
-  useEffect(() => {
-    if (!user) return
-    driveFilesApi.getStorage().then(setStorage).catch(() => {})
+    driveFilesApi.getFolderTree()
+      .then(d => setAllFolders(d.folders || []))
+      .catch(() => {})
   }, [user])
 
-  // Save view preference
-  useEffect(() => { localStorage.setItem('drive-view', view) }, [view])
+  // ── Load storage ─────────────────────────────────────────────────────────────
+  const loadStorage = useCallback(() => {
+    if (!user) return
+    driveFilesApi.getStorageUsage()
+      .then(setStorage)
+      .catch(() => {})
+  }, [user])
 
-  // Save sort preference per folder
-  useEffect(() => {
-    localStorage.setItem(`drive-sort-${folderId || 'root'}`, sort)
-  }, [sort, folderId])
+  // ── Load current view ────────────────────────────────────────────────────────
+  const loadContent = useCallback(async () => {
+    if (!user) return
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      if (currentView === 'recent') {
+        const d = await driveFilesApi.getRecent()
+        setFiles(d.files || [])
+        setFolders([])
+      } else if (currentView === 'trash') {
+        const d = await driveFilesApi.getTrash()
+        setFiles(d.files || [])
+        setFolders([])
+      } else {
+        const [filesRes, foldersRes] = await Promise.all([
+          driveFilesApi.list(currentFolderId ? { folderId: currentFolderId } : {}),
+          driveFoldersApi.list(currentFolderId || null),
+        ])
+        setFiles(filesRes.files || [])
+        setFolders(foldersRes.folders || [])
+      }
+    } catch (err) {
+      setLoadError(err.message || 'Failed to load files')
+    } finally {
+      // Minimum 300ms to avoid skeleton flash
+      setTimeout(() => setIsLoading(false), 300)
+    }
+  }, [user, currentView, currentFolderId])
 
-  // Paste to upload
+  useEffect(() => { loadFolderTree(); loadStorage() }, [loadFolderTree, loadStorage])
+  useEffect(() => { loadContent(); setSelected(new Set()); setFilter('all'); setSearch('') }, [loadContent])
+
+  // Focus rename input
+  useEffect(() => { if (renamingId && renameInputRef.current) renameInputRef.current.focus() }, [renamingId])
+  // Focus new folder input
+  useEffect(() => { if (showNewFolderIn !== null && newFolderInputRef.current) newFolderInputRef.current.focus() }, [showNewFolderIn])
+
+  // Close menus on outside click
   useEffect(() => {
-    const handlePaste = (e) => {
+    function fn(e) {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) setShowSortMenu(false)
+      if (newMenuRef.current  && !newMenuRef.current.contains(e.target))  setShowNewMenu(false)
+    }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [])
+
+  // ── Computed / sorted / filtered ─────────────────────────────────────────────
+  const processedFiles = useMemo(() => {
+    let res = [...files]
+    if (search) {
+      const q = search.toLowerCase()
+      res = res.filter(f => f.name.toLowerCase().includes(q))
+    } else if (filter !== 'all') {
+      res = res.filter(f => getFileCategory(f.mime_type, f.name) === filter)
+    }
+    res.sort((a, b) => {
+      let cmp = 0
+      if (sortBy === 'name') cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      else if (sortBy === 'size') cmp = (a.file_size || 0) - (b.file_size || 0)
+      else if (sortBy === 'date') cmp = new Date(a.created_at) - new Date(b.created_at)
+      else if (sortBy === 'type') cmp = (a.mime_type || '').localeCompare(b.mime_type || '')
+      return sortDir === 'desc' ? -cmp : cmp
+    })
+    return res
+  }, [files, search, filter, sortBy, sortDir])
+
+  const processedFolders = useMemo(() => {
+    if (search) {
+      const q = search.toLowerCase()
+      return folders.filter(f => f.name.toLowerCase().includes(q))
+    }
+    return [...folders].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  }, [folders, search])
+
+  const breadcrumb = useMemo(() => {
+    if (!currentFolderId) return [{ id: null, name: 'My Drive' }]
+    return [{ id: null, name: 'My Drive' }, ...getFolderPath(allFolders, currentFolderId)]
+  }, [currentFolderId, allFolders])
+
+  const previewableFiles = useMemo(() => processedFiles, [processedFiles])
+
+  // ── File upload ─────────────────────────────────────────────────────────────
+  function startUpload(fileList) {
+    const arr = Array.from(fileList)
+    addFiles(arr, currentFolderId || null, files, () => {
+      loadContent(); loadStorage()
+    })
+  }
+
+  // ── Paste ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (currentView !== 'myDrive') return
+    function onPaste(e) {
       const items = e.clipboardData?.items
       if (!items) return
       const pasted = []
       for (const item of items) {
         if (item.kind === 'file') { const f = item.getAsFile(); if (f) pasted.push(f) }
       }
-      if (pasted.length > 0) startUpload(pasted)
+      if (pasted.length) {
+        showToast(`Uploading ${pasted.length} file(s) from clipboard`, 'info')
+        startUpload(pasted)
+      }
     }
-    document.addEventListener('paste', handlePaste)
-    return () => document.removeEventListener('paste', handlePaste)
-  }, [files, folderId])
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [currentView, currentFolderId, files])
 
-  // Close sort menu on outside click
+  // ── Drag overlay ─────────────────────────────────────────────────────────────
+  function onDragEnter(e) { e.preventDefault(); dragCounter.current++; if (dragCounter.current === 1) setIsPageDrag(true) }
+  function onDragLeave(e) { e.preventDefault(); dragCounter.current--; if (dragCounter.current <= 0) { dragCounter.current = 0; setIsPageDrag(false) } }
+  function onDragOver(e)  { e.preventDefault() }
+  function onDrop(e)      { e.preventDefault(); dragCounter.current = 0; setIsPageDrag(false); const dropped = Array.from(e.dataTransfer.files); if (dropped.length) startUpload(dropped) }
+
+  // ── Rename ──────────────────────────────────────────────────────────────────
+  function startRename(item, type) {
+    setRenamingId(item.id); setRenamingType(type); setRenameVal(item.name)
+  }
+  async function saveRename() {
+    const name = renameVal.trim()
+    if (!name) { cancelRename(); return }
+    const prev = renamingType === 'file'
+      ? files.find(f => f.id === renamingId)
+      : folders.find(f => f.id === renamingId)
+    if (!prev || name === prev.name) { cancelRename(); return }
+
+    if (renamingType === 'file') {
+      setFiles(fs => fs.map(f => f.id === renamingId ? { ...f, name } : f))
+      cancelRename()
+      try {
+        await driveFilesApi.rename(renamingId, name)
+        showToast(`Renamed to "${name}"`, 'success')
+      } catch (err) {
+        setFiles(fs => fs.map(f => f.id === renamingId ? { ...f, name: prev.name } : f))
+        showToast(err.message || 'Rename failed', 'error')
+      }
+    } else {
+      setFolders(fs => fs.map(f => f.id === renamingId ? { ...f, name } : f))
+      setAllFolders(fs => fs.map(f => f.id === renamingId ? { ...f, name } : f))
+      cancelRename()
+      try {
+        await driveFilesApi.renameFolder(renamingId, name)
+        showToast(`Renamed to "${name}"`, 'success')
+      } catch (err) {
+        setFolders(fs => fs.map(f => f.id === renamingId ? { ...f, name: prev.name } : f))
+        setAllFolders(fs => fs.map(f => f.id === renamingId ? { ...f, name: prev.name } : f))
+        showToast(err.message || 'Rename failed', 'error')
+      }
+    }
+  }
+  function cancelRename() { setRenamingId(null); setRenamingType(null); setRenameVal('') }
+
+  // ── New folder ──────────────────────────────────────────────────────────────
+  async function createFolder(name, parentId) {
+    if (!name.trim()) { setShowNewFolderIn(null); return }
+    try {
+      const d = await driveFilesApi.createFolder(name.trim(), parentId)
+      const folder = d.folder
+      if (parentId === currentFolderId || (parentId === null && !currentFolderId)) {
+        setFolders(fs => [folder, ...fs])
+      }
+      setAllFolders(fs => [...fs, folder])
+      showToast(`Folder "${name}" created`, 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to create folder', 'error')
+    }
+    setShowNewFolderIn(null); setNewFolderName('')
+  }
+
+  // ── Trash ────────────────────────────────────────────────────────────────────
+  async function trashFile(file) {
+    setFiles(fs => fs.filter(f => f.id !== file.id))
+    showToast(`"${file.name}" moved to Trash`, 'info', {
+      duration: 5000,
+      action: { label: 'Undo', onClick: () => restoreFile(file) },
+    })
+    try {
+      await driveFilesApi.update(file.id, { is_trashed: true })
+    } catch {
+      setFiles(fs => [file, ...fs])
+    }
+  }
+  async function restoreFile(file) {
+    try {
+      await driveFilesApi.restore(file.id)
+      if (currentView === 'trash') setFiles(fs => fs.filter(f => f.id !== file.id))
+      else { setFiles(fs => [file, ...fs]) }
+      showToast(`"${file.name}" restored`, 'success')
+    } catch (err) {
+      showToast(err.message || 'Restore failed', 'error')
+    }
+  }
+  async function permanentDeleteFile(file) {
+    if (!confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) return
+    setFiles(fs => fs.filter(f => f.id !== file.id))
+    try {
+      await driveFilesApi.permanentDelete(file.id)
+      showToast(`"${file.name}" permanently deleted`, 'info')
+    } catch (err) {
+      setFiles(fs => [file, ...fs])
+      showToast(err.message || 'Delete failed', 'error')
+    }
+  }
+  async function trashFolder(folder) {
+    if (!confirm(`Move folder "${folder.name}" and all its contents to Trash?`)) return
+    setFolders(fs => fs.filter(f => f.id !== folder.id))
+    setAllFolders(fs => fs.filter(f => f.id !== folder.id))
+    try {
+      await driveFilesApi.trashFolder(folder.id)
+      showToast(`Folder "${folder.name}" moved to Trash`, 'info')
+    } catch (err) {
+      showToast(err.message || 'Failed to trash folder', 'error')
+      loadContent()
+    }
+  }
+  async function emptyTrash() {
+    if (!confirm(`Permanently delete all ${files.length} items in Trash? This cannot be undone.`)) return
+    try {
+      const d = await driveFilesApi.emptyTrash()
+      setFiles([])
+      loadStorage()
+      showToast(`Trash emptied (${d.count || 0} items deleted)`, 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to empty trash', 'error')
+    }
+  }
+
+  // ── Bulk ─────────────────────────────────────────────────────────────────────
+  async function bulkTrash() {
+    const fileIds   = [...selected].filter(s => s.startsWith('file-')).map(s => s.slice(5))
+    const folderIds = [...selected].filter(s => s.startsWith('folder-')).map(s => s.slice(7))
+    setFiles(fs => fs.filter(f => !fileIds.includes(f.id)))
+    setFolders(fs => fs.filter(f => !folderIds.includes(f.id)))
+    setSelected(new Set())
+    try {
+      await Promise.all([
+        ...fileIds.map(id => driveFilesApi.update(id, { is_trashed: true })),
+        ...folderIds.map(id => driveFilesApi.trashFolder(id)),
+      ])
+      const total = fileIds.length + folderIds.length
+      showToast(`${total} item${total !== 1 ? 's' : ''} moved to Trash`, 'info')
+    } catch {
+      showToast('Some items could not be trashed', 'error')
+      loadContent()
+    }
+  }
+
+  // ── Move ─────────────────────────────────────────────────────────────────────
+  async function doMove(targetFolderId) {
+    if (!moveItems) return
+    const fileItems   = moveItems.filter(i => i.type === 'file')
+    const folderItems = moveItems.filter(i => i.type === 'folder')
+    setMoveItems(null)
+    const destName = targetFolderId ? (allFolders.find(f => f.id === targetFolderId)?.name || 'folder') : 'My Drive'
+    try {
+      const promises = [
+        ...fileItems.map(i => driveFilesApi.move(i.id, targetFolderId)),
+        ...folderItems.map(i => driveFoldersApi.update(i.id, { parent_id: targetFolderId || null })),
+      ]
+      await Promise.all(promises)
+      // Remove from current view
+      setFiles(fs => fs.filter(f => !fileItems.map(i => i.id).includes(f.id)))
+      setFolders(fs => fs.filter(f => !folderItems.map(i => i.id).includes(f.id)))
+      setSelected(new Set())
+      showToast(`Moved to "${destName}"`, 'success')
+      loadFolderTree()
+    } catch (err) {
+      showToast(err.message || 'Move failed', 'error')
+      loadContent()
+    }
+  }
+
+  // ── Copy share link ──────────────────────────────────────────────────────────
+  async function copyLink(file) {
+    try {
+      const data = await shareLinksApi.createForDriveFile(file.id, { allow_download: true, file_name: file.name })
+      const url = `${window.location.origin}/share/${data.link.token}`
+      await navigator.clipboard.writeText(url)
+      showToast('Link copied to clipboard', 'success')
+    } catch {
+      showToast('Failed to copy link', 'error')
+    }
+  }
+
+  // ── Download ─────────────────────────────────────────────────────────────────
+  async function downloadFile(file) {
+    try {
+      const { url } = await driveFilesApi.getDownloadUrl(file.id)
+      const a = document.createElement('a'); a.href = url; a.download = file.name; a.click()
+    } catch { showToast('Download failed', 'error') }
+  }
+
+  // ── Selection helpers ────────────────────────────────────────────────────────
+  function toggleSelect(key) {
+    setSelected(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
+  }
+  function selectAll() {
+    setSelected(new Set([
+      ...folders.map(f => `folder-${f.id}`),
+      ...processedFiles.map(f => `file-${f.id}`),
+    ]))
+  }
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!showSortMenu) return
-    const fn = () => setShowSortMenu(false)
-    document.addEventListener('mousedown', fn)
-    return () => document.removeEventListener('mousedown', fn)
-  }, [showSortMenu])
+    function onKey(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') { e.preventDefault(); selectAll(); return }
+      if (e.key === 'Escape') {
+        if (ctxMenu)      { setCtxMenu(null); return }
+        if (previewFiles) { setPreviewFiles(null); return }
+        if (renamingId)   { cancelRename(); return }
+        setSelected(new Set())
+        return
+      }
+      if (e.key === 'Delete' && selected.size > 0 && currentView !== 'trash') { bulkTrash(); return }
+      if (e.key === 'F2' && selected.size === 1) {
+        const key = [...selected][0]
+        const [type, id] = [key.startsWith('folder-') ? 'folder' : 'file', key.replace(/^(folder|file)-/, '')]
+        const item = type === 'folder' ? folders.find(f => f.id === id) : files.find(f => f.id === id)
+        if (item) startRename(item, type)
+        return
+      }
+      if (e.key === ' ' && selected.size === 1) {
+        e.preventDefault()
+        const key = [...selected][0]
+        if (key.startsWith('file-')) {
+          const id = key.slice(5)
+          const idx = previewableFiles.findIndex(f => f.id === id)
+          if (idx >= 0) { setPreviewFiles(previewableFiles); setPreviewIndex(idx) }
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selected, files, folders, ctxMenu, previewFiles, renamingId, currentView, processedFiles])
 
-  // Drag handlers
-  const handleDragEnter = useCallback((e) => {
-    e.preventDefault()
-    dragCounter.current++
-    setDragActive(true)
-  }, [])
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault()
-    dragCounter.current--
-    if (dragCounter.current <= 0) { dragCounter.current = 0; setDragActive(false) }
-  }, [])
-  const handleDragOver  = useCallback((e) => e.preventDefault(), [])
-  const handleDrop      = useCallback((e) => {
-    e.preventDefault()
-    dragCounter.current = 0
-    setDragActive(false)
-    const dropped = Array.from(e.dataTransfer.files)
-    if (dropped.length) startUpload(dropped)
-  }, [files, folderId])
-
-  function startUpload(filesToUpload) {
-    addFiles(filesToUpload, folderId || null, files, () => {
-      load()
-      driveFilesApi.getStorage().then(setStorage).catch(() => {})
-    })
-    if (fileInputRef.current) fileInputRef.current.value = ''
+  // ── Context menu builders ────────────────────────────────────────────────────
+  function fileCtxItems(file) {
+    if (currentView === 'trash') return [
+      { icon: <ArrowClockwise size={14} />, label: 'Restore',            onClick: () => { setCtxMenu(null); restoreFile(file) } },
+      { divider: true },
+      { icon: <Trash size={14} />, label: 'Delete permanently', danger: true, onClick: () => { setCtxMenu(null); permanentDeleteFile(file) } },
+    ]
+    return [
+      { icon: <ArrowSquareOut size={14} />, label: 'Preview',    hint: 'Space',  onClick: () => { setCtxMenu(null); const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) } },
+      { icon: <DownloadSimple size={14} />, label: 'Download',   hint: '',       onClick: () => { setCtxMenu(null); downloadFile(file) } },
+      { divider: true },
+      { icon: <PencilSimple size={14} />,  label: 'Rename',      hint: 'F2',     onClick: () => { setCtxMenu(null); startRename(file, 'file') } },
+      { icon: <FolderSimple size={14} />,  label: 'Move to',                     onClick: () => { setCtxMenu(null); setMoveItems([{ ...file, type: 'file' }]) } },
+      { divider: true },
+      { icon: <Link size={14} />,          label: 'Copy link',                   onClick: () => { setCtxMenu(null); copyLink(file) } },
+      { divider: true },
+      { icon: <Trash size={14} />,         label: 'Move to Trash', hint: 'Del', danger: true, onClick: () => { setCtxMenu(null); trashFile(file) } },
+    ]
+  }
+  function folderCtxItems(folder) {
+    return [
+      { icon: <PencilSimple size={14} />,    label: 'Rename',          hint: 'F2',  onClick: () => { setCtxMenu(null); startRename(folder, 'folder') } },
+      { icon: <FolderSimple size={14} />,    label: 'Move to',                      onClick: () => { setCtxMenu(null); setMoveItems([{ ...folder, type: 'folder' }]) } },
+      { icon: <FolderSimplePlus size={14} />, label: 'New subfolder',               onClick: () => { setCtxMenu(null); setShowNewFolderIn(folder.id) } },
+      { divider: true },
+      { icon: <Trash size={14} />,           label: 'Move to Trash', danger: true,  onClick: () => { setCtxMenu(null); trashFolder(folder) } },
+    ]
   }
 
-  // File actions
-  async function handleTrash(id) {
-    await driveFilesApi.update(id, { is_trashed: true }).catch(() => {})
-    setFiles(f => f.filter(x => x.id !== id))
-  }
-  async function handleDelete(id) {
-    if (!confirm('Permanently delete this file? This cannot be undone.')) return
-    await driveFilesApi.delete(id).catch(() => {})
-    setFiles(f => f.filter(x => x.id !== id))
-  }
-  async function handleRename(id, name) {
-    await driveFilesApi.update(id, { name }).catch(() => {})
-    setFiles(f => f.map(x => x.id === id ? { ...x, name } : x))
-  }
-  async function handleMove(id, newFolderId) {
-    await driveFilesApi.update(id, { folder_id: newFolderId }).catch(() => {})
-    setFiles(f => f.filter(x => x.id !== id))
-  }
-  async function handleFolderDelete(id) {
-    if (!confirm('Delete this folder and trash its contents?')) return
-    await driveFoldersApi.delete(id).catch(() => {})
-    setFolders(f => f.filter(x => x.id !== id))
-  }
+  // ── Computed sort label ───────────────────────────────────────────────────────
+  const sortLabel = useMemo(() => {
+    const opt = SORT_OPTS.find(o => o && o.value === `${sortBy}-${sortDir}`)
+    return opt ? opt.label : 'Sort'
+  }, [sortBy, sortDir])
 
-  // Sort + filter
-  const processed = useMemo(() => {
-    let result = files.filter(f => {
-      if (filter !== 'all' && getFileCategory(f.mime_type, f.name) !== filter) return false
-      if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false
-      return true
-    })
-    result = [...result].sort((a, b) => {
-      if (sort === 'name-asc')  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-      if (sort === 'name-desc') return b.name.localeCompare(a.name, undefined, { sensitivity: 'base' })
-      if (sort === 'size-desc') return (b.file_size || 0) - (a.file_size || 0)
-      if (sort === 'size-asc')  return (a.file_size || 0) - (b.file_size || 0)
-      if (sort === 'date-desc') return new Date(b.created_at) - new Date(a.created_at)
-      if (sort === 'date-asc')  return new Date(a.created_at) - new Date(b.created_at)
-      return 0
-    })
-    return result
-  }, [files, sort, filter, search])
-
-  const sortLabel = SORT_OPTS.find(o => o.value === sort)?.label || 'Sort'
-
-  // Storage bar
-  const usedPct = storage ? Math.min(100, (storage.used_bytes / storage.limit_bytes) * 100) : 0
+  // ── Storage bar data ──────────────────────────────────────────────────────────
+  const usedPct  = storage ? Math.min(100, (storage.used_bytes / storage.limit_bytes) * 100) : 0
   const barColor = usedPct >= 90 ? '#ef4444' : usedPct >= 70 ? '#f59e0b' : '#7c3aed'
-  const showUpgrade = storage && usedPct > 80
 
-  const viewProps = {
-    files: processed,
-    folders,
-    onFolderClick:  f => navigate(`/drive/folder/${f.id}`),
-    onTrash:        handleTrash,
-    onDelete:       handleDelete,
-    onRename:       handleRename,
-    onMove:         handleMove,
-    onFolderDelete: handleFolderDelete,
-    onShare:        f => setShareTarget({ id: f.id, name: f.name, type: 'file' }),
-    onShareFolder:  f => setShareTarget({ id: f.id, name: f.name, type: 'folder' }),
-    sort, setSort,
-  }
+  // ── Folder tree ──────────────────────────────────────────────────────────────
+  const folderTree = useMemo(() => buildTree(allFolders), [allFolders])
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout title="Drive">
       <div
-        style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
+        style={{ display: 'flex', height: '100%', margin: '-24px', width: 'calc(100% + 48px)', overflow: 'hidden' }}
+        onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={onDrop}
       >
-
-        {/* ── SECTION A: Storage bar ── */}
-        {storage && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 16,
-            padding: '0 24px', height: 48, flexShrink: 0,
-            background: 'rgba(255,255,255,0.03)',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-          }}>
-            <span style={{ fontSize: 12, color: 'var(--t3)', whiteSpace: 'nowrap' }}>Storage</span>
-            <span style={{ fontSize: 13, color: 'var(--t1)', whiteSpace: 'nowrap' }}>
-              {fmtBytes(storage.used_bytes)} of {fmtBytes(storage.limit_bytes)} used
-            </span>
-            <div style={{ flex: 1, maxWidth: 400, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)' }}>
-              <motion.div
-                style={{ height: '100%', borderRadius: 3, background: barColor }}
-                initial={{ width: 0 }}
-                animate={{ width: `${usedPct}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-            {showUpgrade && (
-              <a href="/pricing" style={{ fontSize: 12, color: '#7c3aed', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                Upgrade ↗
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* ── SECTION B: Breadcrumb + actions ── */}
-        <div style={{ padding: '10px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          {/* Breadcrumb */}
-          <div className="breadcrumb">
-            <button className="breadcrumb-item" onClick={() => navigate('/drive')}>
-              <House size={13} /> Root
-            </button>
-            {folderId && (
-              <>
-                <CaretRight size={11} className="breadcrumb-sep" />
-                <span className="breadcrumb-item active">{folderName}</span>
-              </>
-            )}
-          </div>
-
-          {/* Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="btn-ghost" onClick={() => setShowNewFolder(true)}>
-              <FolderSimplePlus size={14} /> New Folder
-            </button>
-            <button className="btn-primary" onClick={() => fileInputRef.current?.click()}>
-              <CloudArrowUp size={14} /> Upload
-            </button>
-            <div className="view-toggle">
-              <button className={`view-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => setView('grid')} title="Grid view">
-                <SquaresFour size={16} />
-              </button>
-              <button className={`view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="List view">
-                <Rows size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ── SECTION C: Sort + filter bar ── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '8px 24px',
-          borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0,
+        {/* ══════════ SIDEBAR ══════════ */}
+        <aside style={{
+          width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          background: 'rgba(255,255,255,0.015)', borderRight: '1px solid rgba(255,255,255,0.06)',
+          overflowY: 'auto', overflowX: 'hidden',
         }}>
-          {/* Left: sort + filter pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* Sort dropdown */}
-            <div style={{ position: 'relative' }} onMouseDown={e => e.stopPropagation()}>
-              <button
-                className="btn-ghost"
-                style={{ fontSize: 12, padding: '5px 10px', gap: 4 }}
-                onClick={() => setShowSortMenu(m => !m)}
-              >
-                {sortLabel} <CaretDown size={11} />
-              </button>
-              <AnimatePresence>
-                {showSortMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    style={{
-                      position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
-                      background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8,
-                      padding: '4px 0', minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                    }}
-                  >
-                    {SORT_OPTS.map((o, i) =>
-                      o.divider ? (
-                        <div key={i} style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-                      ) : (
-                        <button
-                          key={o.value}
-                          onClick={() => { setSort(o.value); setShowSortMenu(false) }}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-                            padding: '7px 12px', fontSize: 12,
-                            color: sort === o.value ? 'var(--accent)' : 'var(--t2)',
-                          }}
-                        >
-                          {o.label}
-                          {sort === o.value && <Check size={12} />}
-                        </button>
-                      )
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          {/* Storage */}
+          {storage && (
+            <div style={{ padding: '16px 14px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Storage</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${usedPct}%`, borderRadius: 3, background: barColor, transition: 'width 0.6s ease' }} />
+              </div>
+              {usedPct >= 80 && (
+                <p style={{ fontSize: 11, color: usedPct >= 90 ? '#f87171' : '#fbbf24', marginTop: 4 }}>
+                  {fmtBytes((storage.limit_bytes - storage.used_bytes))} remaining
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Nav items */}
+          <nav style={{ padding: '10px 8px', flex: 1 }}>
+            {/* My Drive */}
+            <div
+              className={`drive-nav-item ${currentView === 'myDrive' && !currentFolderId ? 'active' : ''}`}
+              onClick={() => navigate('/drive')}
+            >
+              <House size={15} weight="duotone" />
+              <span>My Drive</span>
             </div>
 
-            {/* Filter pills */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {FILTER_OPTS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setFilter(f => f === opt.value ? 'all' : opt.value)}
-                  style={{
-                    fontSize: 11, padding: '4px 10px', borderRadius: 99,
-                    border: '1px solid',
-                    borderColor: filter === opt.value ? 'var(--accent)' : 'var(--border)',
-                    background: filter === opt.value ? 'rgba(124,58,237,0.15)' : 'transparent',
-                    color: filter === opt.value ? 'var(--accent)' : 'var(--t2)',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                >
-                  {opt.label}
-                </button>
+            {/* Folder tree */}
+            <div style={{ marginLeft: 4, marginTop: 2, marginBottom: 8 }}>
+              {folderTree.map(node => (
+                <FolderTreeItem
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  currentFolderId={currentFolderId}
+                  expandedSet={sidebarExpanded}
+                  onToggle={id => setSidebarExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })}
+                  onNavigate={f => navigate(`/drive/folder/${f.id}`)}
+                  onRename={f => startRename(f, 'folder')}
+                  onTrash={trashFolder}
+                  onNewSubfolder={pid => { setShowNewFolderIn(pid); navigate(`/drive/folder/${pid}`) }}
+                />
               ))}
             </div>
+
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '6px 4px 8px' }} />
+
+            {/* Recent */}
+            <div
+              className={`drive-nav-item ${currentView === 'recent' ? 'active' : ''}`}
+              onClick={() => navigate('/drive?view=recent')}
+            >
+              <Clock size={15} weight="duotone" />
+              <span>Recent</span>
+            </div>
+
+            {/* Trash */}
+            <div
+              className={`drive-nav-item ${currentView === 'trash' ? 'active' : ''}`}
+              onClick={() => navigate('/drive?view=trash')}
+            >
+              <Trash size={15} weight="duotone" />
+              <span>Trash</span>
+            </div>
+          </nav>
+
+          {/* Upload button */}
+          <div style={{ padding: '12px 14px' }}>
+            <button
+              style={{ width: '100%', height: 36, borderRadius: 8, background: 'transparent', border: '1px solid rgba(124,58,237,0.4)', color: '#a78bfa', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+              onClick={() => fileInputRef.current?.click()}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <UploadSimple size={15} /> Upload Files
+            </button>
           </div>
+        </aside>
 
-          {/* Right: search */}
-          <input
-            className="input-field"
-            style={{ width: 200, fontSize: 12, padding: '5px 10px' }}
-            placeholder="Search files…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
+        {/* ══════════ MAIN CONTENT ══════════ */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        {/* ── SECTION D: Content ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
-          {loading ? (
-            <div className="empty-state"><span className="spinner" /></div>
-          ) : processed.length === 0 && folders.length === 0 ? (
-            <div className="empty-state">
-              <CloudArrowUp size={40} weight="thin" />
-              <p>{search || filter !== 'all' ? 'No matching files' : 'No files here yet'}</p>
-              {!search && filter === 'all' && (
-                <button className="btn-primary" onClick={() => fileInputRef.current?.click()}>
-                  Upload files
+          {/* ── Toolbar ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', height: 52, borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+            {/* Breadcrumb / title */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              {currentView === 'myDrive' ? (
+                breadcrumb.map((crumb, i) => (
+                  <React.Fragment key={crumb.id || 'root'}>
+                    {i > 0 && <CaretRight size={11} style={{ color: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />}
+                    {i < breadcrumb.length - 1 ? (
+                      <button
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'rgba(255,255,255,0.5)', padding: '2px 4px', borderRadius: 4, whiteSpace: 'nowrap' }}
+                        onClick={() => crumb.id ? navigate(`/drive/folder/${crumb.id}`) : navigate('/drive')}
+                        onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                      >{crumb.name}</button>
+                    ) : (
+                      <span style={{ fontSize: 14, fontWeight: 600, color: '#fff', padding: '2px 4px' }}>{crumb.name}</span>
+                    )}
+                  </React.Fragment>
+                ))
+              ) : (
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>
+                  {currentView === 'recent' ? 'Recent' : 'Trash'}
+                </span>
+              )}
+            </div>
+
+            {/* Search */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <MagnifyingGlass size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search…"
+                style={{
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8, height: 34, paddingLeft: 32, paddingRight: search ? 28 : 12,
+                  fontSize: 13, color: '#fff', outline: 'none', width: 180, transition: 'all 0.2s',
+                }}
+                onFocus={e => { e.target.style.width = '240px'; e.target.style.borderColor = 'rgba(124,58,237,0.5)' }}
+                onBlur={e => { e.target.style.width = '180px'; e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', padding: 0, display: 'flex' }}>
+                  <X size={13} />
                 </button>
               )}
             </div>
-          ) : view === 'grid' ? (
-            <DriveFileGrid {...viewProps} />
-          ) : (
-            <DriveFileList {...viewProps} />
+
+            {/* Sort dropdown */}
+            <div ref={sortMenuRef} style={{ position: 'relative' }}>
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12, gap: 4, height: 34 }}
+                onClick={() => setShowSortMenu(m => !m)}
+              >
+                <SortAscending size={14} /> {sortLabel} <CaretDown size={10} />
+              </button>
+              {showSortMenu && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 50, background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px', minWidth: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                  {SORT_OPTS.map((opt, i) => opt === null ? (
+                    <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '3px 0' }} />
+                  ) : (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        const [sb, sd] = opt.value.split('-')
+                        setSortBy(sb); setSortDir(sd); setShowSortMenu(false)
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        width: '100%', padding: '7px 10px', background: 'none', border: 'none',
+                        cursor: 'pointer', borderRadius: 6, fontSize: 13,
+                        color: `${sortBy}-${sortDir}` === opt.value ? '#a78bfa' : 'rgba(255,255,255,0.75)',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      {opt.label}
+                      {`${sortBy}-${sortDir}` === opt.value && <Check size={13} color="#a78bfa" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Grid/List toggle */}
+            <div className="view-toggle">
+              <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Grid"><SquaresFour size={16} /></button>
+              <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List"><Rows size={16} /></button>
+            </div>
+
+            {/* New / Upload button */}
+            {currentView === 'myDrive' && (
+              <div ref={newMenuRef} style={{ position: 'relative' }}>
+                <button className="btn-primary" style={{ height: 34, gap: 5 }} onClick={() => setShowNewMenu(m => !m)}>
+                  <Plus size={14} /> New <CaretDown size={10} />
+                </button>
+                {showNewMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 50, background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px', minWidth: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                    {[
+                      { icon: <FolderSimplePlus size={15} />, label: 'New Folder',    action: () => { setShowNewFolderIn(currentFolderId); setShowNewMenu(false) } },
+                      null,
+                      { icon: <UploadSimple size={15} />,    label: 'Upload Files',  action: () => { fileInputRef.current?.click(); setShowNewMenu(false) } },
+                      { icon: <FolderSimple size={15} />,    label: 'Upload Folder', action: () => { folderInputRef.current?.click(); setShowNewMenu(false) } },
+                    ].map((item, i) => item === null ? (
+                      <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '3px 0' }} />
+                    ) : (
+                      <button key={i} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 6, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        {item.icon} {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Trash: empty button */}
+            {currentView === 'trash' && files.length > 0 && (
+              <button className="btn-ghost" style={{ fontSize: 12, color: '#f87171', borderColor: 'rgba(248,113,113,0.3)', height: 34 }} onClick={emptyTrash}>
+                <Trash size={13} /> Empty Trash
+              </button>
+            )}
+          </div>
+
+          {/* ── Filter bar ── */}
+          {currentView === 'myDrive' && !search && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0, overflowX: 'auto' }}>
+              {FILTER_OPTS.map(opt => {
+                const count = opt.value === 'all' ? files.length : files.filter(f => getFileCategory(f.mime_type, f.name) === opt.value).length
+                if (opt.value !== 'all' && count === 0) return null
+                const isActive = filter === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFilter(f => f === opt.value ? 'all' : opt.value)}
+                    style={{
+                      fontSize: 12, padding: '4px 12px', borderRadius: 999, border: '1px solid',
+                      borderColor: isActive ? 'rgba(124,58,237,0.5)' : 'rgba(255,255,255,0.08)',
+                      background: isActive ? 'rgba(124,58,237,0.15)' : 'transparent',
+                      color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.5)',
+                      cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+                    }}
+                  >
+                    {opt.label}{count > 0 && opt.value !== 'all' ? ` ${count}` : ''}
+                  </button>
+                )
+              })}
+            </div>
           )}
+
+          {/* ── Trash warning banner ── */}
+          {currentView === 'trash' && (
+            <div style={{ margin: '12px 16px 0', padding: '9px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, fontSize: 13, color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <Warning size={15} color="#f59e0b" />
+              <span style={{ flex: 1 }}>Files in Trash are permanently deleted after 30 days</span>
+            </div>
+          )}
+
+          {/* ── File content area ── */}
+          <div
+            style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 80px' }}
+            onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()) }}
+          >
+            {isLoading ? (
+              viewMode === 'grid' ? <SkeletonGrid /> : <SkeletonList />
+            ) : loadError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60%', gap: 12 }}>
+                <Warning size={48} style={{ color: 'rgba(255,255,255,0.15)' }} />
+                <p style={{ fontSize: 16, color: '#fff' }}>Failed to load files</p>
+                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{loadError}</p>
+                <button className="btn-ghost" onClick={loadContent}>Retry</button>
+              </div>
+            ) : processedFiles.length === 0 && processedFolders.length === 0 ? (
+              <EmptyState view={currentView} search={search} filter={filter} onUpload={() => fileInputRef.current?.click()} onNewFolder={() => setShowNewFolderIn(currentFolderId)} onClearSearch={() => setSearch('')} />
+            ) : viewMode === 'grid' ? (
+              <GridView
+                files={processedFiles} folders={processedFolders}
+                selected={selected} onToggleSelect={toggleSelect}
+                renamingId={renamingId} renamingType={renamingType} renameVal={renameVal}
+                renameInputRef={renameInputRef}
+                onRenameChange={setRenameVal} onRenameSave={saveRename} onRenameCancel={cancelRename}
+                showNewFolderIn={showNewFolderIn} currentFolderId={currentFolderId}
+                newFolderName={newFolderName} newFolderInputRef={newFolderInputRef}
+                onNewFolderChange={setNewFolderName} onNewFolderCreate={createFolder} onNewFolderCancel={() => { setShowNewFolderIn(null); setNewFolderName('') }}
+                onFolderOpen={f => navigate(`/drive/folder/${f.id}`)}
+                onCtxFile={(file, x, y) => setCtxMenu({ x, y, item: file, itemType: 'file' })}
+                onCtxFolder={(folder, x, y) => setCtxMenu({ x, y, item: folder, itemType: 'folder' })}
+                onPreview={(file) => { const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) }}
+                currentView={currentView}
+              />
+            ) : (
+              <ListView
+                files={processedFiles} folders={processedFolders}
+                selected={selected} onToggleSelect={toggleSelect}
+                sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir}
+                renamingId={renamingId} renamingType={renamingType} renameVal={renameVal}
+                renameInputRef={renameInputRef}
+                onRenameChange={setRenameVal} onRenameSave={saveRename} onRenameCancel={cancelRename}
+                showNewFolderIn={showNewFolderIn} currentFolderId={currentFolderId}
+                newFolderName={newFolderName} newFolderInputRef={newFolderInputRef}
+                onNewFolderChange={setNewFolderName} onNewFolderCreate={createFolder} onNewFolderCancel={() => { setShowNewFolderIn(null); setNewFolderName('') }}
+                onFolderOpen={f => navigate(`/drive/folder/${f.id}`)}
+                onCtxFile={(file, x, y) => setCtxMenu({ x, y, item: file, itemType: 'file' })}
+                onCtxFolder={(folder, x, y) => setCtxMenu({ x, y, item: folder, itemType: 'folder' })}
+                onPreview={(file) => { const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) }}
+                currentView={currentView}
+                allFolders={allFolders}
+              />
+            )}
+          </div>
         </div>
 
-        {/* ── SECTION E: Drag overlay ── */}
-        <AnimatePresence>
-          {dragActive && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              style={{
-                position: 'fixed', inset: 0, zIndex: 100,
-                background: 'rgba(10,10,20,0.85)', backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                pointerEvents: 'none',
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                style={{
-                  width: '60%', height: '60%', maxWidth: 600, maxHeight: 400,
-                  border: '4px dashed #7c3aed', borderRadius: 16,
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center', gap: 12,
-                }}
-              >
-                <UploadSimple size={64} weight="duotone" color="#7c3aed" />
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>Drop files to upload</div>
-                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>
-                  Uploading to: {folderId ? folderName : 'Root'}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Modals */}
-        {showNewFolder && (
-          <NewFolderModal
-            parentId={folderId || null}
-            onCreated={folder => { setFolders(f => [folder, ...f]); setShowNewFolder(false) }}
-            onClose={() => setShowNewFolder(false)}
-          />
+        {/* ── Drag upload overlay ── */}
+        {isPageDrag && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(8,10,20,0.88)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ width: '55%', height: '55%', border: '3px dashed rgba(124,58,237,0.6)', borderRadius: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+              <CloudArrowUp size={64} weight="duotone" color="#7c3aed" />
+              <p style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>Drop to upload</p>
+              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>
+                Uploading to: {currentFolderId ? (allFolders.find(f => f.id === currentFolderId)?.name || 'folder') : 'My Drive'}
+              </p>
+            </div>
+          </div>
         )}
-        {shareTarget && (
-          <DriveShareModal
-            target={shareTarget}
-            onClose={() => setShareTarget(null)}
-          />
-        )}
-        <DuplicateModal />
       </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        hidden
-        onChange={e => {
-          const picked = Array.from(e.target.files || [])
-          if (picked.length) startUpload(picked)
-          e.target.value = ''
-        }}
-      />
+      {/* ── Bulk action bar ── */}
+      {selected.size > 0 && (
+        <BulkBar
+          selected={selected}
+          onDeselect={() => setSelected(new Set())}
+          onDownload={() => {
+            const fileIds = [...selected].filter(s => s.startsWith('file-')).map(s => s.slice(5))
+            fileIds.forEach(id => { const f = files.find(x => x.id === id); if (f) downloadFile(f) })
+          }}
+          onMove={() => {
+            const items = [
+              ...[...selected].filter(s => s.startsWith('file-')).map(s => { const f = files.find(x => x.id === s.slice(5)); return f ? { ...f, type: 'file' } : null }),
+              ...[...selected].filter(s => s.startsWith('folder-')).map(s => { const f = folders.find(x => x.id === s.slice(7)); return f ? { ...f, type: 'folder' } : null }),
+            ].filter(Boolean)
+            setMoveItems(items)
+          }}
+          onTrash={currentView === 'trash' ? null : bulkTrash}
+        />
+      )}
+
+      {/* ── Context menu ── */}
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x} y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          items={ctxMenu.itemType === 'file' ? fileCtxItems(ctxMenu.item) : folderCtxItems(ctxMenu.item)}
+        />
+      )}
+
+      {/* ── File preview ── */}
+      {previewFiles && (
+        <FilePreview
+          files={previewFiles}
+          initialIndex={previewIndex}
+          onClose={() => setPreviewFiles(null)}
+        />
+      )}
+
+      {/* ── Move modal ── */}
+      {moveItems && (
+        <MoveFolderModal
+          items={moveItems}
+          currentFolderId={currentFolderId}
+          allFolders={allFolders}
+          onMove={doMove}
+          onClose={() => setMoveItems(null)}
+        />
+      )}
+
+      {/* ── Duplicate modal ── */}
+      {pendingDuplicates && (
+        <DuplicateModal />
+      )}
+
+      {/* Hidden inputs */}
+      <input ref={fileInputRef} type="file" multiple hidden onChange={e => { startUpload(e.target.files); e.target.value = '' }} />
+      <input ref={folderInputRef} type="file" multiple hidden webkitdirectory="" onChange={e => { startUpload(e.target.files); e.target.value = '' }} />
     </DashboardLayout>
+  )
+}
+
+// ── Empty State ──────────────────────────────────────────────────────────────
+function EmptyState({ view, search, filter, onUpload, onNewFolder, onClearSearch }) {
+  if (search) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '55%', gap: 12, textAlign: 'center' }}>
+      <MagnifyingGlass size={64} weight="thin" style={{ color: 'rgba(255,255,255,0.1)' }} />
+      <p style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>No results for "{search}"</p>
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>Try a different search term</p>
+      <button className="btn-ghost" onClick={onClearSearch}>Clear search</button>
+    </div>
+  )
+  if (view === 'trash') return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '55%', gap: 12, textAlign: 'center' }}>
+      <Trash size={64} weight="thin" style={{ color: 'rgba(255,255,255,0.1)' }} />
+      <p style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>Trash is empty</p>
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>Files you delete will appear here</p>
+    </div>
+  )
+  if (view === 'recent') return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '55%', gap: 12, textAlign: 'center' }}>
+      <Clock size={64} weight="thin" style={{ color: 'rgba(255,255,255,0.1)' }} />
+      <p style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>No recent files</p>
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>Files you open or upload will appear here</p>
+    </div>
+  )
+  if (filter !== 'all') return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '55%', gap: 12, textAlign: 'center' }}>
+      <Funnel size={64} weight="thin" style={{ color: 'rgba(255,255,255,0.1)' }} />
+      <p style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>No matching files</p>
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>No files of this type in the current folder</p>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '55%', gap: 14, textAlign: 'center' }}>
+      <FolderSimple size={72} weight="thin" style={{ color: 'rgba(255,255,255,0.1)' }} />
+      <p style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>This folder is empty</p>
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>Drag files here or use the buttons below</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn-primary" onClick={onUpload}><UploadSimple size={14} /> Upload Files</button>
+        <button className="btn-ghost" onClick={onNewFolder}><FolderSimplePlus size={14} /> New Folder</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Bulk Action Bar ──────────────────────────────────────────────────────────
+function BulkBar({ selected, onDeselect, onDownload, onMove, onTrash }) {
+  const count = selected.size
+  const fileCount = [...selected].filter(s => s.startsWith('file-')).length
+  return (
+    <div style={{
+      position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+      zIndex: 200,
+      display: 'flex', alignItems: 'center', gap: 14,
+      background: '#1a1a2e', border: '1px solid rgba(124,58,237,0.35)',
+      borderRadius: 999, padding: '10px 20px',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+      animation: 'bulkIn 0.2s ease',
+    }}>
+      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', padding: 2, display: 'flex' }} onClick={onDeselect}>
+        <X size={14} />
+      </button>
+      <span style={{ fontSize: 13, color: '#fff', whiteSpace: 'nowrap' }}>{count} {count === 1 ? 'item' : 'items'} selected</span>
+      <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)' }} />
+      {fileCount > 0 && (
+        <button className="bulk-action-btn" onClick={onDownload}><DownloadSimple size={14} /> Download</button>
+      )}
+      <button className="bulk-action-btn" onClick={onMove}><FolderSimple size={14} /> Move to</button>
+      {onTrash && (
+        <button className="bulk-action-btn danger" onClick={onTrash}><Trash size={14} /> Delete</button>
+      )}
+      <style>{`
+        @keyframes bulkIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        .bulk-action-btn{background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:13px;display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;transition:all 0.15s}
+        .bulk-action-btn:hover{background:rgba(255,255,255,0.07);color:#fff}
+        .bulk-action-btn.danger:hover{background:rgba(248,113,113,0.1);color:#f87171}
+      `}</style>
+    </div>
+  )
+}
+
+// ── New Folder Inline Input ──────────────────────────────────────────────────
+function NewFolderInput({ inputRef, value, onChange, onSave, onCancel, isCard = false }) {
+  if (isCard) {
+    return (
+      <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 72 }}>
+        <FolderSimple size={28} weight="duotone" color="#fbbf24" />
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Folder name"
+          onKeyDown={e => { if (e.key === 'Enter') onSave(value); if (e.key === 'Escape') onCancel() }}
+          onBlur={() => setTimeout(onCancel, 150)}
+          style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#fff', flex: 1, fontWeight: 600 }}
+        />
+      </div>
+    )
+  }
+  return (
+    <tr>
+      <td colSpan={6} style={{ padding: '4px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36 }}>
+          <FolderSimple size={20} weight="duotone" color="#fbbf24" />
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Folder name"
+            onKeyDown={e => { if (e.key === 'Enter') onSave(value); if (e.key === 'Escape') onCancel() }}
+            onBlur={() => setTimeout(onCancel, 150)}
+            style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 4, outline: 'none', fontSize: 13, color: '#fff', padding: '4px 8px', flex: 1 }}
+          />
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ── Rename Input ─────────────────────────────────────────────────────────────
+function RenameInput({ inputRef, value, onChange, onSave, onCancel }) {
+  return (
+    <input
+      ref={inputRef}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onSave() } if (e.key === 'Escape') onCancel() }}
+      onBlur={onSave}
+      onClick={e => e.stopPropagation()}
+      style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid #7c3aed', borderRadius: 4, outline: 'none', fontSize: 13, color: '#fff', padding: '2px 6px', width: '100%', fontFamily: 'inherit' }}
+    />
+  )
+}
+
+// ── Thumbnail / Icon ─────────────────────────────────────────────────────────
+function FileThumbnail({ file, size = 140 }) {
+  const mime = file.mime_type || ''
+  if (file.thumbnailUrl) {
+    return <img src={file.thumbnailUrl} alt={file.name} style={{ width: '100%', height: size, objectFit: 'cover', display: 'block' }} loading="lazy" />
+  }
+  const bg = mime.startsWith('video/') ? 'linear-gradient(135deg,#1a1030,#0a0a14)' : mime.startsWith('audio/') ? 'linear-gradient(135deg,#0a1e14,#0a0a14)' : mime === 'application/pdf' ? 'linear-gradient(135deg,#1e0a0a,#0a0a14)' : 'linear-gradient(135deg,#0d1520,#0a0a14)'
+  return (
+    <div style={{ height: size, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={40} />
+    </div>
+  )
+}
+
+// ── Grid View ────────────────────────────────────────────────────────────────
+function GridView({ files, folders, selected, onToggleSelect, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView }) {
+
+  function handleFileCtx(e, file) { e.preventDefault(); e.stopPropagation(); onCtxFile(file, e.clientX, e.clientY) }
+  function handleFolderCtx(e, folder) { e.preventDefault(); e.stopPropagation(); onCtxFolder(folder, e.clientX, e.clientY) }
+
+  return (
+    <div>
+      {/* Folders */}
+      {(folders.length > 0 || showNewFolderIn === (currentFolderId || null)) && (
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Folders</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+            {showNewFolderIn === (currentFolderId || null) && (
+              <NewFolderInput inputRef={newFolderInputRef} value={newFolderName} onChange={onNewFolderChange} onSave={v => onNewFolderCreate(v, currentFolderId)} onCancel={onNewFolderCancel} isCard />
+            )}
+            {folders.map(folder => {
+              const selKey = `folder-${folder.id}`
+              const isSel = selected.has(selKey)
+              const isRenaming = renamingId === folder.id && renamingType === 'folder'
+              return (
+                <div
+                  key={folder.id}
+                  className={`drive-folder-card ${isSel ? 'selected' : ''}`}
+                  onClick={e => { if (e.detail === 2) onFolderOpen(folder); else onToggleSelect(selKey) }}
+                  onContextMenu={e => handleFolderCtx(e, folder)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <FolderSimple size={26} weight="duotone" color="#fbbf24" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {isRenaming ? (
+                        <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
+                      ) : (
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    className="card-menu-btn"
+                    style={{ flexShrink: 0 }}
+                    onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFolder(folder, r.left, r.bottom + 4) }}
+                  >
+                    <DotsThree size={16} weight="bold" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Files */}
+      {files.length > 0 && (
+        <div>
+          {folders.length > 0 && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Files</p>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+            {files.map(file => {
+              const selKey = `file-${file.id}`
+              const isSel = selected.has(selKey)
+              const isRenaming = renamingId === file.id && renamingType === 'file'
+              return (
+                <div
+                  key={file.id}
+                  className={`drive-file-card ${isSel ? 'selected' : ''}`}
+                  onClick={e => { if (e.detail === 2) { e.preventDefault(); onPreview(file) } else onToggleSelect(selKey) }}
+                  onContextMenu={e => handleFileCtx(e, file)}
+                >
+                  {/* Thumbnail */}
+                  <div style={{ position: 'relative', overflow: 'hidden' }}>
+                    <FileThumbnail file={file} size={130} />
+                    {/* Hover overlay */}
+                    <div className="drive-card-overlay">
+                      <div
+                        style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSel ? '#7c3aed' : 'rgba(255,255,255,0.8)'}`, background: isSel ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        onClick={e => { e.stopPropagation(); onToggleSelect(selKey) }}
+                      >
+                        {isSel && <Check size={11} color="#fff" weight="bold" />}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Info */}
+                  <div style={{ padding: '8px 10px' }}>
+                    {isRenaming ? (
+                      <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
+                    ) : (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{file.name}</span>
+                    )}
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginTop: 2 }}>{fmtBytes(file.file_size)} · {fmtRel(file.created_at)}</span>
+                  </div>
+                  <button
+                    className="card-menu-btn"
+                    style={{ position: 'absolute', top: 8, right: 8 }}
+                    onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFile(file, r.left, r.bottom + 4) }}
+                  >
+                    <DotsThree size={15} weight="bold" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── List View ────────────────────────────────────────────────────────────────
+function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {} }) {
+  const isActive = sortBy === col
+  return (
+    <th
+      onClick={() => { if (isActive) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(col); setSortDir('asc') } }}
+      style={{ ...style, cursor: 'pointer', padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none', whiteSpace: 'nowrap' }}
+    >
+      {label} {isActive ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+    </th>
+  )
+}
+
+function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, setSortBy, setSortDir, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, allFolders }) {
+
+  const thStyle = { padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none' }
+  const tdStyle = { padding: '0 10px', fontSize: 13, color: 'rgba(255,255,255,0.65)', verticalAlign: 'middle' }
+
+  function mimeLabel(mime, name) {
+    if (!mime && !name) return '—'
+    const ext = (name?.split('.').pop() || '').toUpperCase()
+    if (mime?.startsWith('video/')) return ext ? `${ext} Video` : 'Video'
+    if (mime?.startsWith('image/')) return ext ? `${ext} Image` : 'Image'
+    if (mime?.startsWith('audio/')) return ext ? `${ext} Audio` : 'Audio'
+    if (mime === 'application/pdf') return 'PDF'
+    return ext ? `${ext} File` : 'File'
+  }
+
+  function locationPath(folderId) {
+    if (!folderId) return 'My Drive'
+    const path = []
+    let cur = folderId
+    const map = Object.fromEntries((allFolders || []).map(f => [f.id, f]))
+    let i = 0
+    while (cur && map[cur] && i++ < 10) { path.unshift(map[cur].name); cur = map[cur].parent_id }
+    return 'My Drive' + (path.length ? ' / ' + path.join(' / ') : '')
+  }
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr>
+          <th style={{ ...thStyle, width: 40, paddingLeft: 8 }} />
+          <SortTh col="name"  label="Name"     sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ minWidth: 200 }} />
+          <th style={thStyle}>Type</th>
+          <SortTh col="size"  label="Size"     sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ width: 100 }} />
+          <SortTh col="date"  label="Modified" sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ width: 140 }} />
+          {(currentView === 'recent') && <th style={{ ...thStyle, width: 160 }}>Location</th>}
+          <th style={{ ...thStyle, width: 44 }} />
+        </tr>
+      </thead>
+      <tbody>
+        {showNewFolderIn === (currentFolderId || null) && (
+          <NewFolderInput inputRef={newFolderInputRef} value={newFolderName} onChange={onNewFolderChange} onSave={v => onNewFolderCreate(v, currentFolderId)} onCancel={onNewFolderCancel} isCard={false} />
+        )}
+        {folders.map(folder => {
+          const selKey = `folder-${folder.id}`
+          const isSel = selected.has(selKey)
+          const isRenaming = renamingId === folder.id && renamingType === 'folder'
+          return (
+            <tr
+              key={folder.id}
+              className={`drive-list-row ${isSel ? 'selected' : ''}`}
+              style={{ height: 44 }}
+              onClick={e => { if (e.detail === 2) onFolderOpen(folder); else onToggleSelect(selKey) }}
+              onContextMenu={e => { e.preventDefault(); onCtxFolder(folder, e.clientX, e.clientY) }}
+            >
+              <td style={{ ...tdStyle, paddingLeft: 8, width: 40 }}>
+                <div
+                  style={{ width: 18, height: 18, borderRadius: 3, border: `1.5px solid ${isSel ? '#7c3aed' : 'rgba(255,255,255,0.25)'}`, background: isSel ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  onClick={e => { e.stopPropagation(); onToggleSelect(selKey) }}
+                >
+                  {isSel && <Check size={10} color="#fff" weight="bold" />}
+                </div>
+              </td>
+              <td style={{ ...tdStyle, fontWeight: 600, color: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <FolderSimple size={20} weight="duotone" color="#fbbf24" style={{ flexShrink: 0 }} />
+                  {isRenaming ? <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} /> : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>}
+                </div>
+              </td>
+              <td style={tdStyle}>Folder</td>
+              <td style={tdStyle}>—</td>
+              <td style={tdStyle}>{fmtRel(folder.created_at)}</td>
+              {currentView === 'recent' && <td style={tdStyle}>—</td>}
+              <td style={{ ...tdStyle, textAlign: 'right' }}>
+                <button className="card-menu-btn" onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFolder(folder, r.left, r.bottom + 4) }}><DotsThree size={15} weight="bold" /></button>
+              </td>
+            </tr>
+          )
+        })}
+        {files.map(file => {
+          const selKey = `file-${file.id}`
+          const isSel = selected.has(selKey)
+          const isRenaming = renamingId === file.id && renamingType === 'file'
+          return (
+            <tr
+              key={file.id}
+              className={`drive-list-row ${isSel ? 'selected' : ''}`}
+              style={{ height: 44 }}
+              onClick={e => { if (e.detail === 2) { e.preventDefault(); onPreview(file) } else onToggleSelect(selKey) }}
+              onContextMenu={e => { e.preventDefault(); onCtxFile(file, e.clientX, e.clientY) }}
+            >
+              <td style={{ ...tdStyle, paddingLeft: 8, width: 40 }}>
+                <div
+                  style={{ width: 18, height: 18, borderRadius: 3, border: `1.5px solid ${isSel ? '#7c3aed' : 'rgba(255,255,255,0.25)'}`, background: isSel ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  onClick={e => { e.stopPropagation(); onToggleSelect(selKey) }}
+                >
+                  {isSel && <Check size={10} color="#fff" weight="bold" />}
+                </div>
+              </td>
+              <td style={{ ...tdStyle, fontWeight: 600, color: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  {file.thumbnailUrl
+                    ? <img src={file.thumbnailUrl} alt="" style={{ width: 26, height: 26, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} loading="lazy" />
+                    : <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={26} />}
+                  {isRenaming ? <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} /> : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</span>}
+                </div>
+              </td>
+              <td style={{ ...tdStyle, fontSize: 12 }}>{mimeLabel(file.mime_type, file.name)}</td>
+              <td style={{ ...tdStyle, fontSize: 12 }}>{fmtBytes(file.file_size)}</td>
+              <td style={{ ...tdStyle, fontSize: 12 }}>{fmtDate(file.updated_at || file.created_at)}</td>
+              {currentView === 'recent' && (
+                <td style={{ ...tdStyle, fontSize: 11, color: 'rgba(255,255,255,0.4)' }} title={locationPath(file.folder_id)}>
+                  <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{locationPath(file.folder_id)}</span>
+                </td>
+              )}
+              <td style={{ ...tdStyle, textAlign: 'right' }}>
+                <button className="card-menu-btn" onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFile(file, r.left, r.bottom + 4) }}><DotsThree size={15} weight="bold" /></button>
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }

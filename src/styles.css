@@ -5151,3 +5151,128 @@ body { overflow-x: hidden; }
   .comment-action { padding: 6px 8px; min-height: 32px; }
   .version-item[style*="pointer"] { padding: 14px 12px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Drive Page — new redesign styles
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Skeleton shimmer animation */
+@keyframes driveSkeleton {
+  0%   { background-position: -400px 0 }
+  100% { background-position: 400px 0 }
+}
+.drive-skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 800px 100%;
+  animation: driveSkeleton 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* Sidebar nav items */
+.drive-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+.drive-nav-item:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.9); }
+.drive-nav-item.active { background: rgba(124,58,237,0.18); color: #fff; font-weight: 600; }
+.drive-nav-item.active svg { color: #a78bfa; }
+
+/* Sidebar dots button — hidden until hover */
+.sidebar-dots-btn { opacity: 0; transition: opacity 0.12s; }
+.drive-nav-item:hover .sidebar-dots-btn,
+[class*="FolderTreeItem"]:hover .sidebar-dots-btn { opacity: 1; }
+
+/* Folder card (grid) */
+.drive-folder-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  min-height: 52px;
+  overflow: hidden;
+}
+.drive-folder-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+.drive-folder-card.selected { background: rgba(124,58,237,0.12); border-color: rgba(124,58,237,0.4); }
+.drive-folder-card .card-menu-btn { opacity: 0; }
+.drive-folder-card:hover .card-menu-btn { opacity: 1; }
+
+/* File card (grid) */
+.drive-file-card {
+  position: relative;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.drive-file-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); transform: translateY(-1px); }
+.drive-file-card.selected { background: rgba(124,58,237,0.12); border-color: rgba(124,58,237,0.4); }
+.drive-file-card .card-menu-btn { opacity: 0; }
+.drive-file-card:hover .card-menu-btn { opacity: 1; }
+
+/* Hover overlay (checkbox reveal) on file card */
+.drive-card-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.35);
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 8px;
+}
+.drive-file-card:hover .drive-card-overlay,
+.drive-file-card.selected .drive-card-overlay { opacity: 1; }
+
+/* List view rows */
+.drive-list-row {
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.drive-list-row:hover { background: rgba(255,255,255,0.04); }
+.drive-list-row.selected { background: rgba(124,58,237,0.1); }
+.drive-list-row .card-menu-btn { opacity: 0; }
+.drive-list-row:hover .card-menu-btn { opacity: 1; }
+
+/* card-menu-btn override for drive (already exists but missing drive rules) */
+.drive-folder-card .card-menu-btn,
+.drive-file-card .card-menu-btn,
+.drive-list-row .card-menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255,255,255,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
+}
+.drive-folder-card .card-menu-btn:hover,
+.drive-file-card .card-menu-btn:hover,
+.drive-list-row .card-menu-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .drive-folder-card { padding: 9px 10px; }
+  .drive-file-card .drive-card-overlay { opacity: 1; }
+}

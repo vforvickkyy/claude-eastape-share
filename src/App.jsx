@@ -4,6 +4,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { PlanProvider } from "./context/PlanContext";
 import { ProjectProvider } from "./context/ProjectContext";
 import { UploadProvider } from "./context/UploadContext";
+import { ToastProvider } from "./components/ui/Toast";
 import UploadProgressPanel from "./components/drive/UploadProgressPanel";
 import LoginPage           from "./LoginPage.jsx";
 import SignupPage          from "./SignupPage.jsx";
@@ -12,8 +13,6 @@ import PrivacyPolicyPage   from "./PrivacyPolicyPage.jsx";
 import TermsPage           from "./TermsPage.jsx";
 import DashboardPage       from "./DashboardPage.jsx";
 import DrivePage           from "./DrivePage.jsx";
-import RecentPage          from "./RecentPage.jsx";
-import TrashPage           from "./TrashPage.jsx";
 import ProfilePage         from "./ProfilePage.jsx";
 import PricingPage         from "./PricingPage.jsx";
 import MediaSharePage      from "./MediaSharePage.jsx";
@@ -67,6 +66,7 @@ export default function App() {
       <AuthProvider>
       <PlanProvider>
       <UploadProvider>
+        <ToastProvider>
         <UploadProgressPanel />
         <Routes>
           {/* ── Root = Master Dashboard ── */}
@@ -132,8 +132,8 @@ export default function App() {
           {/* ── Static / misc ── */}
           <Route path="/privacy"                  element={<PrivacyPolicyPage />} />
           <Route path="/terms"                    element={<TermsPage />} />
-          <Route path="/recent"                   element={<ProtectedRoute><RecentPage /></ProtectedRoute>} />
-          <Route path="/trash"                    element={<ProtectedRoute><TrashPage /></ProtectedRoute>} />
+          <Route path="/recent"                   element={<Navigate to="/drive?view=recent" replace />} />
+          <Route path="/trash"                    element={<Navigate to="/drive?view=trash" replace />} />
           <Route path="/profile"                  element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/pricing"                  element={<PricingPage />} />
           <Route path="/plans"                    element={<ProtectedRoute><PricingPage inDashboard /></ProtectedRoute>} />
@@ -150,6 +150,7 @@ export default function App() {
             }
           />
         </Routes>
+        </ToastProvider>
       </UploadProvider>
       </PlanProvider>
       </AuthProvider>
