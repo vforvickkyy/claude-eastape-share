@@ -5276,3 +5276,14 @@ body { overflow-x: hidden; }
   .drive-folder-card { padding: 9px 10px; }
   .drive-file-card .drive-card-overlay { opacity: 1; }
 }
+
+/* Drag-over folder highlight */
+.drive-folder-card.drag-over {
+  border-color: rgba(124,58,237,0.7) !important;
+  background: rgba(124,58,237,0.2) !important;
+  box-shadow: 0 0 0 2px rgba(124,58,237,0.3);
+}
+.drive-list-row.drag-over {
+  background: rgba(124,58,237,0.15) !important;
+  outline: 1px solid rgba(124,58,237,0.5);
+}

@@ -13,7 +13,7 @@ import {
   MagnifyingGlass, Plus, UploadSimple, FolderSimplePlus, DotsThree,
   DownloadSimple, PencilSimple, Trash, ArrowClockwise, ArrowSquareOut,
   Check, X, CloudArrowUp, Clock, Funnel, Link, SortAscending,
-  Warning, ArrowLeft,
+  Warning, ShareNetwork, CopySimple,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import { useUpload } from './context/UploadContext'
@@ -21,6 +21,7 @@ import DashboardLayout from './DashboardLayout'
 import ContextMenu from './components/drive/ContextMenu'
 import FilePreview from './components/drive/FilePreview'
 import MoveFolderModal from './components/drive/MoveFolderModal'
+import ShareModal from './components/drive/ShareModal'
 import FileTypeIcon, { getFileCategory } from './components/drive/FileTypeIcon'
 import DuplicateModal from './components/drive/DuplicateModal'
 import { driveFilesApi, driveFoldersApi, shareLinksApi } from './lib/api'
@@ -231,6 +232,13 @@ export default function DrivePage() {
 
   // ── Move modal ───────────────────────────────────────────────────────────────
   const [moveItems, setMoveItems] = useState(null) // items to move
+
+  // ── Share modal ──────────────────────────────────────────────────────────────
+  const [shareTarget, setShareTarget] = useState(null) // { id, name, type: 'file'|'folder' }
+
+  // ── Drag-to-move ─────────────────────────────────────────────────────────────
+  const [draggingItem, setDraggingItem]   = useState(null) // { id, type, name }
+  const [dragOverFolder, setDragOverFolder] = useState(null) // folder id being dragged over
 
   // ── Sidebar expanded folders ─────────────────────────────────────────────────
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
@@ -446,7 +454,7 @@ export default function DrivePage() {
       action: { label: 'Undo', onClick: () => restoreFile(file) },
     })
     try {
-      await driveFilesApi.update(file.id, { is_trashed: true })
+      await driveFilesApi.trashFile(file.id)
     } catch {
       setFiles(fs => [file, ...fs])
     }
@@ -526,10 +534,9 @@ export default function DrivePage() {
     try {
       const promises = [
         ...fileItems.map(i => driveFilesApi.move(i.id, targetFolderId)),
-        ...folderItems.map(i => driveFoldersApi.update(i.id, { parent_id: targetFolderId || null })),
+        ...folderItems.map(i => driveFilesApi.moveFolder(i.id, targetFolderId)),
       ]
       await Promise.all(promises)
-      // Remove from current view
       setFiles(fs => fs.filter(f => !fileItems.map(i => i.id).includes(f.id)))
       setFolders(fs => fs.filter(f => !folderItems.map(i => i.id).includes(f.id)))
       setSelected(new Set())
@@ -541,15 +548,88 @@ export default function DrivePage() {
     }
   }
 
+  // ── Drag-to-move ─────────────────────────────────────────────────────────────
+  async function handleDragDrop(draggedId, draggedType, targetFolderId) {
+    if (!draggedId || draggedId === targetFolderId) return
+    try {
+      if (draggedType === 'folder') {
+        await driveFilesApi.moveFolder(draggedId, targetFolderId)
+        setFolders(fs => fs.filter(f => f.id !== draggedId))
+      } else {
+        await driveFilesApi.move(draggedId, targetFolderId)
+        setFiles(fs => fs.filter(f => f.id !== draggedId))
+      }
+      const destName = targetFolderId ? (allFolders.find(f => f.id === targetFolderId)?.name || 'folder') : 'My Drive'
+      showToast(`Moved to "${destName}"`, 'success')
+      loadFolderTree()
+    } catch (err) {
+      showToast(err.message || 'Move failed', 'error')
+    }
+    setDraggingItem(null)
+    setDragOverFolder(null)
+  }
+
+  // ── Folder upload with structure ──────────────────────────────────────────────
+  async function handleFolderUpload(fileList) {
+    const files = Array.from(fileList)
+    if (!files.length) return
+    const rootName = files[0].webkitRelativePath.split('/')[0]
+    showToast(`Creating folder structure for "${rootName}"…`, 'info')
+    try {
+      const folderMap = new Map()
+      // Create root folder
+      const rootRes = await driveFilesApi.createFolder(rootName, currentFolderId)
+      folderMap.set(rootName, rootRes.folder.id)
+      // Create intermediate folders
+      for (const file of files) {
+        const parts = file.webkitRelativePath.split('/')
+        for (let i = 1; i < parts.length - 1; i++) {
+          const pathKey = parts.slice(0, i + 1).join('/')
+          if (!folderMap.has(pathKey)) {
+            const parentPath = parts.slice(0, i).join('/')
+            const parentId = folderMap.get(parentPath) || rootRes.folder.id
+            const res = await driveFilesApi.createFolder(parts[i], parentId)
+            folderMap.set(pathKey, res.folder.id)
+          }
+        }
+      }
+      // Upload files to correct folders
+      const filesToUpload = files.map(file => {
+        const parts = file.webkitRelativePath.split('/')
+        const folderPath = parts.slice(0, -1).join('/')
+        const targetFolderId = folderMap.get(folderPath) || rootRes.folder.id
+        return { file, folderId: targetFolderId }
+      })
+      // Use UploadContext to upload each file
+      for (const { file, folderId } of filesToUpload) {
+        addFiles([file], folderId, [], () => {})
+      }
+      loadFolderTree()
+      showToast(`Uploading "${rootName}" folder (${files.length} files)`, 'success')
+    } catch (err) {
+      showToast(err.message || 'Folder upload failed', 'error')
+    }
+  }
+
   // ── Copy share link ──────────────────────────────────────────────────────────
   async function copyLink(file) {
     try {
-      const data = await shareLinksApi.createForDriveFile(file.id, { allow_download: true, file_name: file.name })
+      const data = await shareLinksApi.getOrCreateForDriveFile(file.id, { file_name: file.name })
       const url = `${window.location.origin}/share/${data.link.token}`
       await navigator.clipboard.writeText(url)
       showToast('Link copied to clipboard', 'success')
     } catch {
       showToast('Failed to copy link', 'error')
+    }
+  }
+  async function copyFolderLink(folder) {
+    try {
+      const data = await shareLinksApi.getOrCreateForDriveFolder(folder.id, { file_name: folder.name })
+      const url = `${window.location.origin}/share/${data.link.token}`
+      await navigator.clipboard.writeText(url)
+      showToast('Folder link copied to clipboard', 'success')
+    } catch {
+      showToast('Failed to copy folder link', 'error')
     }
   }
 
@@ -615,24 +695,47 @@ export default function DrivePage() {
     ]
     return [
       { icon: <ArrowSquareOut size={14} />, label: 'Preview',    hint: 'Space',  onClick: () => { setCtxMenu(null); const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) } },
-      { icon: <DownloadSimple size={14} />, label: 'Download',   hint: '',       onClick: () => { setCtxMenu(null); downloadFile(file) } },
+      { icon: <DownloadSimple size={14} />, label: 'Download',   onClick: () => { setCtxMenu(null); downloadFile(file) } },
       { divider: true },
-      { icon: <PencilSimple size={14} />,  label: 'Rename',      hint: 'F2',     onClick: () => { setCtxMenu(null); startRename(file, 'file') } },
-      { icon: <FolderSimple size={14} />,  label: 'Move to',                     onClick: () => { setCtxMenu(null); setMoveItems([{ ...file, type: 'file' }]) } },
+      { icon: <PencilSimple size={14} />,  label: 'Rename',      hint: 'F2',  onClick: () => { setCtxMenu(null); startRename(file, 'file') } },
+      { icon: <FolderSimple size={14} />,  label: 'Move to',                  onClick: () => { setCtxMenu(null); setMoveItems([{ ...file, type: 'file' }]) } },
       { divider: true },
-      { icon: <Link size={14} />,          label: 'Copy link',                   onClick: () => { setCtxMenu(null); copyLink(file) } },
+      { icon: <ShareNetwork size={14} />,  label: 'Share file',              onClick: () => { setCtxMenu(null); setShareTarget({ id: file.id, name: file.name, type: 'file' }) } },
+      { icon: <CopySimple size={14} />,    label: 'Copy link',               onClick: () => { setCtxMenu(null); copyLink(file) } },
       { divider: true },
       { icon: <Trash size={14} />,         label: 'Move to Trash', hint: 'Del', danger: true, onClick: () => { setCtxMenu(null); trashFile(file) } },
     ]
   }
   function folderCtxItems(folder) {
     return [
-      { icon: <PencilSimple size={14} />,    label: 'Rename',          hint: 'F2',  onClick: () => { setCtxMenu(null); startRename(folder, 'folder') } },
-      { icon: <FolderSimple size={14} />,    label: 'Move to',                      onClick: () => { setCtxMenu(null); setMoveItems([{ ...folder, type: 'folder' }]) } },
-      { icon: <FolderSimplePlus size={14} />, label: 'New subfolder',               onClick: () => { setCtxMenu(null); setShowNewFolderIn(folder.id) } },
+      { icon: <PencilSimple size={14} />,     label: 'Rename',         hint: 'F2', onClick: () => { setCtxMenu(null); startRename(folder, 'folder') } },
+      { icon: <FolderSimple size={14} />,     label: 'Move to',                    onClick: () => { setCtxMenu(null); setMoveItems([{ ...folder, type: 'folder' }]) } },
+      { icon: <FolderSimplePlus size={14} />, label: 'New subfolder',              onClick: () => { setCtxMenu(null); setShowNewFolderIn(folder.id) } },
       { divider: true },
-      { icon: <Trash size={14} />,           label: 'Move to Trash', danger: true,  onClick: () => { setCtxMenu(null); trashFolder(folder) } },
+      { icon: <ShareNetwork size={14} />,     label: 'Share folder',               onClick: () => { setCtxMenu(null); setShareTarget({ id: folder.id, name: folder.name, type: 'folder' }) } },
+      { icon: <CopySimple size={14} />,       label: 'Copy folder link',           onClick: () => { setCtxMenu(null); copyFolderLink(folder) } },
+      { divider: true },
+      { icon: <Trash size={14} />,            label: 'Move to Trash', danger: true, onClick: () => { setCtxMenu(null); trashFolder(folder) } },
     ]
+  }
+  // Area context menu (right-click on empty drive space)
+  function areaCtxItems() {
+    const items = []
+    if (currentView === 'myDrive') {
+      items.push(
+        { icon: <FolderSimplePlus size={14} />, label: 'New Folder',    onClick: () => { setCtxMenu(null); setShowNewFolderIn(currentFolderId) } },
+        { icon: <UploadSimple size={14} />,     label: 'Upload Files',  onClick: () => { setCtxMenu(null); fileInputRef.current?.click() } },
+        { icon: <FolderSimple size={14} />,     label: 'Upload Folder', onClick: () => { setCtxMenu(null); folderInputRef.current?.click() } },
+      )
+      if (currentFolderId) {
+        items.push(
+          { divider: true },
+          { icon: <ShareNetwork size={14} />, label: 'Share this folder', onClick: () => { setCtxMenu(null); const f = allFolders.find(x => x.id === currentFolderId); if (f) setShareTarget({ id: f.id, name: f.name, type: 'folder' }) } },
+          { icon: <CopySimple size={14} />,   label: 'Copy folder link',  onClick: () => { setCtxMenu(null); const f = allFolders.find(x => x.id === currentFolderId); if (f) copyFolderLink(f) } },
+        )
+      }
+    }
+    return items
   }
 
   // ── Computed sort label ───────────────────────────────────────────────────────
@@ -729,17 +832,6 @@ export default function DrivePage() {
             </div>
           </nav>
 
-          {/* Upload button */}
-          <div style={{ padding: '12px 14px' }}>
-            <button
-              style={{ width: '100%', height: 36, borderRadius: 8, background: 'transparent', border: '1px solid rgba(124,58,237,0.4)', color: '#a78bfa', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
-              onClick={() => fileInputRef.current?.click()}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <UploadSimple size={15} /> Upload Files
-            </button>
-          </div>
         </aside>
 
         {/* ══════════ MAIN CONTENT ══════════ */}
@@ -911,6 +1003,26 @@ export default function DrivePage() {
           <div
             style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 80px' }}
             onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()) }}
+            onContextMenu={e => {
+              // Only show area menu if right-click is on the container itself or grid/table containers
+              const tag = e.target.tagName
+              const cls = e.target.className || ''
+              const isContainer = e.target === e.currentTarget
+                || (typeof cls === 'string' && (cls.includes('drive-area') || cls.includes('drive-grid') || cls.includes('drive-list')))
+                || tag === 'TABLE' || tag === 'TBODY' || tag === 'THEAD'
+              if (isContainer) {
+                e.preventDefault()
+                const items = areaCtxItems()
+                if (items.length) setCtxMenu({ x: e.clientX, y: e.clientY, item: null, itemType: 'area' })
+              }
+            }}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault()
+              const id   = e.dataTransfer.getData('draggedId')
+              const type = e.dataTransfer.getData('draggedType')
+              if (id && currentView === 'myDrive') handleDragDrop(id, type, currentFolderId)
+            }}
           >
             {isLoading ? (
               viewMode === 'grid' ? <SkeletonGrid /> : <SkeletonList />
@@ -938,6 +1050,14 @@ export default function DrivePage() {
                 onCtxFolder={(folder, x, y) => setCtxMenu({ x, y, item: folder, itemType: 'folder' })}
                 onPreview={(file) => { const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) }}
                 currentView={currentView}
+                draggingItem={draggingItem} dragOverFolder={dragOverFolder}
+                onDragStart={(e, id, type, name) => { e.dataTransfer.setData('draggedId', id); e.dataTransfer.setData('draggedType', type); setDraggingItem({ id, type, name }) }}
+                onDragEnd={() => { setDraggingItem(null); setDragOverFolder(null) }}
+                onDrop={(e, folderId, mode) => {
+                  if (mode === 'hover') { setDragOverFolder(folderId); return }
+                  const id = e.dataTransfer.getData('draggedId'); const type = e.dataTransfer.getData('draggedType')
+                  if (id) handleDragDrop(id, type, folderId)
+                }}
               />
             ) : (
               <ListView
@@ -956,6 +1076,14 @@ export default function DrivePage() {
                 onPreview={(file) => { const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) }}
                 currentView={currentView}
                 allFolders={allFolders}
+                draggingItem={draggingItem} dragOverFolder={dragOverFolder}
+                onDragStart={(e, id, type, name) => { e.dataTransfer.setData('draggedId', id); e.dataTransfer.setData('draggedType', type); setDraggingItem({ id, type, name }) }}
+                onDragEnd={() => { setDraggingItem(null); setDragOverFolder(null) }}
+                onDrop={(e, folderId, mode) => {
+                  if (mode === 'hover') { setDragOverFolder(folderId); return }
+                  const id = e.dataTransfer.getData('draggedId'); const type = e.dataTransfer.getData('draggedType')
+                  if (id) handleDragDrop(id, type, folderId)
+                }}
               />
             )}
           </div>
@@ -1000,7 +1128,11 @@ export default function DrivePage() {
         <ContextMenu
           x={ctxMenu.x} y={ctxMenu.y}
           onClose={() => setCtxMenu(null)}
-          items={ctxMenu.itemType === 'file' ? fileCtxItems(ctxMenu.item) : folderCtxItems(ctxMenu.item)}
+          items={
+            ctxMenu.itemType === 'file'   ? fileCtxItems(ctxMenu.item)
+            : ctxMenu.itemType === 'folder' ? folderCtxItems(ctxMenu.item)
+            : areaCtxItems()
+          }
         />
       )}
 
@@ -1029,9 +1161,17 @@ export default function DrivePage() {
         <DuplicateModal />
       )}
 
+      {/* ── Share modal ── */}
+      {shareTarget && (
+        <ShareModal
+          item={shareTarget}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
+
       {/* Hidden inputs */}
       <input ref={fileInputRef} type="file" multiple hidden onChange={e => { startUpload(e.target.files); e.target.value = '' }} />
-      <input ref={folderInputRef} type="file" multiple hidden webkitdirectory="" onChange={e => { startUpload(e.target.files); e.target.value = '' }} />
+      <input ref={folderInputRef} type="file" multiple hidden webkitdirectory="" onChange={e => { handleFolderUpload(e.target.files); e.target.value = '' }} />
     </DashboardLayout>
   )
 }
@@ -1184,18 +1324,18 @@ function FileThumbnail({ file, size = 140 }) {
 }
 
 // ── Grid View ────────────────────────────────────────────────────────────────
-function GridView({ files, folders, selected, onToggleSelect, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView }) {
+function GridView({ files, folders, selected, onToggleSelect, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
 
   function handleFileCtx(e, file) { e.preventDefault(); e.stopPropagation(); onCtxFile(file, e.clientX, e.clientY) }
   function handleFolderCtx(e, folder) { e.preventDefault(); e.stopPropagation(); onCtxFolder(folder, e.clientX, e.clientY) }
 
   return (
-    <div>
+    <div className="drive-area">
       {/* Folders */}
       {(folders.length > 0 || showNewFolderIn === (currentFolderId || null)) && (
         <div style={{ marginBottom: 16 }}>
           <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Folders</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+          <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
             {showNewFolderIn === (currentFolderId || null) && (
               <NewFolderInput inputRef={newFolderInputRef} value={newFolderName} onChange={onNewFolderChange} onSave={v => onNewFolderCreate(v, currentFolderId)} onCancel={onNewFolderCancel} isCard />
             )}
@@ -1203,15 +1343,23 @@ function GridView({ files, folders, selected, onToggleSelect, renamingId, renami
               const selKey = `folder-${folder.id}`
               const isSel = selected.has(selKey)
               const isRenaming = renamingId === folder.id && renamingType === 'folder'
+              const isDragOver = dragOverFolder === folder.id
               return (
                 <div
                   key={folder.id}
-                  className={`drive-folder-card ${isSel ? 'selected' : ''}`}
+                  className={`drive-folder-card ${isSel ? 'selected' : ''} ${isDragOver ? 'drag-over' : ''}`}
+                  style={{ opacity: draggingItem?.id === folder.id ? 0.45 : 1 }}
+                  draggable={currentView === 'myDrive'}
+                  onDragStart={e => { e.stopPropagation(); onDragStart(e, folder.id, 'folder', folder.name) }}
+                  onDragEnd={onDragEnd}
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingItem?.id !== folder.id) onDrop(null, folder.id, 'hover') }}
+                  onDragLeave={e => { e.stopPropagation(); onDrop(null, null, 'hover') }}
+                  onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop(e, folder.id) }}
                   onClick={e => { if (e.detail === 2) onFolderOpen(folder); else onToggleSelect(selKey) }}
                   onContextMenu={e => handleFolderCtx(e, folder)}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-                    <FolderSimple size={26} weight="duotone" color="#fbbf24" style={{ flexShrink: 0 }} />
+                    <FolderSimple size={26} weight="duotone" color={isDragOver ? '#a78bfa' : '#fbbf24'} style={{ flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {isRenaming ? (
                         <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
@@ -1238,7 +1386,7 @@ function GridView({ files, folders, selected, onToggleSelect, renamingId, renami
       {files.length > 0 && (
         <div>
           {folders.length > 0 && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Files</p>}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+          <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
             {files.map(file => {
               const selKey = `file-${file.id}`
               const isSel = selected.has(selKey)
@@ -1247,6 +1395,10 @@ function GridView({ files, folders, selected, onToggleSelect, renamingId, renami
                 <div
                   key={file.id}
                   className={`drive-file-card ${isSel ? 'selected' : ''}`}
+                  style={{ opacity: draggingItem?.id === file.id ? 0.45 : 1 }}
+                  draggable={currentView === 'myDrive'}
+                  onDragStart={e => { e.stopPropagation(); onDragStart(e, file.id, 'file', file.name) }}
+                  onDragEnd={onDragEnd}
                   onClick={e => { if (e.detail === 2) { e.preventDefault(); onPreview(file) } else onToggleSelect(selKey) }}
                   onContextMenu={e => handleFileCtx(e, file)}
                 >
@@ -1302,7 +1454,7 @@ function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {}
   )
 }
 
-function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, setSortBy, setSortDir, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, allFolders }) {
+function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, setSortBy, setSortDir, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, allFolders, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
 
   const thStyle = { padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none' }
   const tdStyle = { padding: '0 10px', fontSize: 13, color: 'rgba(255,255,255,0.65)', verticalAlign: 'middle' }
@@ -1348,11 +1500,18 @@ function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, s
           const selKey = `folder-${folder.id}`
           const isSel = selected.has(selKey)
           const isRenaming = renamingId === folder.id && renamingType === 'folder'
+          const isDragOver = dragOverFolder === folder.id
           return (
             <tr
               key={folder.id}
-              className={`drive-list-row ${isSel ? 'selected' : ''}`}
-              style={{ height: 44 }}
+              className={`drive-list-row ${isSel ? 'selected' : ''} ${isDragOver ? 'drag-over' : ''}`}
+              style={{ height: 44, opacity: draggingItem?.id === folder.id ? 0.45 : 1 }}
+              draggable={currentView === 'myDrive'}
+              onDragStart={e => { e.stopPropagation(); onDragStart(e, folder.id, 'folder', folder.name) }}
+              onDragEnd={onDragEnd}
+              onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingItem?.id !== folder.id) onDrop(null, folder.id, 'hover') }}
+              onDragLeave={e => { e.stopPropagation(); onDrop(null, null, 'hover') }}
+              onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop(e, folder.id) }}
               onClick={e => { if (e.detail === 2) onFolderOpen(folder); else onToggleSelect(selKey) }}
               onContextMenu={e => { e.preventDefault(); onCtxFolder(folder, e.clientX, e.clientY) }}
             >
@@ -1388,7 +1547,10 @@ function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, s
             <tr
               key={file.id}
               className={`drive-list-row ${isSel ? 'selected' : ''}`}
-              style={{ height: 44 }}
+              style={{ height: 44, opacity: draggingItem?.id === file.id ? 0.45 : 1 }}
+              draggable={currentView === 'myDrive'}
+              onDragStart={e => { e.stopPropagation(); onDragStart(e, file.id, 'file', file.name) }}
+              onDragEnd={onDragEnd}
               onClick={e => { if (e.detail === 2) { e.preventDefault(); onPreview(file) } else onToggleSelect(selKey) }}
               onContextMenu={e => { e.preventDefault(); onCtxFile(file, e.clientX, e.clientY) }}
             >

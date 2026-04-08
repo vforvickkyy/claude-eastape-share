@@ -233,21 +233,27 @@ export const driveFilesApi = {
   presign:        (body)        => post(`${BASE}/presign`, { ...body, upload_type: 'drive' }, true),
   getDownloadUrl: (id)          => get(`${BASE}/download`, { drive_id: id }, true),
   getStorage:     ()            => get(`${BASE}/drive-files`, { resource: 'storage' }, true),
-  // New actions (PATCH-based mutations)
-  rename:          (id, name)      => patch(`${BASE}/drive-files`, {}, { action: 'rename', id, name }, true),
-  renameFolder:    (id, name)      => patch(`${BASE}/drive-files`, {}, { action: 'rename_folder', id, name }, true),
-  move:            (id, folderId)  => patch(`${BASE}/drive-files`, {}, { action: 'move', id, folder_id: folderId || null }, true),
-  moveMultiple:    (ids, folderId) => patch(`${BASE}/drive-files`, {}, { action: 'move_multiple', ids, folder_id: folderId || null }, true),
-  restore:         (id)            => patch(`${BASE}/drive-files`, {}, { action: 'restore', id }, true),
-  permanentDelete: (id)            => patch(`${BASE}/drive-files`, {}, { action: 'permanent_delete', id }, true),
-  emptyTrash:      ()              => patch(`${BASE}/drive-files`, {}, { action: 'empty_trash' }, true),
-  trashFolder:     (id)            => patch(`${BASE}/drive-files`, {}, { action: 'trash_folder', id }, true),
-  createFolder:    (name, parentId)=> patch(`${BASE}/drive-files`, {}, { action: 'create_folder', name, parent_id: parentId || null }, true),
-  getFolderTree:   ()              => get(`${BASE}/drive-files`, { action: 'folder_tree' }, true),
-  getRecent:       (limit = 20)    => get(`${BASE}/drive-files`, { action: 'recent', limit }, true),
-  getTrash:        ()              => get(`${BASE}/drive-files`, { action: 'trash' }, true),
-  getStorageUsage: ()              => get(`${BASE}/drive-files`, { action: 'storage_usage' }, true),
-  search:          (query)         => get(`${BASE}/drive-files`, { action: 'search', query }, true),
+  // View/thumbnail URLs
+  getViewUrl:      (fileId)     => get(`${BASE}/drive-files`, { action: 'view', file_id: fileId }, true),
+  getThumbnailUrl: (fileId)     => get(`${BASE}/drive-files`, { action: 'thumbnail', file_id: fileId }, true),
+  // PATCH-based mutations
+  rename:          (id, name)       => patch(`${BASE}/drive-files`, {}, { action: 'rename', id, name }, true),
+  renameFolder:    (id, name)       => patch(`${BASE}/drive-files`, {}, { action: 'rename_folder', id, name }, true),
+  move:            (id, folderId)   => patch(`${BASE}/drive-files`, {}, { action: 'move', id, folder_id: folderId || null }, true),
+  moveFolder:      (id, parentId)   => patch(`${BASE}/drive-files`, {}, { action: 'move_folder', id, parent_id: parentId || null }, true),
+  moveMultiple:    (ids, folderId)  => patch(`${BASE}/drive-files`, {}, { action: 'move_multiple', ids, folder_id: folderId || null }, true),
+  trashFile:       (id)             => patch(`${BASE}/drive-files`, {}, { action: 'trash', id }, true),
+  trashFolder:     (id)             => patch(`${BASE}/drive-files`, {}, { action: 'trash_folder', id }, true),
+  restore:         (id)             => patch(`${BASE}/drive-files`, {}, { action: 'restore', id }, true),
+  restoreFolder:   (id)             => patch(`${BASE}/drive-files`, {}, { action: 'restore_folder', id }, true),
+  permanentDelete: (id)             => patch(`${BASE}/drive-files`, {}, { action: 'permanent_delete', id }, true),
+  emptyTrash:      ()               => patch(`${BASE}/drive-files`, {}, { action: 'empty_trash' }, true),
+  createFolder:    (name, parentId) => patch(`${BASE}/drive-files`, {}, { action: 'create_folder', name, parent_id: parentId || null }, true),
+  getFolderTree:   ()               => get(`${BASE}/drive-files`, { action: 'folder_tree' }, true),
+  getRecent:       (limit = 20)     => get(`${BASE}/drive-files`, { action: 'recent', limit }, true),
+  getTrash:        ()               => get(`${BASE}/drive-files`, { action: 'trash' }, true),
+  getStorageUsage: ()               => get(`${BASE}/drive-files`, { action: 'storage_usage' }, true),
+  search:          (query)          => get(`${BASE}/drive-files`, { action: 'search', query }, true),
 }
 
 // ── Drive Folders ──────────────────────────────────────────────────
@@ -266,10 +272,20 @@ export const shareLinksApi = {
   delete:  (id)               => del(`${BASE}/share-links`, { id }, true),
   resolve: (token, password)  => get(`${BASE}/share-resolve`, password ? { token, password } : { token }),
   // Drive-specific helpers
-  listForDriveFile:   (driveFileId)   => get(`${BASE}/share-links`, { driveFileId }, true),
-  listForDriveFolder: (driveFolderId) => get(`${BASE}/share-links`, { driveFolderId }, true),
-  createForDriveFile:   (driveFileId,   opts = {}) => post(`${BASE}/share-links`, { drive_file_id:   driveFileId,   ...opts }, true),
-  createForDriveFolder: (driveFolderId, opts = {}) => post(`${BASE}/share-links`, { drive_folder_id: driveFolderId, ...opts }, true),
+  listForDriveFile:     (driveFileId)            => get(`${BASE}/share-links`, { driveFileId }, true),
+  listForDriveFolder:   (driveFolderId)          => get(`${BASE}/share-links`, { driveFolderId }, true),
+  createForDriveFile:   (driveFileId,   opts={}) => post(`${BASE}/share-links`, { drive_file_id:   driveFileId,   allow_download: true, ...opts }, true),
+  createForDriveFolder: (driveFolderId, opts={}) => post(`${BASE}/share-links`, { drive_folder_id: driveFolderId, allow_download: true, ...opts }, true),
+  getOrCreateForDriveFile:   async (fileId,   opts={}) => {
+    const res = await get(`${BASE}/share-links`, { driveFileId: fileId }, true)
+    if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].token}` }
+    return post(`${BASE}/share-links`, { drive_file_id: fileId, allow_download: true, ...opts }, true)
+  },
+  getOrCreateForDriveFolder: async (folderId, opts={}) => {
+    const res = await get(`${BASE}/share-links`, { driveFolderId: folderId }, true)
+    if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].token}` }
+    return post(`${BASE}/share-links`, { drive_folder_id: folderId, allow_download: true, ...opts }, true)
+  },
 }
 
 // ── User ───────────────────────────────────────────────────────────

@@ -88,6 +88,32 @@ Deno.serve(async (req) => {
 
     // ── GET ─────────────────────────────────────────────────────────────────
 
+    // Thumbnail presigned URL
+    if (req.method === 'GET' && action === 'thumbnail') {
+      const fileId = url.searchParams.get('file_id')
+      if (!fileId) return json({ error: 'file_id required' }, 400)
+      const { data: f } = await supabase.from('drive_files').select('wasabi_key, thumbnail_key, mime_type').eq('id', fileId).eq('user_id', user.id).single()
+      if (!f) return json({ error: 'File not found' }, 404)
+      if (!canSign) return json({ error: 'Storage not configured' }, 500)
+      const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
+      if (!thumbKey) return json({ error: 'No thumbnail available' }, 404)
+      const presignUrl = await presignViewUrl(ENDPOINT, BUCKET, thumbKey, ACCESS, SECRET, REGION, 3600).catch(() => null)
+      if (!presignUrl) return json({ error: 'Failed to generate URL' }, 500)
+      return json({ url: presignUrl })
+    }
+
+    // View presigned URL (no download header)
+    if (req.method === 'GET' && action === 'view') {
+      const fileId = url.searchParams.get('file_id')
+      if (!fileId) return json({ error: 'file_id required' }, 400)
+      const { data: f } = await supabase.from('drive_files').select('wasabi_key').eq('id', fileId).eq('user_id', user.id).single()
+      if (!f) return json({ error: 'File not found' }, 404)
+      if (!canSign) return json({ error: 'Storage not configured' }, 500)
+      const presignUrl = await presignViewUrl(ENDPOINT, BUCKET, f.wasabi_key, ACCESS, SECRET, REGION, 14400).catch(() => null)
+      if (!presignUrl) return json({ error: 'Failed to generate URL' }, 500)
+      return json({ url: presignUrl })
+    }
+
     // Storage usage
     if (req.method === 'GET' && (url.searchParams.get('resource') === 'storage' || action === 'storage_usage')) {
       const [driveRes, projFilesRes, projMediaRes, planRes] = await Promise.all([
@@ -239,6 +265,48 @@ Deno.serve(async (req) => {
           .eq('id', id).eq('user_id', user.id).select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ file: data })
+      }
+
+      // Move folder to new parent
+      if (act === 'move_folder') {
+        const { id, parent_id } = body
+        if (!id) return json({ error: 'id required' }, 400)
+        // Prevent moving a folder into itself or a descendant
+        async function isDescendant(checkId: string, ancestorId: string): Promise<boolean> {
+          if (checkId === ancestorId) return true
+          const { data: f } = await supabase.from('drive_folders').select('parent_id').eq('id', checkId).eq('user_id', user.id).single()
+          if (!f?.parent_id) return false
+          return isDescendant(f.parent_id, ancestorId)
+        }
+        if (parent_id && await isDescendant(parent_id, id)) return json({ error: 'Cannot move folder into itself' }, 400)
+        const { data, error } = await supabase.from('drive_folders')
+          .update({ parent_id: parent_id || null, updated_at: new Date().toISOString() })
+          .eq('id', id).eq('user_id', user.id).select().single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ folder: data })
+      }
+
+      // Restore folder from trash (restore folder + all its files)
+      if (act === 'restore_folder') {
+        const { id } = body
+        if (!id) return json({ error: 'id required' }, 400)
+        // Re-create the folder (trash currently deletes it)
+        // For now just restore all files that were in this folder
+        await supabase.from('drive_files')
+          .update({ is_trashed: false, trashed_at: null })
+          .eq('folder_id', id).eq('user_id', user.id)
+        return json({ ok: true })
+      }
+
+      // Trash single file
+      if (act === 'trash') {
+        const { id } = body
+        if (!id) return json({ error: 'id required' }, 400)
+        const { error } = await supabase.from('drive_files')
+          .update({ is_trashed: true, trashed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('id', id).eq('user_id', user.id)
+        if (error) return json({ error: error.message }, 500)
+        return json({ ok: true })
       }
 
       // Move multiple files
