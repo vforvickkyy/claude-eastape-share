@@ -219,7 +219,7 @@ export default function DrivePage() {
   const renameInputRef = useRef(null)
 
   // ── New folder ──────────────────────────────────────────────────────────────
-  const [showNewFolderIn, setShowNewFolderIn] = useState(null) // parent folder id
+  const [showNewFolderIn, setShowNewFolderIn] = useState(undefined) // undefined=hidden, null=root, id=subfolder
   const [newFolderName,   setNewFolderName]   = useState('')
   const newFolderInputRef = useRef(null)
 
@@ -311,7 +311,7 @@ export default function DrivePage() {
   // Focus rename input
   useEffect(() => { if (renamingId && renameInputRef.current) renameInputRef.current.focus() }, [renamingId])
   // Focus new folder input
-  useEffect(() => { if (showNewFolderIn !== null && newFolderInputRef.current) newFolderInputRef.current.focus() }, [showNewFolderIn])
+  useEffect(() => { if (showNewFolderIn !== undefined && newFolderInputRef.current) newFolderInputRef.current.focus() }, [showNewFolderIn])
 
   // Close menus on outside click
   useEffect(() => {
@@ -431,7 +431,7 @@ export default function DrivePage() {
 
   // ── New folder ──────────────────────────────────────────────────────────────
   async function createFolder(name, parentId) {
-    if (!name.trim()) { setShowNewFolderIn(null); return }
+    if (!name.trim()) { setShowNewFolderIn(undefined); return }
     try {
       const d = await driveFilesApi.createFolder(name.trim(), parentId)
       const folder = d.folder
@@ -443,7 +443,7 @@ export default function DrivePage() {
     } catch (err) {
       showToast(err.message || 'Failed to create folder', 'error')
     }
-    setShowNewFolderIn(null); setNewFolderName('')
+    setShowNewFolderIn(undefined); setNewFolderName('')
   }
 
   // ── Trash ────────────────────────────────────────────────────────────────────
@@ -1044,7 +1044,7 @@ export default function DrivePage() {
                 onRenameChange={setRenameVal} onRenameSave={saveRename} onRenameCancel={cancelRename}
                 showNewFolderIn={showNewFolderIn} currentFolderId={currentFolderId}
                 newFolderName={newFolderName} newFolderInputRef={newFolderInputRef}
-                onNewFolderChange={setNewFolderName} onNewFolderCreate={createFolder} onNewFolderCancel={() => { setShowNewFolderIn(null); setNewFolderName('') }}
+                onNewFolderChange={setNewFolderName} onNewFolderCreate={createFolder} onNewFolderCancel={() => { setShowNewFolderIn(undefined); setNewFolderName('') }}
                 onFolderOpen={f => navigate(`/drive/folder/${f.id}`)}
                 onCtxFile={(file, x, y) => setCtxMenu({ x, y, item: file, itemType: 'file' })}
                 onCtxFolder={(folder, x, y) => setCtxMenu({ x, y, item: folder, itemType: 'folder' })}
@@ -1069,7 +1069,7 @@ export default function DrivePage() {
                 onRenameChange={setRenameVal} onRenameSave={saveRename} onRenameCancel={cancelRename}
                 showNewFolderIn={showNewFolderIn} currentFolderId={currentFolderId}
                 newFolderName={newFolderName} newFolderInputRef={newFolderInputRef}
-                onNewFolderChange={setNewFolderName} onNewFolderCreate={createFolder} onNewFolderCancel={() => { setShowNewFolderIn(null); setNewFolderName('') }}
+                onNewFolderChange={setNewFolderName} onNewFolderCreate={createFolder} onNewFolderCancel={() => { setShowNewFolderIn(undefined); setNewFolderName('') }}
                 onFolderOpen={f => navigate(`/drive/folder/${f.id}`)}
                 onCtxFile={(file, x, y) => setCtxMenu({ x, y, item: file, itemType: 'file' })}
                 onCtxFolder={(folder, x, y) => setCtxMenu({ x, y, item: folder, itemType: 'folder' })}
