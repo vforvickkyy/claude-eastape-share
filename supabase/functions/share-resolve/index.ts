@@ -45,6 +45,18 @@ async function presignGet(endpoint: string, bucket: string, key: string, accessK
   return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
 }
 
+// Check if folderId is a descendant of (or equal to) ancestorId
+async function isDescendantOf(supabase: ReturnType<typeof createClient>, folderId: string, ancestorId: string): Promise<boolean> {
+  let cur = folderId
+  for (let i = 0; i < 25; i++) {
+    if (cur === ancestorId) return true
+    const { data: f } = await supabase.from('drive_folders').select('parent_id').eq('id', cur).single()
+    if (!f || !f.parent_id) return false
+    cur = f.parent_id
+  }
+  return false
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405)
@@ -52,8 +64,9 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const url = new URL(req.url)
-    const token    = url.searchParams.get('token')
-    const password = url.searchParams.get('password')
+    const token      = url.searchParams.get('token')
+    const password   = url.searchParams.get('password')
+    const subFolderId = url.searchParams.get('subfolder_id')
     if (!token) return json({ error: 'Token required' }, 400)
 
     const { data: link, error } = await supabase
@@ -75,7 +88,6 @@ Deno.serve(async (req) => {
       .eq('id', link.id)
       .then(() => {})
 
-    // Wasabi credentials (try all naming conventions used across the project)
     const wEndpoint = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '') || 'https://s3.ap-southeast-1.wasabisys.com'
     const wBucket   = Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? ''
     const wKey      = Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY') ?? ''
@@ -99,7 +111,6 @@ Deno.serve(async (req) => {
     // ── Single media asset share ──────────────────────────────────────
     if (link.project_media_id && link.project_media) {
       const asset = await signMedia(link.project_media)
-
       let comments: unknown[] = []
       if (link.allow_comments) {
         const { data: rows } = await supabase
@@ -109,13 +120,7 @@ Deno.serve(async (req) => {
           .order('created_at')
         comments = rows || []
       }
-
-      return json({
-        asset,
-        allowDownload: link.allow_download ?? true,
-        allowComments: link.allow_comments ?? false,
-        comments,
-      })
+      return json({ asset, allowDownload: link.allow_download ?? true, allowComments: link.allow_comments ?? false, comments })
     }
 
     // ── Project-level share ───────────────────────────────────────────
@@ -126,15 +131,8 @@ Deno.serve(async (req) => {
         .eq('project_id', link.project_id)
         .eq('is_trashed', false)
         .order('created_at', { ascending: false })
-
       const enriched = await Promise.all((assets || []).map(signMedia))
-
-      return json({
-        type: 'project',
-        project: link.projects,
-        assets: enriched,
-        allowDownload: link.allow_download ?? true,
-      })
+      return json({ type: 'project', project: link.projects, assets: enriched, allowDownload: link.allow_download ?? true })
     }
 
     // ── Drive file share ──────────────────────────────────────────────
@@ -149,24 +147,41 @@ Deno.serve(async (req) => {
       if (thumbKey && wKey) {
         try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
       }
-      return json({
-        type: 'drive_file',
-        file: { ...f, downloadUrl, thumbnailUrl },
-        allowDownload: link.allow_download ?? true,
-      })
+      return json({ type: 'drive_file', file: { ...f, downloadUrl, thumbnailUrl }, allowDownload: link.allow_download ?? true })
     }
 
     // ── Drive folder share ────────────────────────────────────────────
     if (link.drive_folder_id && link.drive_folders) {
-      const folder = link.drive_folders
-      const { data: files } = await supabase
-        .from('drive_files')
-        .select('id, name, mime_type, file_size, wasabi_key, thumbnail_key, created_at')
-        .eq('folder_id', link.drive_folder_id)
-        .eq('is_trashed', false)
-        .order('created_at', { ascending: false })
+      const rootFolder = link.drive_folders
 
-      const enriched = await Promise.all((files || []).map(async (f: any) => {
+      // Determine which folder level to list
+      let listFolderId = link.drive_folder_id
+      let currentFolder: any = rootFolder
+
+      if (subFolderId && subFolderId !== link.drive_folder_id) {
+        // Security: verify subfolder is actually a descendant of the shared root
+        const ok = await isDescendantOf(supabase, subFolderId, link.drive_folder_id)
+        if (!ok) return json({ error: 'Access denied' }, 403)
+        const { data: sf } = await supabase.from('drive_folders').select('id, name, parent_id').eq('id', subFolderId).single()
+        if (!sf) return json({ error: 'Subfolder not found' }, 404)
+        listFolderId = subFolderId
+        currentFolder = sf
+      }
+
+      // Fetch files and sub-folders at current level in parallel
+      const [filesResult, subfoldersResult] = await Promise.all([
+        supabase.from('drive_files')
+          .select('id, name, mime_type, file_size, wasabi_key, thumbnail_key, created_at')
+          .eq('folder_id', listFolderId)
+          .eq('is_trashed', false)
+          .order('name'),
+        supabase.from('drive_folders')
+          .select('id, name, created_at')
+          .eq('parent_id', listFolderId)
+          .order('name'),
+      ])
+
+      const enrichedFiles = await Promise.all((filesResult.data || []).map(async (f: any) => {
         let downloadUrl: string | null = null
         let thumbnailUrl: string | null = null
         if (f.wasabi_key && wKey) {
@@ -181,8 +196,10 @@ Deno.serve(async (req) => {
 
       return json({
         type: 'drive_folder',
-        folder,
-        files: enriched,
+        rootFolder,
+        currentFolder,
+        subfolders: subfoldersResult.data || [],
+        files: enrichedFiles,
         allowDownload: link.allow_download ?? true,
       })
     }

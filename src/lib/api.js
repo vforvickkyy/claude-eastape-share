@@ -270,7 +270,12 @@ export const shareLinksApi = {
   create:  (body)             => post(`${BASE}/share-links`, body, true),
   update:  (id, body)         => put(`${BASE}/share-links`, { id }, body, true),
   delete:  (id)               => del(`${BASE}/share-links`, { id }, true),
-  resolve: (token, password)  => get(`${BASE}/share-resolve`, password ? { token, password } : { token }),
+  resolve: (token, password, subFolderId) => {
+    const params = { token }
+    if (password) params.password = password
+    if (subFolderId) params.subfolder_id = subFolderId
+    return get(`${BASE}/share-resolve`, params)
+  },
   // Drive-specific helpers
   listForDriveFile:     (driveFileId)            => get(`${BASE}/share-links`, { driveFileId }, true),
   listForDriveFolder:   (driveFolderId)          => get(`${BASE}/share-links`, { driveFolderId }, true),
