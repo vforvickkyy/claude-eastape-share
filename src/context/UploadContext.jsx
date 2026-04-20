@@ -92,7 +92,7 @@ export function UploadProvider({ children }) {
   }
 
   function processQueue() {
-    while (activeRef.current < 3 && queueRef.current.length > 0) {
+    while (activeRef.current < 1 && queueRef.current.length > 0) {
       runUpload(queueRef.current.shift())
     }
     if (activeRef.current === 0 && queueRef.current.length === 0) {
@@ -109,7 +109,7 @@ export function UploadProvider({ children }) {
   function enqueueItems(items) {
     setUploads(prev => [...prev, ...items])
     for (const item of items) {
-      if (activeRef.current < 3) {
+      if (activeRef.current < 1) {
         setTimeout(() => runUpload(item), 0)
       } else {
         queueRef.current.push(item)

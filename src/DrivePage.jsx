@@ -179,7 +179,7 @@ export default function DrivePage() {
   const navigate     = useNavigate()
   const { id: urlFolderId } = useParams()
   const [searchParams] = useSearchParams()
-  const { addFiles, pendingDuplicates, resolveDuplicates, dismissDuplicates } = useUpload()
+  const { addFiles, uploads, pendingDuplicates, resolveDuplicates, dismissDuplicates } = useUpload()
   const fileInputRef   = useRef(null)
   const folderInputRef = useRef(null)
   const dragCounter    = useRef(0)
@@ -357,6 +357,14 @@ export default function DrivePage() {
   }, [currentFolderId, allFolders])
 
   const previewableFiles = useMemo(() => processedFiles, [processedFiles])
+
+  // Files currently uploading to the visible folder (shown as placeholder cards)
+  const uploadingItems = useMemo(() =>
+    uploads.filter(u =>
+      (u.status === 'uploading' || u.status === 'pending') &&
+      (currentView === 'myDrive') &&
+      (u.folderId === currentFolderId || (u.folderId == null && !currentFolderId))
+    ), [uploads, currentFolderId, currentView])
 
   // ── File upload ─────────────────────────────────────────────────────────────
   function startUpload(fileList) {
@@ -1033,13 +1041,13 @@ export default function DrivePage() {
                 <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{loadError}</p>
                 <button className="btn-ghost" onClick={loadContent}>Retry</button>
               </div>
-            ) : processedFiles.length === 0 && processedFolders.length === 0 && showNewFolderIn === undefined ? (
+            ) : processedFiles.length === 0 && processedFolders.length === 0 && showNewFolderIn === undefined && uploadingItems.length === 0 ? (
               <div className="drive-area" style={{ height: '100%' }}>
                 <EmptyState view={currentView} search={search} filter={filter} onUpload={() => fileInputRef.current?.click()} onNewFolder={() => setShowNewFolderIn(currentFolderId || null)} onClearSearch={() => setSearch('')} />
               </div>
             ) : viewMode === 'grid' ? (
               <GridView
-                files={processedFiles} folders={processedFolders}
+                files={processedFiles} folders={processedFolders} uploadingItems={uploadingItems}
                 selected={selected} onToggleSelect={toggleSelect}
                 renamingId={renamingId} renamingType={renamingType} renameVal={renameVal}
                 renameInputRef={renameInputRef}
@@ -1063,7 +1071,7 @@ export default function DrivePage() {
               />
             ) : (
               <ListView
-                files={processedFiles} folders={processedFolders}
+                files={processedFiles} folders={processedFolders} uploadingItems={uploadingItems}
                 selected={selected} onToggleSelect={toggleSelect}
                 sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir}
                 renamingId={renamingId} renamingType={renamingType} renameVal={renameVal}
@@ -1335,8 +1343,72 @@ function ListThumb({ file }) {
   return <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={26} />
 }
 
+// ── Uploading placeholder card (grid view) ────────────────────────────────────
+function UploadingFileCard({ item }) {
+  const isPending = item.status === 'pending'
+  const pct = isPending ? 0 : item.progress
+  return (
+    <div className="drive-file-card" style={{ cursor: 'default', pointerEvents: 'none' }}>
+      {/* Thumbnail area */}
+      <div style={{ position: 'relative', height: 130, background: 'linear-gradient(135deg,#110c1e,#0a0a14)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <FileTypeIcon fileName={item.name} size={40} style={{ opacity: 0.5 }} />
+        {/* Progress bar */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'rgba(255,255,255,0.08)' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.4)' : '#7c3aed', transition: 'width 0.3s ease', borderRadius: 2 }} />
+        </div>
+        {/* Percentage badge */}
+        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 11, fontWeight: 700, color: isPending ? 'rgba(255,255,255,0.35)' : '#a78bfa', background: 'rgba(0,0,0,0.5)', padding: '1px 5px', borderRadius: 4 }}>
+          {isPending ? 'Queued' : `${pct}%`}
+        </div>
+      </div>
+      {/* Info */}
+      <div style={{ padding: '8px 10px' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{item.name}</span>
+        <span style={{ fontSize: 11, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', display: 'block', marginTop: 2 }}>
+          {isPending ? 'Queued' : 'Uploading…'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Uploading placeholder row (list view) ─────────────────────────────────────
+function UploadingFileRow({ item }) {
+  const isPending = item.status === 'pending'
+  const pct = isPending ? 0 : item.progress
+  const tdStyle = { padding: '0 10px', fontSize: 13, verticalAlign: 'middle' }
+  return (
+    <tr style={{ height: 44, opacity: isPending ? 0.6 : 1 }}>
+      <td style={{ ...tdStyle, width: 40, paddingLeft: 8 }}>
+        <div style={{ width: 16, height: 16 }} />
+      </td>
+      <td style={{ ...tdStyle, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <FileTypeIcon fileName={item.name} size={26} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{item.name}</span>
+            {/* Inline progress bar */}
+            <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', maxWidth: 200 }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.4)' : '#7c3aed', transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+        </div>
+      </td>
+      <td style={{ ...tdStyle, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', fontSize: 12 }}>
+        {isPending ? 'Queued' : `${pct}%`}
+      </td>
+      <td style={tdStyle}>{fmtBytes(item.size)}</td>
+      <td style={{ ...tdStyle, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', fontSize: 12 }}>
+        {isPending ? '—' : 'Uploading…'}
+      </td>
+      <td />
+      <td />
+    </tr>
+  )
+}
+
 // ── Grid View ────────────────────────────────────────────────────────────────
-function GridView({ files, folders, selected, onToggleSelect, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
+function GridView({ files, folders, uploadingItems = [], selected, onToggleSelect, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
 
   function handleFileCtx(e, file) { e.preventDefault(); e.stopPropagation(); onCtxFile(file, e.clientX, e.clientY) }
   function handleFolderCtx(e, folder) { e.preventDefault(); e.stopPropagation(); onCtxFolder(folder, e.clientX, e.clientY) }
@@ -1395,10 +1467,11 @@ function GridView({ files, folders, selected, onToggleSelect, renamingId, renami
       )}
 
       {/* Files */}
-      {files.length > 0 && (
+      {(files.length > 0 || uploadingItems.length > 0) && (
         <div>
           {folders.length > 0 && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Files</p>}
           <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+            {uploadingItems.map(u => <UploadingFileCard key={u.id} item={u} />)}
             {files.map(file => {
               const selKey = `file-${file.id}`
               const isSel = selected.has(selKey)
@@ -1466,7 +1539,7 @@ function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {}
   )
 }
 
-function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, setSortBy, setSortDir, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, allFolders, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
+function ListView({ files, folders, uploadingItems = [], selected, onToggleSelect, sortBy, sortDir, setSortBy, setSortDir, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, allFolders, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
 
   const thStyle = { padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none' }
   const tdStyle = { padding: '0 10px', fontSize: 13, color: 'rgba(255,255,255,0.65)', verticalAlign: 'middle' }
@@ -1508,6 +1581,7 @@ function ListView({ files, folders, selected, onToggleSelect, sortBy, sortDir, s
         {showNewFolderIn === (currentFolderId || null) && (
           <NewFolderInput inputRef={newFolderInputRef} value={newFolderName} onChange={onNewFolderChange} onSave={v => onNewFolderCreate(v, currentFolderId)} onCancel={onNewFolderCancel} isCard={false} />
         )}
+        {uploadingItems.map(u => <UploadingFileRow key={u.id} item={u} />)}
         {folders.map(folder => {
           const selKey = `folder-${folder.id}`
           const isSel = selected.has(selKey)
