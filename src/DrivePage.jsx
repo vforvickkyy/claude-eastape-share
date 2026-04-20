@@ -1033,8 +1033,10 @@ export default function DrivePage() {
                 <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{loadError}</p>
                 <button className="btn-ghost" onClick={loadContent}>Retry</button>
               </div>
-            ) : processedFiles.length === 0 && processedFolders.length === 0 ? (
-              <EmptyState view={currentView} search={search} filter={filter} onUpload={() => fileInputRef.current?.click()} onNewFolder={() => setShowNewFolderIn(currentFolderId)} onClearSearch={() => setSearch('')} />
+            ) : processedFiles.length === 0 && processedFolders.length === 0 && showNewFolderIn === undefined ? (
+              <div className="drive-area" style={{ height: '100%' }}>
+                <EmptyState view={currentView} search={search} filter={filter} onUpload={() => fileInputRef.current?.click()} onNewFolder={() => setShowNewFolderIn(currentFolderId || null)} onClearSearch={() => setSearch('')} />
+              </div>
             ) : viewMode === 'grid' ? (
               <GridView
                 files={processedFiles} folders={processedFolders}
