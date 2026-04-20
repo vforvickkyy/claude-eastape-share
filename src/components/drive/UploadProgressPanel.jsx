@@ -12,6 +12,19 @@ function formatSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+function formatSpeed(bps) {
+  if (!bps || bps <= 0) return null
+  if (bps < 1024) return `${bps} B/s`
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`
+  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`
+}
+function formatEta(sec) {
+  if (!sec || sec <= 0) return null
+  if (sec < 60) return `${sec}s left`
+  const m = Math.floor(sec / 60), s = sec % 60
+  if (m < 60) return s > 0 ? `${m}m ${s}s left` : `${m}m left`
+  return `${Math.floor(m / 60)}h ${m % 60}m left`
+}
 
 function StatusIcon({ status }) {
   if (status === 'done')      return <CheckCircle size={14} weight="fill" color="#10b981" />
@@ -51,17 +64,26 @@ export default function UploadProgressPanel() {
           <button
             onClick={toggleMinimize}
             style={{
-              display: 'flex', alignItems: 'center', gap: 10,
+              display: 'flex', alignItems: 'center', gap: 8,
               background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 999, padding: '0 16px', height: 40, cursor: 'pointer',
+              borderRadius: 999, padding: '0 14px', height: 40, cursor: 'pointer',
               color: 'var(--t1)', fontSize: 13,
             }}
           >
             <UploadSimple size={15} weight="duotone" color="#7c3aed" />
-            <span>{allDone ? `${doneCount} done` : `${overallPct}%`}</span>
-            <span style={{ color: 'var(--t3)', fontSize: 11 }}>{headerLabel}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{allDone ? `${doneCount} done` : `${overallPct}%`}</span>
+            {!allDone && (() => {
+              const active = uploads.find(u => u.status === 'uploading')
+              const spd = formatSpeed(active?.speed)
+              const eta = formatEta(active?.eta)
+              return (spd || eta) ? (
+                <span style={{ color: 'var(--t3)', fontSize: 11 }}>
+                  {[spd, eta].filter(Boolean).join(' · ')}
+                </span>
+              ) : null
+            })()}
             <button
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, marginLeft: 4 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, marginLeft: 2 }}
               onClick={e => { e.stopPropagation(); dismissAll() }}
             >
               <X size={13} color="var(--t3)" />
@@ -118,52 +140,46 @@ export default function UploadProgressPanel() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <FileTypeIcon fileName={u.name} size={28} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between', gap: 4,
-                      }}>
-                        <span style={{
-                          fontSize: 12, color: 'var(--t1)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          maxWidth: 175,
-                        }}>{u.name}</span>
+                      {/* Name row */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                        <span style={{ fontSize: 12, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 175 }}>{u.name}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                           {u.status === 'uploading' && (
                             <>
-                              <span style={{ fontSize: 11, color: 'var(--t3)' }}>{u.progress}%</span>
-                              <button
-                                className="icon-btn"
-                                onClick={() => cancelUpload(u.id)}
-                                style={{ opacity: 0.5 }}
-                                title="Cancel"
-                              >
+                              <span style={{ fontSize: 11, color: 'var(--t3)', fontVariantNumeric: 'tabular-nums' }}>{u.progress}%</span>
+                              <button className="icon-btn" onClick={() => cancelUpload(u.id)} style={{ opacity: 0.5 }} title="Cancel">
                                 <X size={11} />
                               </button>
                             </>
                           )}
                           <StatusIcon status={u.status} />
-                          {u.status === 'error' && (
-                            <span style={{ fontSize: 10, color: '#ef4444', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {u.error}
-                            </span>
-                          )}
-                          {u.status === 'cancelled' && (
-                            <span style={{ fontSize: 10, color: 'var(--t3)' }}>Cancelled</span>
-                          )}
+                          {u.status === 'error' && <span style={{ fontSize: 10, color: '#ef4444', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.error}</span>}
+                          {u.status === 'cancelled' && <span style={{ fontSize: 10, color: 'var(--t3)' }}>Cancelled</span>}
                         </div>
                       </div>
+                      {/* Progress bar */}
                       {(u.status === 'uploading' || u.status === 'pending') && (
-                        <div style={{
-                          marginTop: 4, height: 3, borderRadius: 2,
-                          background: 'rgba(255,255,255,0.08)',
-                        }}>
-                          <div style={{
-                            height: '100%', borderRadius: 2,
-                            width: `${u.progress}%`,
-                            background: 'linear-gradient(90deg, #7c3aed, #2563eb)',
-                            transition: 'width 0.2s',
-                          }} />
+                        <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
+                          <div style={{ height: '100%', borderRadius: 2, width: `${u.progress}%`, background: 'linear-gradient(90deg, #7c3aed, #2563eb)', transition: 'width 0.2s' }} />
                         </div>
+                      )}
+                      {/* Speed + ETA */}
+                      {u.status === 'uploading' && (u.speed || u.eta) && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
+                          {formatSpeed(u.speed) && (
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>
+                              {formatSpeed(u.speed)}
+                            </span>
+                          )}
+                          {formatEta(u.eta) && (
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
+                              {formatEta(u.eta)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {u.status === 'pending' && (
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 3, display: 'block' }}>Waiting in queue…</span>
                       )}
                     </div>
                   </div>

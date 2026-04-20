@@ -36,6 +36,19 @@ function fmtBytes(b) {
   if (b < 1024 ** 3) return `${(b / 1024 ** 2).toFixed(1)} MB`
   return `${(b / 1024 ** 3).toFixed(2)} GB`
 }
+function fmtSpeed(bps) {
+  if (!bps || bps <= 0) return null
+  if (bps < 1024) return `${bps} B/s`
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`
+  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`
+}
+function fmtEta(sec) {
+  if (!sec || sec <= 0) return null
+  if (sec < 60) return `${sec}s left`
+  const m = Math.floor(sec / 60), s = sec % 60
+  if (m < 60) return s > 0 ? `${m}m ${s}s left` : `${m}m left`
+  return `${Math.floor(m / 60)}h ${m % 60}m left`
+}
 function fmtRel(iso) {
   if (!iso) return '—'
   const d = (Date.now() - new Date(iso)) / 1000
@@ -1346,7 +1359,9 @@ function ListThumb({ file }) {
 // ── Uploading placeholder card (grid view) ────────────────────────────────────
 function UploadingFileCard({ item }) {
   const isPending = item.status === 'pending'
-  const pct = isPending ? 0 : item.progress
+  const pct   = isPending ? 0 : item.progress
+  const speed = !isPending ? fmtSpeed(item.speed) : null
+  const eta   = !isPending ? fmtEta(item.eta)   : null
   return (
     <div className="drive-file-card" style={{ cursor: 'default', pointerEvents: 'none' }}>
       {/* Thumbnail area */}
@@ -1354,18 +1369,24 @@ function UploadingFileCard({ item }) {
         <FileTypeIcon fileName={item.name} size={40} style={{ opacity: 0.5 }} />
         {/* Progress bar */}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'rgba(255,255,255,0.08)' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.4)' : '#7c3aed', transition: 'width 0.3s ease', borderRadius: 2 }} />
+          <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.35)' : '#7c3aed', transition: 'width 0.3s ease', borderRadius: 2 }} />
         </div>
         {/* Percentage badge */}
-        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 11, fontWeight: 700, color: isPending ? 'rgba(255,255,255,0.35)' : '#a78bfa', background: 'rgba(0,0,0,0.5)', padding: '1px 5px', borderRadius: 4 }}>
+        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 11, fontWeight: 700, color: isPending ? 'rgba(255,255,255,0.3)' : '#a78bfa', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
           {isPending ? 'Queued' : `${pct}%`}
         </div>
+        {/* Speed badge */}
+        {speed && (
+          <div style={{ position: 'absolute', bottom: 8, left: 8, fontSize: 10, color: 'rgba(255,255,255,0.5)', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
+            {speed}
+          </div>
+        )}
       </div>
       {/* Info */}
       <div style={{ padding: '8px 10px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{item.name}</span>
         <span style={{ fontSize: 11, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', display: 'block', marginTop: 2 }}>
-          {isPending ? 'Queued' : 'Uploading…'}
+          {isPending ? 'Queued' : (eta || 'Uploading…')}
         </span>
       </div>
     </div>
@@ -1375,10 +1396,12 @@ function UploadingFileCard({ item }) {
 // ── Uploading placeholder row (list view) ─────────────────────────────────────
 function UploadingFileRow({ item }) {
   const isPending = item.status === 'pending'
-  const pct = isPending ? 0 : item.progress
+  const pct   = isPending ? 0 : item.progress
+  const speed = !isPending ? fmtSpeed(item.speed) : null
+  const eta   = !isPending ? fmtEta(item.eta)   : null
   const tdStyle = { padding: '0 10px', fontSize: 13, verticalAlign: 'middle' }
   return (
-    <tr style={{ height: 44, opacity: isPending ? 0.6 : 1 }}>
+    <tr style={{ height: 48, opacity: isPending ? 0.55 : 1 }}>
       <td style={{ ...tdStyle, width: 40, paddingLeft: 8 }}>
         <div style={{ width: 16, height: 16 }} />
       </td>
@@ -1387,22 +1410,20 @@ function UploadingFileRow({ item }) {
           <FileTypeIcon fileName={item.name} size={26} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{item.name}</span>
-            {/* Inline progress bar */}
-            <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', maxWidth: 200 }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.4)' : '#7c3aed', transition: 'width 0.3s ease' }} />
+            <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', maxWidth: 220 }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.35)' : '#7c3aed', transition: 'width 0.3s ease' }} />
             </div>
           </div>
         </div>
       </td>
-      <td style={{ ...tdStyle, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', fontSize: 12 }}>
+      <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums', color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', fontSize: 12 }}>
         {isPending ? 'Queued' : `${pct}%`}
       </td>
       <td style={tdStyle}>{fmtBytes(item.size)}</td>
-      <td style={{ ...tdStyle, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', fontSize: 12 }}>
-        {isPending ? '—' : 'Uploading…'}
+      <td style={{ ...tdStyle, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>
+        {isPending ? '—' : [speed, eta].filter(Boolean).join(' · ') || 'Uploading…'}
       </td>
-      <td />
-      <td />
+      <td /><td />
     </tr>
   )
 }

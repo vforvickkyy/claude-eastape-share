@@ -33,7 +33,7 @@ export function UploadProvider({ children }) {
       if (item.uploadFn) {
         // Custom upload function — used for version bumps, etc.
         await item.uploadFn((pct) => updItem(item.id, { progress: pct }))
-        updItem(item.id, { progress: 100, status: 'done' })
+        updItem(item.id, { progress: 100, status: 'done', speed: null, eta: null })
         item.onItemComplete?.()
       } else {
         const { uploads: presigned } = await driveFilesApi.presign({
@@ -45,8 +45,36 @@ export function UploadProvider({ children }) {
         await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest()
           xhrRefs.current[item.id] = xhr
+
+          // Speed tracking (per-upload closure)
+          let lastLoaded = 0
+          let lastTime   = 0
+          let emaSpeed   = 0   // bytes/sec exponential moving average
+
           xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) updItem(item.id, { progress: Math.round(e.loaded / e.total * 100) })
+            if (!e.lengthComputable) return
+            const now = Date.now()
+            const pct = Math.round(e.loaded / e.total * 100)
+
+            if (lastTime === 0) {
+              lastLoaded = e.loaded
+              lastTime   = now
+              updItem(item.id, { progress: pct })
+              return
+            }
+
+            const dt = (now - lastTime) / 1000  // seconds since last sample
+            if (dt >= 0.3) {
+              const instant = (e.loaded - lastLoaded) / dt   // bytes/sec
+              emaSpeed = emaSpeed === 0 ? instant : emaSpeed * 0.6 + instant * 0.4
+              lastLoaded = e.loaded
+              lastTime   = now
+              const bytesLeft = e.total - e.loaded
+              const eta = emaSpeed > 0 ? Math.ceil(bytesLeft / emaSpeed) : null
+              updItem(item.id, { progress: pct, speed: Math.round(emaSpeed), eta })
+            } else {
+              updItem(item.id, { progress: pct })
+            }
           }
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
