@@ -204,10 +204,11 @@ Deno.serve(async (req) => {
       const credentialScope = `${date}/${REGION}/s3/aws4_request`
       const encodedUploadId = encodeURIComponent(uploadId)
 
-      // Only sign host + x-amz-date (not content-type) to keep it simple
-      const signedHeaderNames = 'host;x-amz-date'
-      const canonicalHeaders  = `host:${host}\nx-amz-date:${datetime}\n`
       const bodyHash = hex(await crypto.subtle.digest('SHA-256', enc.encode(completeXml)))
+
+      // Wasabi requires x-amz-content-sha256 to be signed
+      const signedHeaderNames = 'host;x-amz-content-sha256;x-amz-date'
+      const canonicalHeaders  = `host:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${datetime}\n`
 
       const canonicalRequest = [
         'POST',
@@ -231,6 +232,7 @@ Deno.serve(async (req) => {
           headers: {
             'Content-Type': 'application/xml',
             'x-amz-date': datetime,
+            'x-amz-content-sha256': bodyHash,
             'Authorization': authHeader,
           },
           body: completeXml,
@@ -264,9 +266,9 @@ Deno.serve(async (req) => {
         const encodedKey = wasabiKey.split('/').map((s: string) => encodeURIComponent(s)).join('/')
         const credentialScope = `${date}/${REGION}/s3/aws4_request`
         const encodedUploadId = encodeURIComponent(uploadId)
-        const signedHeaderNames = 'host;x-amz-date'
-        const canonicalHeaders  = `host:${host}\nx-amz-date:${datetime}\n`
         const emptyHash = hex(await crypto.subtle.digest('SHA-256', new Uint8Array(0)))
+        const signedHeaderNames = 'host;x-amz-content-sha256;x-amz-date'
+        const canonicalHeaders  = `host:${host}\nx-amz-content-sha256:${emptyHash}\nx-amz-date:${datetime}\n`
         const canonicalRequest = ['DELETE', `/${BUCKET}/${encodedKey}`, `uploadId=${encodedUploadId}`, canonicalHeaders, signedHeaderNames, emptyHash].join('\n')
         const reqHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
         const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(reqHashBuf)].join('\n')
@@ -275,7 +277,7 @@ Deno.serve(async (req) => {
         const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS}/${credentialScope}, SignedHeaders=${signedHeaderNames}, Signature=${sig}`
         await fetch(`${ENDPOINT}/${BUCKET}/${encodedKey}?uploadId=${encodedUploadId}`, {
           method: 'DELETE',
-          headers: { 'x-amz-date': datetime, 'Authorization': authHeader },
+          headers: { 'x-amz-date': datetime, 'x-amz-content-sha256': emptyHash, 'Authorization': authHeader },
         })
       } catch {}
 
