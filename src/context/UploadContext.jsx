@@ -60,6 +60,10 @@ export function UploadProvider({ children }) {
           thumbnailPresignedUrl = res.thumbnailPresignedUrl
         }
 
+        // Store resolved ids on item so catch block can clean up
+        item._resolvedFileId = fileId
+        item.wasabiKey       = wasabiKey
+
         // POST the presigned initiate URL directly to Wasabi to get the uploadId
         const initRes = await fetch(initiateUrl, { method: 'POST' })
         if (!initRes.ok) {
@@ -70,6 +74,7 @@ export function UploadProvider({ children }) {
         const uploadIdMatch = initXml.match(/<UploadId>([^<]+)<\/UploadId>/)
         if (!uploadIdMatch) throw new Error('No UploadId in Wasabi response')
         const uploadId = uploadIdMatch[1]
+        item._resolvedUploadId = uploadId
 
         const totalParts = Math.ceil(item.size / PART_SIZE)
         const parts = []
@@ -167,6 +172,8 @@ export function UploadProvider({ children }) {
           })
           ;({ presignedUrl, thumbnailPresignedUrl, fileId } = presigned[0])
         }
+        // Store so catch block can delete the DB record on failure
+        item._resolvedFileId = fileId
 
         await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest()
@@ -237,7 +244,18 @@ export function UploadProvider({ children }) {
         }
       }
     } catch (err) {
-      if (err.message !== 'cancelled') updItem(item.id, { status: 'error', error: err.message })
+      const cancelled = err.message === 'cancelled'
+      updItem(item.id, { status: cancelled ? 'cancelled' : 'error', error: cancelled ? null : err.message })
+
+      // Delete the DB record so the file doesn't appear in Drive or count against storage
+      const fileIdToDelete = item.fileId || item._resolvedFileId
+      if (fileIdToDelete) {
+        driveFilesApi.delete(fileIdToDelete).catch(() => {})
+      }
+      // For multipart: also abort the incomplete upload at Wasabi
+      if (item._resolvedUploadId && item.wasabiKey) {
+        driveFilesApi.multipartAbort({ uploadId: item._resolvedUploadId, wasabiKey: item.wasabiKey, fileId: fileIdToDelete }).catch(() => {})
+      }
     } finally {
       activeRef.current--
       delete xhrRefs.current[item.id]
@@ -412,9 +430,13 @@ export function UploadProvider({ children }) {
   function cancelUpload(id) {
     xhrRefs.current[id]?.abort()
     queueRef.current = queueRef.current.filter(i => {
-      if (i.id === id && i.fileId && i.wasabiKey) {
-        // If initiate was already called, clean up the DB record and any in-progress multipart
-        driveFilesApi.multipartAbort({ uploadId: '', wasabiKey: i.wasabiKey, fileId: i.fileId }).catch(() => {})
+      if (i.id === id) {
+        // Delete DB record if it was already created (batch presign / multipart initiate)
+        const fid = i.fileId || i._resolvedFileId
+        if (fid) driveFilesApi.delete(fid).catch(() => {})
+        if (i._resolvedUploadId && i.wasabiKey) {
+          driveFilesApi.multipartAbort({ uploadId: i._resolvedUploadId, wasabiKey: i.wasabiKey, fileId: fid }).catch(() => {})
+        }
       }
       return i.id !== id
     })
