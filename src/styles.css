@@ -5287,3 +5287,202 @@ body { overflow-x: hidden; }
   background: rgba(124,58,237,0.15) !important;
   outline: 1px solid rgba(124,58,237,0.5);
 }
+
+/* ══════════════════════════════════════════════════════════
+   DRIVE PAGE — MOBILE RESPONSIVE
+══════════════════════════════════════════════════════════ */
+
+/* Inner sidebar (folder tree) */
+.drive-inner-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255,255,255,0.015);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* Mobile sidebar toggle button — hidden on desktop */
+.drive-sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.drive-sidebar-toggle:hover { background: rgba(255,255,255,0.06); color: #fff; }
+
+/* Drive toolbar search input */
+.drive-search-wrap { position: relative; flex-shrink: 0; }
+.drive-search-input {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  height: 34px;
+  padding-left: 32px;
+  font-size: 13px;
+  color: #fff;
+  outline: none;
+  width: 180px;
+  transition: width 0.2s, border-color 0.2s;
+}
+.drive-search-input:focus { width: 240px; border-color: rgba(124,58,237,0.5); }
+
+/* Drive toolbar */
+.drive-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 52px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  /* Show sidebar toggle on mobile */
+  .drive-sidebar-toggle { display: flex; }
+
+  /* Slide sidebar off-screen on mobile */
+  .drive-inner-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 260px;
+    background: #0e0e18;
+    border-right: 1px solid rgba(255,255,255,0.08);
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .drive-inner-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0,0,0,0.5);
+  }
+
+  /* Overlay behind open sidebar */
+  .drive-sidebar-overlay {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 59;
+  }
+
+  /* Toolbar: tighter on mobile */
+  .drive-toolbar { gap: 6px; padding: 0 10px; height: 48px; }
+
+  /* Hide search on mobile — show icon-only search button instead */
+  .drive-search-wrap { display: none; }
+  .drive-search-mobile { display: flex !important; }
+
+  /* Hide sort label text on mobile */
+  .drive-sort-label { display: none; }
+
+  /* New button: icon only on mobile */
+  .drive-new-label { display: none; }
+
+  /* Breadcrumb: scrollable */
+  .drive-breadcrumb {
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .drive-breadcrumb::-webkit-scrollbar { display: none; }
+}
+
+@media (max-width: 480px) {
+  /* Tighter file content padding on small phones */
+  .drive-content-area { padding: 10px 10px 80px !important; }
+
+  /* Folder grid: 2 columns on small phones */
+  .drive-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
+
+  /* Always show card overlay (checkbox) on touch */
+  .drive-file-card .drive-card-overlay { opacity: 1; }
+
+  /* List view: hide modified column on small phones */
+  .drive-list-col-modified { display: none !important; }
+  .drive-list-col-size { display: none !important; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   DRIVE SHARE PAGE — MOBILE RESPONSIVE
+══════════════════════════════════════════════════════════ */
+
+.share-folder-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.share-folder-header-info { flex: 1; min-width: 0; }
+.share-folder-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.share-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+.share-files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .share-folder-grid  { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .share-files-grid   { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .share-folder-header { padding: 12px 14px; gap: 10px; }
+  .share-folder-actions .btn-ghost { display: none; } /* hide "Download all" — too cramped */
+  .share-dl-all-mobile { display: flex !important; } /* show compact version instead */
+}
+
+@media (max-width: 380px) {
+  .share-folder-grid  { grid-template-columns: 1fr; }
+  .share-files-grid   { grid-template-columns: 1fr; }
+}
+
+/* File row on share page — better mobile layout */
+.share-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+.share-file-row:hover { background: rgba(255,255,255,0.04); }
+.share-file-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: rgba(255,255,255,0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-file-row-meta {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .share-file-row { padding: 8px 10px; gap: 8px; }
+  .share-file-row-meta { display: none; }
+  .share-file-row-name { font-size: 12px; }
+}

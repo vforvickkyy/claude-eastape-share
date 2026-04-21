@@ -216,21 +216,12 @@ function FolderCard({ folder, onClick }) {
 
 // ── File row (list view) ──────────────────────────────────────────────────────
 function FileRow({ file, allowDownload }) {
-  const [hov, setHov] = useState(false)
   return (
-    <div
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '9px 14px',
-        background: hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        borderRadius: 8, transition: 'background 0.12s',
-      }}
-    >
+    <div className="share-file-row">
       <ThumbOrIcon file={file} size={34} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</p>
-        <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{mimeLabel(file.mime_type, file.name)} · {formatSize(file.file_size)}</p>
+        <p className="share-file-row-name" style={{ margin: 0, fontWeight: 600, color: '#fff' }} title={file.name}>{file.name}</p>
+        <p className="share-file-row-meta" style={{ margin: 0 }}>{mimeLabel(file.mime_type, file.name)} · {formatSize(file.file_size)}</p>
       </div>
       {allowDownload && file.downloadUrl && (
         <button
@@ -465,16 +456,16 @@ export default function DriveSharePage() {
           <div style={{ ...card, maxWidth: 900, width: '100%', alignSelf: 'flex-start' }}>
 
             {/* ── Folder header ── */}
-            <div style={{ padding: '18px 22px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div className="share-folder-header">
               <FolderSimple size={38} weight="duotone" color="#f59e0b" style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="share-folder-header-info">
                 <h1 style={{ fontSize: 19, fontWeight: 700, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rootFolder.name}</h1>
                 <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', margin: 0 }}>
                   {subfolders.length > 0 && `${subfolders.length} folder${subfolders.length !== 1 ? 's' : ''} · `}
                   {files.length} file{files.length !== 1 ? 's' : ''} · {formatSize(totalSize)}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="share-folder-actions">
                 <ViewToggle view={viewMode} onChange={setViewMode} />
                 {allowDownload && files.length > 0 && (
                   <button className="btn-ghost" style={{ fontSize: 12, height: 32, padding: '0 12px' }}
@@ -527,7 +518,7 @@ export default function DriveSharePage() {
                   {subfolders.length > 0 && (
                     <div style={{ marginBottom: files.length > 0 ? 20 : 0 }}>
                       <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Folders</p>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                      <div className="share-folder-grid">
                         {subfolders.map(sf => <FolderCard key={sf.id} folder={sf} onClick={navigateInto} />)}
                       </div>
                     </div>
@@ -542,7 +533,7 @@ export default function DriveSharePage() {
                           {files.map(f => <FileRow key={f.id} file={f} allowDownload={allowDownload} />)}
                         </div>
                       ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 10 }}>
+                        <div className="share-files-grid">
                           {files.map(f => <FileCard key={f.id} file={f} allowDownload={allowDownload} />)}
                         </div>
                       )}

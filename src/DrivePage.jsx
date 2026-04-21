@@ -13,7 +13,7 @@ import {
   MagnifyingGlass, Plus, UploadSimple, FolderSimplePlus, DotsThree,
   DownloadSimple, PencilSimple, Trash, ArrowClockwise, ArrowSquareOut,
   Check, X, CloudArrowUp, Clock, Funnel, Link, SortAscending,
-  Warning, ShareNetwork, CopySimple,
+  Warning, ShareNetwork, CopySimple, List,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import { useUpload } from './context/UploadContext'
@@ -252,6 +252,9 @@ export default function DrivePage() {
   // ── Drag-to-move ─────────────────────────────────────────────────────────────
   const [draggingItem, setDraggingItem]   = useState(null) // { id, type, name }
   const [dragOverFolder, setDragOverFolder] = useState(null) // folder id being dragged over
+
+  // ── Mobile sidebar open ───────────────────────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // ── Sidebar expanded folders ─────────────────────────────────────────────────
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
@@ -780,11 +783,10 @@ export default function DrivePage() {
         onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={onDrop}
       >
         {/* ══════════ SIDEBAR ══════════ */}
-        <aside style={{
-          width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column',
-          background: 'rgba(255,255,255,0.015)', borderRight: '1px solid rgba(255,255,255,0.06)',
-          overflowY: 'auto', overflowX: 'hidden',
-        }}>
+        {sidebarOpen && (
+          <div className="drive-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+        )}
+        <aside className={`drive-inner-sidebar${sidebarOpen ? ' open' : ''}`}>
           {/* Storage */}
           {storage && (
             <div style={{ padding: '16px 14px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -808,7 +810,7 @@ export default function DrivePage() {
             {/* My Drive */}
             <div
               className={`drive-nav-item ${currentView === 'myDrive' && !currentFolderId ? 'active' : ''}`}
-              onClick={() => navigate('/drive')}
+              onClick={() => { navigate('/drive'); setSidebarOpen(false) }}
             >
               <House size={15} weight="duotone" />
               <span>My Drive</span>
@@ -824,10 +826,10 @@ export default function DrivePage() {
                   currentFolderId={currentFolderId}
                   expandedSet={sidebarExpanded}
                   onToggle={id => setSidebarExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })}
-                  onNavigate={f => navigate(`/drive/folder/${f.id}`)}
+                  onNavigate={f => { navigate(`/drive/folder/${f.id}`); setSidebarOpen(false) }}
                   onRename={f => startRename(f, 'folder')}
                   onTrash={trashFolder}
-                  onNewSubfolder={pid => { setShowNewFolderIn(pid); navigate(`/drive/folder/${pid}`) }}
+                  onNewSubfolder={pid => { setShowNewFolderIn(pid); navigate(`/drive/folder/${pid}`); setSidebarOpen(false) }}
                 />
               ))}
             </div>
@@ -837,7 +839,7 @@ export default function DrivePage() {
             {/* Recent */}
             <div
               className={`drive-nav-item ${currentView === 'recent' ? 'active' : ''}`}
-              onClick={() => navigate('/drive?view=recent')}
+              onClick={() => { navigate('/drive?view=recent'); setSidebarOpen(false) }}
             >
               <Clock size={15} weight="duotone" />
               <span>Recent</span>
@@ -846,7 +848,7 @@ export default function DrivePage() {
             {/* Trash */}
             <div
               className={`drive-nav-item ${currentView === 'trash' ? 'active' : ''}`}
-              onClick={() => navigate('/drive?view=trash')}
+              onClick={() => { navigate('/drive?view=trash'); setSidebarOpen(false) }}
             >
               <Trash size={15} weight="duotone" />
               <span>Trash</span>
@@ -859,9 +861,13 @@ export default function DrivePage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* ── Toolbar ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', height: 52, borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <div className="drive-toolbar">
+            {/* Mobile sidebar toggle */}
+            <button className="drive-sidebar-toggle" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
+              <List size={16} />
+            </button>
             {/* Breadcrumb / title */}
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <div className="drive-breadcrumb" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
               {currentView === 'myDrive' ? (
                 breadcrumb.map((crumb, i) => (
                   <React.Fragment key={crumb.id || 'root'}>
@@ -886,19 +892,14 @@ export default function DrivePage() {
             </div>
 
             {/* Search */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div className="drive-search-wrap">
               <MagnifyingGlass size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
               <input
+                className="drive-search-input"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search…"
-                style={{
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 8, height: 34, paddingLeft: 32, paddingRight: search ? 28 : 12,
-                  fontSize: 13, color: '#fff', outline: 'none', width: 180, transition: 'all 0.2s',
-                }}
-                onFocus={e => { e.target.style.width = '240px'; e.target.style.borderColor = 'rgba(124,58,237,0.5)' }}
-                onBlur={e => { e.target.style.width = '180px'; e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                style={{ paddingRight: search ? 28 : 12 }}
               />
               {search && (
                 <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', padding: 0, display: 'flex' }}>
@@ -1022,6 +1023,7 @@ export default function DrivePage() {
 
           {/* ── File content area ── */}
           <div
+            className="drive-content-area"
             style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 80px' }}
             onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()) }}
             onContextMenu={e => {
@@ -1548,10 +1550,11 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
 }
 
 // ── List View ────────────────────────────────────────────────────────────────
-function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {} }) {
+function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {}, className = '' }) {
   const isActive = sortBy === col
   return (
     <th
+      className={className}
       onClick={() => { if (isActive) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(col); setSortDir('asc') } }}
       style={{ ...style, cursor: 'pointer', padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none', whiteSpace: 'nowrap' }}
     >
@@ -1592,8 +1595,8 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
           <th style={{ ...thStyle, width: 40, paddingLeft: 8 }} />
           <SortTh col="name"  label="Name"     sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ minWidth: 200 }} />
           <th style={thStyle}>Type</th>
-          <SortTh col="size"  label="Size"     sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ width: 100 }} />
-          <SortTh col="date"  label="Modified" sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ width: 140 }} />
+          <SortTh col="size"  label="Size"     sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ width: 100 }} className="drive-list-col-size" />
+          <SortTh col="date"  label="Modified" sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir} style={{ width: 140 }} className="drive-list-col-modified" />
           {(currentView === 'recent') && <th style={{ ...thStyle, width: 160 }}>Location</th>}
           <th style={{ ...thStyle, width: 44 }} />
         </tr>
@@ -1637,8 +1640,8 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
                 </div>
               </td>
               <td style={tdStyle}>Folder</td>
-              <td style={tdStyle}>—</td>
-              <td style={tdStyle}>{fmtRel(folder.created_at)}</td>
+              <td className="drive-list-col-size" style={tdStyle}>—</td>
+              <td className="drive-list-col-modified" style={tdStyle}>{fmtRel(folder.created_at)}</td>
               {currentView === 'recent' && <td style={tdStyle}>—</td>}
               <td style={{ ...tdStyle, textAlign: 'right' }}>
                 <button className="card-menu-btn" onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFolder(folder, r.left, r.bottom + 4) }}><DotsThree size={15} weight="bold" /></button>
@@ -1676,8 +1679,8 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
                 </div>
               </td>
               <td style={{ ...tdStyle, fontSize: 12 }}>{mimeLabel(file.mime_type, file.name)}</td>
-              <td style={{ ...tdStyle, fontSize: 12 }}>{fmtBytes(file.file_size)}</td>
-              <td style={{ ...tdStyle, fontSize: 12 }}>{fmtDate(file.updated_at || file.created_at)}</td>
+              <td className="drive-list-col-size" style={{ ...tdStyle, fontSize: 12 }}>{fmtBytes(file.file_size)}</td>
+              <td className="drive-list-col-modified" style={{ ...tdStyle, fontSize: 12 }}>{fmtDate(file.updated_at || file.created_at)}</td>
               {currentView === 'recent' && (
                 <td style={{ ...tdStyle, fontSize: 11, color: 'rgba(255,255,255,0.4)' }} title={locationPath(file.folder_id)}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{locationPath(file.folder_id)}</span>
