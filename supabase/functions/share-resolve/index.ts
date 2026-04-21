@@ -19,7 +19,7 @@ async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer
   const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   return crypto.subtle.sign('HMAC', k, enc.encode(msg))
 }
-async function presignGet(endpoint: string, bucket: string, key: string, accessKeyId: string, secretAccessKey: string, region: string, expiresIn = 14400): Promise<string> {
+async function presignGet(endpoint: string, bucket: string, key: string, accessKeyId: string, secretAccessKey: string, region: string, expiresIn = 14400, fileName?: string): Promise<string> {
   const now = new Date()
   const date = now.toISOString().slice(0, 10).replace(/-/g, '')
   const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
@@ -32,6 +32,10 @@ async function presignGet(endpoint: string, bucket: string, key: string, accessK
   qp.set('X-Amz-Date', datetime)
   qp.set('X-Amz-Expires', String(expiresIn))
   qp.set('X-Amz-SignedHeaders', 'host')
+  if (fileName) {
+    const safeFileName = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '_')
+    qp.set('response-content-disposition', `attachment; filename="${safeFileName}"`)
+  }
   const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
   const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
   const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
@@ -141,7 +145,7 @@ Deno.serve(async (req) => {
       let downloadUrl: string | null = null
       let thumbnailUrl: string | null = null
       if (f.wasabi_key && wKey) {
-        try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion) } catch {}
+        try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion, 14400, f.name) } catch {}
       }
       const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
       if (thumbKey && wKey) {
@@ -185,7 +189,7 @@ Deno.serve(async (req) => {
         let downloadUrl: string | null = null
         let thumbnailUrl: string | null = null
         if (f.wasabi_key && wKey) {
-          try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion) } catch {}
+          try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion, 14400, f.name) } catch {}
         }
         const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
         if (thumbKey && wKey) {

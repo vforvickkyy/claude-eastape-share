@@ -108,7 +108,7 @@ function PageFooter() {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
     }}>
       <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
-        Powered by <strong style={{ color: 'rgba(255,255,255,0.4)' }}>EastapeStudio</strong>
+        Powered by <strong style={{ color: 'rgba(255,255,255,0.4)' }}>Eastape Films</strong>
       </span>
       <div style={{ display: 'flex', gap: 18 }}>
         {[['Privacy Policy', '/privacy'], ['Terms', '/terms']].map(([l, p]) => (

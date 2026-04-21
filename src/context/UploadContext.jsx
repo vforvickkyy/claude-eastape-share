@@ -36,11 +36,19 @@ export function UploadProvider({ children }) {
         updItem(item.id, { progress: 100, status: 'done', speed: null, eta: null })
         item.onItemComplete?.()
       } else {
-        const { uploads: presigned } = await driveFilesApi.presign({
-          files: [{ name: item.name, size: item.size, type: item.file.type || 'application/octet-stream' }],
-          folderId: item.folderId || undefined,
-        })
-        const { presignedUrl, thumbnailPresignedUrl, fileId } = presigned[0]
+        // Use pre-fetched URL if available (batch presign), otherwise fetch individually
+        let presignedUrl, thumbnailPresignedUrl, fileId
+        if (item.presignedUrl) {
+          presignedUrl = item.presignedUrl
+          thumbnailPresignedUrl = item.thumbnailPresignedUrl
+          fileId = item.fileId
+        } else {
+          const { uploads: presigned } = await driveFilesApi.presign({
+            files: [{ name: item.name, size: item.size, type: item.file.type || 'application/octet-stream' }],
+            folderId: item.folderId || undefined,
+          })
+          ;({ presignedUrl, thumbnailPresignedUrl, fileId } = presigned[0])
+        }
 
         await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest()
@@ -136,8 +144,10 @@ export function UploadProvider({ children }) {
 
   function enqueueItems(items) {
     setUploads(prev => [...prev, ...items])
+    let starting = 0
     for (const item of items) {
-      if (activeRef.current < 1) {
+      if (activeRef.current + starting < 1) {
+        starting++
         setTimeout(() => runUpload(item), 0)
       } else {
         queueRef.current.push(item)
@@ -182,7 +192,7 @@ export function UploadProvider({ children }) {
   }
 
   /** Main entry — call from DrivePage with file list + current folder files */
-  function addFiles(files, folderId, existingFiles = [], onComplete) {
+  async function addFiles(files, folderId, existingFiles = [], onComplete) {
     onDoneRef.current = onComplete
     clearTimeout(autoHideTimer.current)
 
@@ -190,7 +200,41 @@ export function UploadProvider({ children }) {
     const dupes  = files.filter(f => existingNames.has(f.name?.toLowerCase()))
     const fresh  = files.filter(f => !existingNames.has(f.name?.toLowerCase()))
 
-    if (fresh.length > 0) enqueueItems(fresh.map(f => makeItem(f, folderId)))
+    if (fresh.length > 0) {
+      const items = fresh.map(f => makeItem(f, folderId))
+
+      // Show items in UI immediately as pending
+      setUploads(prev => [...prev, ...items])
+      setIsMinimized(false)
+
+      // Batch-presign all files in a single edge-function call
+      try {
+        const { uploads: presigned } = await driveFilesApi.presign({
+          files: fresh.map(f => ({ name: f.name, size: f.size, type: f.type || 'application/octet-stream' })),
+          folderId: folderId || undefined,
+        })
+        presigned.forEach((p, i) => {
+          items[i].presignedUrl         = p.presignedUrl
+          items[i].thumbnailPresignedUrl = p.thumbnailPresignedUrl
+          items[i].fileId               = p.fileId
+        })
+      } catch (err) {
+        items.forEach(item => updItem(item.id, { status: 'error', error: 'Upload init failed' }))
+        if (dupes.length > 0) setPendingDuplicates({ files: dupes, folderId, existingFiles })
+        return
+      }
+
+      // Queue items — URLs already in hand, no presign delay per file
+      let starting = 0
+      for (const item of items) {
+        if (activeRef.current + starting < 1) {
+          starting++
+          setTimeout(() => runUpload(item), 0)
+        } else {
+          queueRef.current.push(item)
+        }
+      }
+    }
 
     if (dupes.length > 0) {
       setPendingDuplicates({ files: dupes, folderId, existingFiles })
