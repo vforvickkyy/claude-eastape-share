@@ -310,6 +310,7 @@ export default function DriveSharePage() {
   const [pwErr,     setPwErr]     = useState(false)
   const [pwLoading, setPwLoading] = useState(false)
   const [viewMode,  setViewMode]  = useState('list')
+  const [authPw,    setAuthPw]    = useState(null)  // password used to unlock, kept for subfolder nav
 
   // Unlock body scroll
   useEffect(() => {
@@ -330,6 +331,7 @@ export default function DriveSharePage() {
       setNavData(res)
       setNavStack([])
       setNeedsPw(false)
+      if (pw) setAuthPw(pw)  // remember password for subfolder navigation
     } catch (err) {
       const msg = (err.message || '').toLowerCase()
       if (msg.includes('password')) { setNeedsPw(true); if (pw) setPwErr(true) }
@@ -341,13 +343,13 @@ export default function DriveSharePage() {
   const navigateInto = useCallback(async (folder) => {
     setNavLoading(true)
     try {
-      const res = await shareLinksApi.resolve(token, null, folder.id)
+      const res = await shareLinksApi.resolve(token, authPw, folder.id)
       setNavData(res)
       setNavStack(s => [...s, { id: folder.id, name: folder.name }])
     } catch (err) {
       // silently ignore nav errors — folder might be empty
     } finally { setNavLoading(false) }
-  }, [token])
+  }, [token, authPw])
 
   const navigateTo = useCallback(async (idx) => {
     // idx === -1 → root; otherwise navigate to that breadcrumb
@@ -359,11 +361,11 @@ export default function DriveSharePage() {
     const target = navStack[idx]
     setNavLoading(true)
     try {
-      const res = await shareLinksApi.resolve(token, null, target.id)
+      const res = await shareLinksApi.resolve(token, authPw, target.id)
       setNavData(res)
       setNavStack(s => s.slice(0, idx + 1))
     } catch { } finally { setNavLoading(false) }
-  }, [token, navStack, rootData])
+  }, [token, authPw, navStack, rootData])
 
   // ── Page shell ────────────────────────────────────────────────────────────
   const page = { minHeight: '100vh', background: '#09090f', display: 'flex', flexDirection: 'column' }
