@@ -42,22 +42,25 @@ async function presignViewUrl(endpoint: string, bucket: string, key: string, acc
 }
 
 async function wasabiDelete(endpoint: string, bucket: string, key: string, access: string, secret: string, region: string) {
-  const now = new Date()
-  const date = now.toISOString().slice(0,10).replace(/-/g,'')
-  const datetime = date + 'T' + now.toISOString().slice(11,19).replace(/:/g,'') + 'Z'
-  const host = new URL(endpoint).host
-  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
-  const scope = `${date}/${region}/s3/aws4_request`
-  const canonicalRequest = ['DELETE',`/${bucket}/${encodedKey}`,'',`host:${host}\nx-amz-date:${datetime}\n`,'host;x-amz-date','e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'].join('\n')
-  const hb = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
-  const sts = ['AWS4-HMAC-SHA256',datetime,scope,hex(hb)].join('\n')
-  const kD = await hmac(`AWS4${secret}`,date), kR = await hmac(kD,region), kS = await hmac(kR,'s3'), kSi = await hmac(kS,'aws4_request')
-  const sig = hex(await hmac(kSi,sts))
-  const authHeader = `AWS4-HMAC-SHA256 Credential=${access}/${scope},SignedHeaders=host;x-amz-date,Signature=${sig}`
   try {
+    const now = new Date()
+    const date = now.toISOString().slice(0,10).replace(/-/g,'')
+    const datetime = date + 'T' + now.toISOString().slice(11,19).replace(/:/g,'') + 'Z'
+    const host = new URL(endpoint).host
+    const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+    const scope = `${date}/${region}/s3/aws4_request`
+    const emptyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
+    const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${emptyHash}\nx-amz-date:${datetime}\n`
+    const canonicalRequest = ['DELETE', `/${bucket}/${encodedKey}`, '', canonicalHeaders, signedHeaders, emptyHash].join('\n')
+    const hb = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+    const sts = ['AWS4-HMAC-SHA256', datetime, scope, hex(hb)].join('\n')
+    const kD = await hmac(`AWS4${secret}`, date), kR = await hmac(kD, region), kS = await hmac(kR, 's3'), kSi = await hmac(kS, 'aws4_request')
+    const sig = hex(await hmac(kSi, sts))
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${access}/${scope}, SignedHeaders=${signedHeaders}, Signature=${sig}`
     await fetch(`${endpoint}/${bucket}/${encodedKey}`, {
       method: 'DELETE',
-      headers: { 'Host': host, 'X-Amz-Date': datetime, 'Authorization': authHeader },
+      headers: { 'x-amz-date': datetime, 'x-amz-content-sha256': emptyHash, 'Authorization': authHeader },
     })
   } catch {}
 }
