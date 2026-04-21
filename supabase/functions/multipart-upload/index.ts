@@ -22,7 +22,7 @@ async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer
   return crypto.subtle.sign('HMAC', k, enc.encode(msg))
 }
 
-function toAmzDate(now: Date): { date: string; datetime: string } {
+function isoDate(now: Date) {
   const iso = now.toISOString()
   const date = iso.slice(0, 10).replace(/-/g, '')
   const datetime = date + 'T' + iso.slice(11, 19).replace(/:/g, '') + 'Z'
@@ -36,21 +36,25 @@ async function signingKey(secret: string, date: string, region: string): Promise
   return hmac(kService, 'aws4_request')
 }
 
-/** Presign a GET or PUT for a single object (no body or unsigned body) */
-async function presignUrl(
-  method: 'GET' | 'PUT',
+/**
+ * Generate a presigned URL for any method (GET, PUT, POST, DELETE).
+ * Uses UNSIGNED-PAYLOAD so no body hash is required in the signature.
+ * The actual body (if any) is sent un-signed — Wasabi accepts this for multipart ops.
+ */
+async function presign(
+  method: string,
   endpoint: string, bucket: string, key: string,
   extraQp: Record<string, string>,
   accessKeyId: string, secretAccessKey: string, region: string,
   expiresIn = 3600,
 ): Promise<string> {
   const now = new Date()
-  const { date, datetime } = toAmzDate(now)
+  const { date, datetime } = isoDate(now)
   const host = new URL(endpoint).host
   const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
   const credentialScope = `${date}/${region}/s3/aws4_request`
 
-  const rawQp: Record<string, string> = {
+  const qpObj: Record<string, string> = {
     'X-Amz-Algorithm':    'AWS4-HMAC-SHA256',
     'X-Amz-Credential':   `${accessKeyId}/${credentialScope}`,
     'X-Amz-Date':         datetime,
@@ -59,8 +63,7 @@ async function presignUrl(
     ...extraQp,
   }
 
-  // Sort by percent-encoded key name (AWS4 requirement)
-  const sorted = Object.entries(rawQp).sort(([a], [b]) => {
+  const sorted = Object.entries(qpObj).sort(([a], [b]) => {
     const ea = encodeURIComponent(a), eb = encodeURIComponent(b)
     return ea < eb ? -1 : ea > eb ? 1 : 0
   })
@@ -72,58 +75,6 @@ async function presignUrl(
   const sig = hex(await hmac(kSign, stringToSign))
 
   return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
-}
-
-/** Sign and execute a server-side POST to Wasabi (used for initiate + complete) */
-async function wasabiPost(
-  endpoint: string, bucket: string, key: string,
-  queryString: string,  // e.g. "uploads" or "uploadId=xxx"
-  contentType: string,
-  body: string | null,
-  accessKeyId: string, secretAccessKey: string, region: string,
-): Promise<Response> {
-  const now = new Date()
-  const { date, datetime } = toAmzDate(now)
-  const host = new URL(endpoint).host
-  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
-  const credentialScope = `${date}/${region}/s3/aws4_request`
-
-  const bodyBytes = body ? enc.encode(body) : new Uint8Array(0)
-  const bodyHashBuf = await crypto.subtle.digest('SHA-256', bodyBytes)
-  const bodyHash = hex(bodyHashBuf)
-
-  // Build canonical query string — parse and re-sort the query params
-  const qpPairs = queryString
-    ? queryString.split('&').map(p => {
-        const eq = p.indexOf('=')
-        return eq === -1 ? [p, ''] : [p.slice(0, eq), p.slice(eq + 1)]
-      })
-    : []
-  const sortedQp = qpPairs.sort(([a], [b]) => {
-    const ea = encodeURIComponent(a), eb = encodeURIComponent(b)
-    return ea < eb ? -1 : ea > eb ? 1 : 0
-  })
-  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(decodeURIComponent(k))}=${encodeURIComponent(decodeURIComponent(v))}`).join('&')
-
-  const signedHeaders = 'content-type;host;x-amz-date'
-  const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-amz-date:${datetime}\n`
-  const canonicalRequest = ['POST', `/${bucket}/${encodedKey}`, canonicalQs, canonicalHeaders, signedHeaders, bodyHash].join('\n')
-  const reqHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
-  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(reqHashBuf)].join('\n')
-  const kSign = await signingKey(secretAccessKey, date, region)
-  const sig = hex(await hmac(kSign, stringToSign))
-  const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`
-
-  const sep = queryString ? '?' : ''
-  return fetch(`${endpoint}/${bucket}/${encodedKey}${sep}${queryString}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': contentType,
-      'x-amz-date': datetime,
-      'Authorization': authHeader,
-    },
-    body: body ?? undefined,
-  })
 }
 
 async function getStorageUsage(supabase: any, userId: string) {
@@ -166,6 +117,8 @@ Deno.serve(async (req) => {
     const action = url.searchParams.get('action')
 
     // ── INITIATE ─────────────────────────────────────────────────────────────
+    // Returns: { initiateUrl, fileId, wasabiKey, thumbnailPresignedUrl }
+    // Client calls initiateUrl with POST to get uploadId from Wasabi XML response.
     if (action === 'initiate') {
       if (req.method !== 'POST') return json({ error: 'POST required' }, 405)
       const body = await req.json()
@@ -180,41 +133,30 @@ Deno.serve(async (req) => {
       const ct = mimeType || 'application/octet-stream'
       const safeName = name.replace(/\\/g, '/').split('/').pop()!
         .replace(/[^\w.\-() ]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 255) || 'file'
-      const fileId   = crypto.randomUUID()
-      const ext      = safeName.split('.').pop()?.toLowerCase() || 'bin'
+      const fileId    = crypto.randomUUID()
+      const ext       = safeName.split('.').pop()?.toLowerCase() || 'bin'
       const wasabiKey = `drive/${user.id}/${fileId}.${ext}`
       const isMedia   = ct.startsWith('image/') || ct.startsWith('video/')
       const thumbnailKey = isMedia ? `drive/thumbnails/${fileId}.jpg` : null
 
-      // Initiate multipart upload at Wasabi (signed POST)
-      const initRes = await wasabiPost(ENDPOINT, BUCKET, wasabiKey, 'uploads', ct, null, ACCESS, SECRET, REGION)
-      if (!initRes.ok) {
-        const errText = await initRes.text()
-        return json({ error: `Failed to initiate multipart upload (${initRes.status}): ${errText}` }, 500)
-      }
-      const xmlText = await initRes.text()
-      const uploadIdMatch = xmlText.match(/<UploadId>([^<]+)<\/UploadId>/)
-      if (!uploadIdMatch) return json({ error: 'No UploadId in Wasabi response' }, 500)
-      const uploadId = uploadIdMatch[1]
-
-      // Insert DB record
+      // Insert DB record now (we'll delete it on abort)
       const { error: dbErr } = await supabase.from('drive_files').insert({
         id: fileId, user_id: user.id, folder_id: folderId || null,
         name: safeName, wasabi_key: wasabiKey, file_size: size || 0, mime_type: ct,
         thumbnail_key: thumbnailKey,
       })
-      if (dbErr) {
-        // Abort the zombie multipart upload
-        await wasabiPost(ENDPOINT, BUCKET, wasabiKey, `uploadId=${encodeURIComponent(uploadId)}`, 'application/octet-stream', null, ACCESS, SECRET, REGION)
-        return json({ error: 'DB error: ' + dbErr.message }, 500)
-      }
+      if (dbErr) return json({ error: 'DB error: ' + dbErr.message }, 500)
+
+      // Generate presigned URL for CreateMultipartUpload (POST ?uploads).
+      // Client will POST to this URL and parse the XML to get the uploadId.
+      const initiateUrl = await presign('POST', ENDPOINT, BUCKET, wasabiKey, { 'uploads': '' }, ACCESS, SECRET, REGION, 300)
 
       let thumbnailPresignedUrl: string | null = null
       if (thumbnailKey) {
-        try { thumbnailPresignedUrl = await presignUrl('PUT', ENDPOINT, BUCKET, thumbnailKey, {}, ACCESS, SECRET, REGION) } catch {}
+        try { thumbnailPresignedUrl = await presign('PUT', ENDPOINT, BUCKET, thumbnailKey, {}, ACCESS, SECRET, REGION) } catch {}
       }
 
-      return json({ uploadId, fileId, wasabiKey, thumbnailPresignedUrl })
+      return json({ initiateUrl, fileId, wasabiKey, thumbnailPresignedUrl })
     }
 
     // ── PRESIGN PART ─────────────────────────────────────────────────────────
@@ -227,15 +169,16 @@ Deno.serve(async (req) => {
       const { data: f } = await supabase.from('drive_files').select('user_id').eq('wasabi_key', wasabiKey).single()
       if (!f || f.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
 
-      const partUrl = await presignUrl('PUT', ENDPOINT, BUCKET, wasabiKey, {
+      const partUrl = await presign('PUT', ENDPOINT, BUCKET, wasabiKey, {
         partNumber: String(partNumber),
         uploadId,
-      }, ACCESS, SECRET, REGION)
+      }, ACCESS, SECRET, REGION, 3600)
 
       return json({ partUrl })
     }
 
     // ── COMPLETE ─────────────────────────────────────────────────────────────
+    // Server-side: build and send the CompleteMultipartUpload XML to Wasabi.
     if (action === 'complete') {
       if (req.method !== 'POST') return json({ error: 'POST required' }, 405)
       const { uploadId, wasabiKey, fileId, parts } = await req.json()
@@ -246,20 +189,57 @@ Deno.serve(async (req) => {
 
       const partsXml = (parts as { partNumber: number; etag: string }[])
         .sort((a, b) => a.partNumber - b.partNumber)
-        .map(p => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${p.etag.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}</ETag></Part>`)
+        .map(p => {
+          const etag = p.etag.replace(/"/g, '').replace(/&quot;/g, '')
+          return `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>"${etag}"</ETag></Part>`
+        })
         .join('')
       const completeXml = `<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUpload>${partsXml}</CompleteMultipartUpload>`
 
-      const completeRes = await wasabiPost(
-        ENDPOINT, BUCKET, wasabiKey,
-        `uploadId=${encodeURIComponent(uploadId)}`,
-        'application/xml', completeXml,
-        ACCESS, SECRET, REGION,
+      // Sign the complete POST with Authorization header
+      const now = new Date()
+      const { date, datetime } = isoDate(now)
+      const host = new URL(ENDPOINT).host
+      const encodedKey = wasabiKey.split('/').map((s: string) => encodeURIComponent(s)).join('/')
+      const credentialScope = `${date}/${REGION}/s3/aws4_request`
+      const encodedUploadId = encodeURIComponent(uploadId)
+
+      // Only sign host + x-amz-date (not content-type) to keep it simple
+      const signedHeaderNames = 'host;x-amz-date'
+      const canonicalHeaders  = `host:${host}\nx-amz-date:${datetime}\n`
+      const bodyHash = hex(await crypto.subtle.digest('SHA-256', enc.encode(completeXml)))
+
+      const canonicalRequest = [
+        'POST',
+        `/${BUCKET}/${encodedKey}`,
+        `uploadId=${encodedUploadId}`,
+        canonicalHeaders,
+        signedHeaderNames,
+        bodyHash,
+      ].join('\n')
+
+      const reqHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+      const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(reqHashBuf)].join('\n')
+      const kSign = await signingKey(SECRET, date, REGION)
+      const sig = hex(await hmac(kSign, stringToSign))
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS}/${credentialScope}, SignedHeaders=${signedHeaderNames}, Signature=${sig}`
+
+      const completeRes = await fetch(
+        `${ENDPOINT}/${BUCKET}/${encodedKey}?uploadId=${encodedUploadId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/xml',
+            'x-amz-date': datetime,
+            'Authorization': authHeader,
+          },
+          body: completeXml,
+        },
       )
 
       if (!completeRes.ok) {
         const errText = await completeRes.text()
-        return json({ error: `Failed to complete multipart upload (${completeRes.status}): ${errText}` }, 500)
+        return json({ error: `Complete failed (${completeRes.status}): ${errText}` }, 500)
       }
 
       return json({ ok: true })
@@ -273,30 +253,27 @@ Deno.serve(async (req) => {
 
       if (fileId) {
         const { data: f } = await supabase.from('drive_files').select('user_id').eq('id', fileId).single()
-        if (f?.user_id === user.id) {
-          await supabase.from('drive_files').delete().eq('id', fileId)
-        }
+        if (f?.user_id === user.id) await supabase.from('drive_files').delete().eq('id', fileId)
       }
 
-      // DELETE ?uploadId=xxx aborts the multipart upload in S3
+      // Abort the multipart upload at Wasabi
       try {
         const now = new Date()
-        const { date, datetime } = toAmzDate(now)
+        const { date, datetime } = isoDate(now)
         const host = new URL(ENDPOINT).host
         const encodedKey = wasabiKey.split('/').map((s: string) => encodeURIComponent(s)).join('/')
         const credentialScope = `${date}/${REGION}/s3/aws4_request`
         const encodedUploadId = encodeURIComponent(uploadId)
-        const canonicalQs = `uploadId=${encodedUploadId}`
-        const signedHeaders = 'host;x-amz-date'
-        const canonicalHeaders = `host:${host}\nx-amz-date:${datetime}\n`
+        const signedHeaderNames = 'host;x-amz-date'
+        const canonicalHeaders  = `host:${host}\nx-amz-date:${datetime}\n`
         const emptyHash = hex(await crypto.subtle.digest('SHA-256', new Uint8Array(0)))
-        const canonicalRequest = ['DELETE', `/${BUCKET}/${encodedKey}`, canonicalQs, canonicalHeaders, signedHeaders, emptyHash].join('\n')
+        const canonicalRequest = ['DELETE', `/${BUCKET}/${encodedKey}`, `uploadId=${encodedUploadId}`, canonicalHeaders, signedHeaderNames, emptyHash].join('\n')
         const reqHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
         const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(reqHashBuf)].join('\n')
         const kSign = await signingKey(SECRET, date, REGION)
         const sig = hex(await hmac(kSign, stringToSign))
-        const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`
-        await fetch(`${ENDPOINT}/${BUCKET}/${encodedKey}?${canonicalQs}`, {
+        const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS}/${credentialScope}, SignedHeaders=${signedHeaderNames}, Signature=${sig}`
+        await fetch(`${ENDPOINT}/${BUCKET}/${encodedKey}?uploadId=${encodedUploadId}`, {
           method: 'DELETE',
           headers: { 'x-amz-date': datetime, 'Authorization': authHeader },
         })

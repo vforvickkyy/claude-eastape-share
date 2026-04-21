@@ -39,12 +39,12 @@ export function UploadProvider({ children }) {
         updItem(item.id, { progress: 100, status: 'done', speed: null, eta: null })
         item.onItemComplete?.()
       } else if (item.size > MULTIPART_THRESHOLD) {
-        // ── Multipart upload (files > 100 MB) ────────────────────────────────
-        let uploadId, wasabiKey, fileId, thumbnailPresignedUrl
+        // ── Multipart upload (files > 4.9 GB) ────────────────────────────────
+        let initiateUrl, wasabiKey, fileId, thumbnailPresignedUrl
 
-        if (item.uploadId) {
-          // Pre-fetched during batch presign
-          uploadId             = item.uploadId
+        if (item.initiateUrl) {
+          // Pre-fetched during batch initiate
+          initiateUrl          = item.initiateUrl
           wasabiKey            = item.wasabiKey
           fileId               = item.fileId
           thumbnailPresignedUrl = item.thumbnailPresignedUrl
@@ -54,11 +54,22 @@ export function UploadProvider({ children }) {
             type: item.file.type || 'application/octet-stream',
             folderId: item.folderId || undefined,
           })
-          uploadId             = res.uploadId
+          initiateUrl          = res.initiateUrl
           wasabiKey            = res.wasabiKey
           fileId               = res.fileId
           thumbnailPresignedUrl = res.thumbnailPresignedUrl
         }
+
+        // POST the presigned initiate URL directly to Wasabi to get the uploadId
+        const initRes = await fetch(initiateUrl, { method: 'POST' })
+        if (!initRes.ok) {
+          const errText = await initRes.text()
+          throw new Error(`Multipart init failed (${initRes.status}): ${errText}`)
+        }
+        const initXml = await initRes.text()
+        const uploadIdMatch = initXml.match(/<UploadId>([^<]+)<\/UploadId>/)
+        if (!uploadIdMatch) throw new Error('No UploadId in Wasabi response')
+        const uploadId = uploadIdMatch[1]
 
         const totalParts = Math.ceil(item.size / PART_SIZE)
         const parts = []
@@ -344,14 +355,15 @@ export function UploadProvider({ children }) {
           ))
           mpResults.forEach((res, i) => {
             const item = items[fresh.indexOf(largeFiles[i])]
-            item.uploadId              = res.uploadId
+            item.initiateUrl           = res.initiateUrl
             item.wasabiKey             = res.wasabiKey
             item.fileId                = res.fileId
             item.thumbnailPresignedUrl = res.thumbnailPresignedUrl
           })
         }
       } catch (err) {
-        items.forEach(item => updItem(item.id, { status: 'error', error: 'Upload init failed' }))
+        const msg = err?.message || 'Upload init failed'
+        items.forEach(item => updItem(item.id, { status: 'error', error: msg }))
         if (dupes.length > 0) setPendingDuplicates({ files: dupes, folderId, existingFiles })
         return
       }
@@ -400,9 +412,9 @@ export function UploadProvider({ children }) {
   function cancelUpload(id) {
     xhrRefs.current[id]?.abort()
     queueRef.current = queueRef.current.filter(i => {
-      if (i.id === id && i.uploadId) {
-        // Abort multipart on server (fire-and-forget)
-        driveFilesApi.multipartAbort({ uploadId: i.uploadId, wasabiKey: i.wasabiKey, fileId: i.fileId }).catch(() => {})
+      if (i.id === id && i.fileId && i.wasabiKey) {
+        // If initiate was already called, clean up the DB record and any in-progress multipart
+        driveFilesApi.multipartAbort({ uploadId: '', wasabiKey: i.wasabiKey, fileId: i.fileId }).catch(() => {})
       }
       return i.id !== id
     })
