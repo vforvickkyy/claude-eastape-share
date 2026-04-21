@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react'
 import { driveFilesApi } from '../lib/api'
 
-const MULTIPART_THRESHOLD = 100 * 1024 * 1024   // 100 MB — use multipart above this
-const PART_SIZE           = 100 * 1024 * 1024   // 100 MB per part (max 10 000 parts → 1 TB)
+const MULTIPART_THRESHOLD = 4.9 * 1024 * 1024 * 1024  // 4.9 GB — use multipart only when single PUT would fail
+const PART_SIZE           = 100 * 1024 * 1024          // 100 MB per part
 
 const UploadContext = createContext(null)
 
