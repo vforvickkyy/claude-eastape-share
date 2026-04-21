@@ -254,6 +254,11 @@ export const driveFilesApi = {
   getTrash:        ()               => get(`${BASE}/drive-files`, { action: 'trash' }, true),
   getStorageUsage: ()               => get(`${BASE}/drive-files`, { action: 'storage_usage' }, true),
   search:          (query)          => get(`${BASE}/drive-files`, { action: 'search', query }, true),
+  // Multipart upload (for files > 100 MB)
+  multipartInitiate:   (body)                  => post(`${BASE}/multipart-upload?action=initiate`, body, true),
+  multipartPresignPart:(body)                  => post(`${BASE}/multipart-upload?action=presign-part`, body, true),
+  multipartComplete:   (body)                  => post(`${BASE}/multipart-upload?action=complete`, body, true),
+  multipartAbort:      (body)                  => post(`${BASE}/multipart-upload?action=abort`, body, true),
 }
 
 // ── Drive Folders ──────────────────────────────────────────────────

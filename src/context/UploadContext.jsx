@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react'
 import { driveFilesApi } from '../lib/api'
 
+const MULTIPART_THRESHOLD = 100 * 1024 * 1024   // 100 MB — use multipart above this
+const PART_SIZE           = 100 * 1024 * 1024   // 100 MB per part (max 10 000 parts → 1 TB)
+
 const UploadContext = createContext(null)
 
 export function UploadProvider({ children }) {
@@ -35,7 +38,111 @@ export function UploadProvider({ children }) {
         await item.uploadFn((pct) => updItem(item.id, { progress: pct }))
         updItem(item.id, { progress: 100, status: 'done', speed: null, eta: null })
         item.onItemComplete?.()
+      } else if (item.size > MULTIPART_THRESHOLD) {
+        // ── Multipart upload (files > 100 MB) ────────────────────────────────
+        let uploadId, wasabiKey, fileId, thumbnailPresignedUrl
+
+        if (item.uploadId) {
+          // Pre-fetched during batch presign
+          uploadId             = item.uploadId
+          wasabiKey            = item.wasabiKey
+          fileId               = item.fileId
+          thumbnailPresignedUrl = item.thumbnailPresignedUrl
+        } else {
+          const res = await driveFilesApi.multipartInitiate({
+            name: item.name, size: item.size,
+            type: item.file.type || 'application/octet-stream',
+            folderId: item.folderId || undefined,
+          })
+          uploadId             = res.uploadId
+          wasabiKey            = res.wasabiKey
+          fileId               = res.fileId
+          thumbnailPresignedUrl = res.thumbnailPresignedUrl
+        }
+
+        const totalParts = Math.ceil(item.size / PART_SIZE)
+        const parts = []
+        let totalUploaded = 0
+        let lastLoaded = 0, lastTime = 0, emaSpeed = 0
+
+        for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+          // Check if cancelled
+          if (!xhrRefs.current[item.id] && xhrRefs.current[item.id] !== undefined) break
+
+          const start  = (partNumber - 1) * PART_SIZE
+          const end    = Math.min(start + PART_SIZE, item.size)
+          const chunk  = item.file.slice(start, end)
+
+          const { partUrl } = await driveFilesApi.multipartPresignPart({ uploadId, wasabiKey, partNumber })
+
+          const etag = await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest()
+            xhrRefs.current[item.id] = xhr
+
+            xhr.upload.onprogress = (e) => {
+              if (!e.lengthComputable) return
+              const now = Date.now()
+              const partLoaded = totalUploaded + e.loaded
+              const pct = Math.round(partLoaded / item.size * 100)
+
+              if (lastTime === 0) { lastLoaded = partLoaded; lastTime = now; updItem(item.id, { progress: pct }); return }
+              const dt = (now - lastTime) / 1000
+              if (dt >= 0.3) {
+                const instant = (partLoaded - lastLoaded) / dt
+                emaSpeed = emaSpeed === 0 ? instant : emaSpeed * 0.6 + instant * 0.4
+                lastLoaded = partLoaded; lastTime = now
+                const bytesLeft = item.size - partLoaded
+                const eta = emaSpeed > 0 ? Math.ceil(bytesLeft / emaSpeed) : null
+                updItem(item.id, { progress: pct, speed: Math.round(emaSpeed), eta })
+              } else {
+                updItem(item.id, { progress: pct })
+              }
+            }
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(xhr.getResponseHeader('ETag') || '')
+              } else {
+                reject(new Error(`Part ${partNumber} failed (HTTP ${xhr.status})`))
+              }
+            }
+            xhr.onerror = () => reject(new Error('Network error'))
+            xhr.onabort = () => reject(new Error('cancelled'))
+            xhr.open('PUT', partUrl)
+            // Don't set Content-Type — it's not in SignedHeaders and some S3 implementations reject it
+            xhr.send(chunk)
+          })
+
+          totalUploaded += (end - start)
+          parts.push({ partNumber, etag })
+        }
+
+        // Complete the multipart upload
+        await driveFilesApi.multipartComplete({ uploadId, wasabiKey, fileId, parts })
+        updItem(item.id, { progress: 100, status: 'done', speed: null, eta: null })
+
+        // Thumbnail (non-blocking)
+        if (thumbnailPresignedUrl && fileId) {
+          const mime = item.file.type || ''
+          if (mime.startsWith('image/') || mime.startsWith('video/')) {
+            import('../lib/mediaUpload').then(async ({ generateVideoThumbnail, generateImageThumbnail }) => {
+              try {
+                const base64 = mime.startsWith('video/')
+                  ? await generateVideoThumbnail(item.file)
+                  : await generateImageThumbnail(item.file)
+                if (base64) {
+                  const byteStr = atob(base64.split(',')[1])
+                  const arr = new Uint8Array(byteStr.length)
+                  for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i)
+                  const blob = new Blob([arr], { type: 'image/jpeg' })
+                  await fetch(thumbnailPresignedUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
+                }
+              } catch {}
+            }).catch(() => {})
+          }
+        }
+
       } else {
+        // ── Single PUT upload (files ≤ 100 MB) ───────────────────────────────
         // Use pre-fetched URL if available (batch presign), otherwise fetch individually
         let presignedUrl, thumbnailPresignedUrl, fileId
         if (item.presignedUrl) {
@@ -207,17 +314,42 @@ export function UploadProvider({ children }) {
       setUploads(prev => [...prev, ...items])
       setIsMinimized(false)
 
-      // Batch-presign all files in a single edge-function call
+      // Batch-presign/initiate all files
       try {
-        const { uploads: presigned } = await driveFilesApi.presign({
-          files: fresh.map(f => ({ name: f.name, size: f.size, type: f.type || 'application/octet-stream' })),
-          folderId: folderId || undefined,
-        })
-        presigned.forEach((p, i) => {
-          items[i].presignedUrl         = p.presignedUrl
-          items[i].thumbnailPresignedUrl = p.thumbnailPresignedUrl
-          items[i].fileId               = p.fileId
-        })
+        const smallFiles = fresh.filter(f => f.size <= MULTIPART_THRESHOLD)
+        const largeFiles = fresh.filter(f => f.size >  MULTIPART_THRESHOLD)
+
+        // Single presign call for all small files
+        if (smallFiles.length > 0) {
+          const { uploads: presigned } = await driveFilesApi.presign({
+            files: smallFiles.map(f => ({ name: f.name, size: f.size, type: f.type || 'application/octet-stream' })),
+            folderId: folderId || undefined,
+          })
+          presigned.forEach((p, i) => {
+            const item = items[fresh.indexOf(smallFiles[i])]
+            item.presignedUrl          = p.presignedUrl
+            item.thumbnailPresignedUrl = p.thumbnailPresignedUrl
+            item.fileId                = p.fileId
+          })
+        }
+
+        // Initiate multipart for each large file (parallel)
+        if (largeFiles.length > 0) {
+          const mpResults = await Promise.all(largeFiles.map(f =>
+            driveFilesApi.multipartInitiate({
+              name: f.name, size: f.size,
+              type: f.type || 'application/octet-stream',
+              folderId: folderId || undefined,
+            })
+          ))
+          mpResults.forEach((res, i) => {
+            const item = items[fresh.indexOf(largeFiles[i])]
+            item.uploadId              = res.uploadId
+            item.wasabiKey             = res.wasabiKey
+            item.fileId                = res.fileId
+            item.thumbnailPresignedUrl = res.thumbnailPresignedUrl
+          })
+        }
       } catch (err) {
         items.forEach(item => updItem(item.id, { status: 'error', error: 'Upload init failed' }))
         if (dupes.length > 0) setPendingDuplicates({ files: dupes, folderId, existingFiles })
@@ -267,7 +399,13 @@ export function UploadProvider({ children }) {
 
   function cancelUpload(id) {
     xhrRefs.current[id]?.abort()
-    queueRef.current = queueRef.current.filter(i => i.id !== id)
+    queueRef.current = queueRef.current.filter(i => {
+      if (i.id === id && i.uploadId) {
+        // Abort multipart on server (fire-and-forget)
+        driveFilesApi.multipartAbort({ uploadId: i.uploadId, wasabiKey: i.wasabiKey, fileId: i.fileId }).catch(() => {})
+      }
+      return i.id !== id
+    })
     updItem(id, { status: 'cancelled' })
   }
 
