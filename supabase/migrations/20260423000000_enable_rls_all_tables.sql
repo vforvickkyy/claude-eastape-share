@@ -114,21 +114,21 @@ DO $$ BEGIN
 END $$;
 
 -- ── pipeline_cells (if exists) ────────────────────────────────────
-ALTER TABLE IF EXISTS pipeline_cells ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='pipeline_cells' AND policyname='pipeline_cells_owner') THEN
-    CREATE POLICY "pipeline_cells_owner" ON pipeline_cells FOR ALL USING (
-      EXISTS (SELECT 1 FROM projects WHERE id = project_id AND user_id = auth.uid())
-    );
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='pipeline_cells') THEN
+    EXECUTE 'ALTER TABLE pipeline_cells ENABLE ROW LEVEL SECURITY';
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='pipeline_cells' AND policyname='pipeline_cells_owner') THEN
+      EXECUTE 'CREATE POLICY "pipeline_cells_owner" ON pipeline_cells FOR ALL USING (EXISTS (SELECT 1 FROM projects WHERE id = project_id AND user_id = auth.uid()))';
+    END IF;
   END IF;
 END $$;
 
 -- ── pipeline_columns (if exists) ──────────────────────────────────
-ALTER TABLE IF EXISTS pipeline_columns ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='pipeline_columns' AND policyname='pipeline_columns_owner') THEN
-    CREATE POLICY "pipeline_columns_owner" ON pipeline_columns FOR ALL USING (
-      EXISTS (SELECT 1 FROM projects WHERE id = project_id AND user_id = auth.uid())
-    );
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='pipeline_columns') THEN
+    EXECUTE 'ALTER TABLE pipeline_columns ENABLE ROW LEVEL SECURITY';
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='pipeline_columns' AND policyname='pipeline_columns_owner') THEN
+      EXECUTE 'CREATE POLICY "pipeline_columns_owner" ON pipeline_columns FOR ALL USING (EXISTS (SELECT 1 FROM projects WHERE id = project_id AND user_id = auth.uid()))';
+    END IF;
   END IF;
 END $$;
