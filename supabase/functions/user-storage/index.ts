@@ -21,23 +21,16 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-    // ── 1. Drive bytes (shares not trashed, not storage-deleted) ─────────────
-    const { data: driveData } = await supabase
-      .from('shares')
-      .select('file_size')
-      .eq('user_id', user.id)
-      .eq('is_trashed', false)
-      .eq('storage_deleted', false)
+    // ── 1. Storage bytes across all tables ───────────────────────────────────
+    const [driveRes, projectFilesRes, projectMediaRes] = await Promise.all([
+      supabase.from('drive_files').select('file_size').eq('user_id', user.id).eq('is_trashed', false),
+      supabase.from('project_files').select('file_size').eq('user_id', user.id).eq('is_trashed', false),
+      supabase.from('project_media').select('file_size').eq('user_id', user.id).eq('is_trashed', false),
+    ])
 
-    const drive_bytes = (driveData || []).reduce((sum: number, r: any) => sum + (r.file_size || 0), 0)
-
-    // ── 2. Media bytes (all assets for this user) ─────────────────────────────
-    const { data: mediaData } = await supabase
-      .from('media_assets')
-      .select('file_size')
-      .eq('user_id', user.id)
-
-    const media_bytes = (mediaData || []).reduce((sum: number, r: any) => sum + (r.file_size || 0), 0)
+    const drive_bytes = (driveRes.data || []).reduce((sum: number, r: any) => sum + (r.file_size || 0), 0)
+    const media_bytes = (projectFilesRes.data || []).reduce((sum: number, r: any) => sum + (r.file_size || 0), 0)
+                      + (projectMediaRes.data || []).reduce((sum: number, r: any) => sum + (r.file_size || 0), 0)
 
     const used_bytes = drive_bytes + media_bytes
 
