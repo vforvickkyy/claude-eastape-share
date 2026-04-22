@@ -1,0 +1,2 @@
+[functions.share-links]
+verify_jwt = false

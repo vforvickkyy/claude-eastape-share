@@ -109,8 +109,14 @@ export function AuthProvider({ children }) {
     init();
 
     // Listen for Supabase auth events (Google OAuth callback writes session via supabase.auth)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
+      if (event === 'SIGNED_OUT') {
+        saveSession(null);
+        setUser(null);
+        setProfile(null);
+        return;
+      }
       if (session?.user) {
         // Only update if we don't already have this user (avoids overwriting richer session)
         setUser(prev => {
@@ -183,6 +189,7 @@ export function AuthProvider({ children }) {
     saveSession(null);
     setUser(null);
     setProfile(null);
+    supabase.auth.signOut().catch(() => {});
   }
 
   return (
