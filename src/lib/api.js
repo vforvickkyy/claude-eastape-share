@@ -288,12 +288,12 @@ export const shareLinksApi = {
   createForDriveFolder: (driveFolderId, opts={}) => post(`${BASE}/share-links`, { drive_folder_id: driveFolderId, allow_download: true, ...opts }, true),
   getOrCreateForDriveFile:   async (fileId,   opts={}) => {
     const res = await get(`${BASE}/share-links`, { driveFileId: fileId }, true)
-    if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].token}` }
+    if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].short_token || res.links[0].token}` }
     return post(`${BASE}/share-links`, { drive_file_id: fileId, allow_download: true, ...opts }, true)
   },
   getOrCreateForDriveFolder: async (folderId, opts={}) => {
     const res = await get(`${BASE}/share-links`, { driveFolderId: folderId }, true)
-    if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].token}` }
+    if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].short_token || res.links[0].token}` }
     return post(`${BASE}/share-links`, { drive_folder_id: folderId, allow_download: true, ...opts }, true)
   },
 }

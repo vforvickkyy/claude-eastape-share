@@ -53,13 +53,13 @@ export default function ProjectSharingPage() {
   }
 
   async function copyLink(link) {
-    const url = `${window.location.origin}/share/${link.token}`;
+    const url = `${window.location.origin}/share/${link.short_token || link.token}`;
     await navigator.clipboard.writeText(url).catch(() => {});
     setCopied(link.id);
     setTimeout(() => setCopied(null), 2000);
   }
 
-  const shareUrl = (link) => `${window.location.origin}/share/${link.token}`;
+  const shareUrl = (link) => `${window.location.origin}/share/${link.short_token || link.token}`;
 
   return (
     <div className="project-sharing-tab">

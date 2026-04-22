@@ -56,7 +56,7 @@ export default function ShareModal({ item, onClose }) {
         const existing = res.links?.[0]
         if (existing) {
           setLink(existing)
-          setShareUrl(`${window.location.origin}/share/${existing.token}`)
+          setShareUrl(`${window.location.origin}/share/${existing.short_token || existing.token}`)
           setAllowDownload(existing.allow_download ?? true)
           if (existing.password) setPwMode(true)
         }
@@ -96,7 +96,7 @@ export default function ShareModal({ item, onClose }) {
           ? await shareLinksApi.createForDriveFile(item.id, opts)
           : await shareLinksApi.createForDriveFolder(item.id, opts)
         setLink(res.link)
-        setShareUrl(`${window.location.origin}/share/${res.link.token}`)
+        setShareUrl(`${window.location.origin}/share/${res.link.short_token || res.link.token}`)
         showToast('Share link created', 'success')
       }
     } catch (err) {

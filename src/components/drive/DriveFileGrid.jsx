@@ -35,7 +35,7 @@ async function quickCopyLink(target, isFolder) {
     const data = isFolder
       ? await shareLinksApi.createForDriveFolder(target.id, opts)
       : await shareLinksApi.createForDriveFile(target.id, opts)
-    const url = `${window.location.origin}/share/${data.link.token}`
+    const url = `${window.location.origin}/share/${data.link.short_token || data.link.token}`
     await navigator.clipboard.writeText(url)
     return true
   } catch {

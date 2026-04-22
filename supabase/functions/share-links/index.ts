@@ -11,6 +11,12 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
+const SHORT_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789'
+function makeShortToken(len = 8): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(len))
+  return Array.from(bytes).map(b => SHORT_CHARS[b % SHORT_CHARS.length]).join('')
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -59,6 +65,7 @@ Deno.serve(async (req) => {
         allow_comments: allow_comments ?? false,
         access_type: access_type || 'anyone',
         password: password || null, expires_at: expires_at || null,
+        short_token: makeShortToken(),
       }).select().single()
       if (error) return json({ error: error.message }, 500)
 

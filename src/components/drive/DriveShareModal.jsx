@@ -91,7 +91,7 @@ export default function DriveShareModal({ target, onClose }) {
   }
 
   function copyLink(link) {
-    const url = `${SITE}/share/${link.token}`
+    const url = `${SITE}/share/${link.short_token || link.token}`
     navigator.clipboard.writeText(url).catch(() => {})
     setCopied(link.id)
     setTimeout(() => setCopied(null), 2000)
@@ -197,7 +197,7 @@ export default function DriveShareModal({ target, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {links.map(link => {
                 const expired = link.expires_at && new Date(link.expires_at) < new Date()
-                const shareUrl = `${SITE}/share/${link.token}`
+                const shareUrl = `${SITE}/share/${link.short_token || link.token}`
                 return (
                   <div
                     key={link.id}

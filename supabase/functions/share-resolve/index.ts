@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     const { data: link, error } = await supabase
       .from('share_links')
       .select('*, project_media(*), projects(id, name, color, icon), drive_files(id, name, mime_type, file_size, wasabi_key, thumbnail_key), drive_folders(id, name)')
-      .eq('token', token)
+      .or(`token.eq.${token},short_token.eq.${token}`)
       .single()
 
     if (error || !link) return json({ error: 'Share link not found' }, 404)

@@ -639,7 +639,7 @@ export default function DrivePage() {
   async function copyLink(file) {
     try {
       const data = await shareLinksApi.getOrCreateForDriveFile(file.id, { file_name: file.name })
-      const url = `${window.location.origin}/share/${data.link.token}`
+      const url = `${window.location.origin}/share/${data.link.short_token || data.link.token}`
       await navigator.clipboard.writeText(url)
       showToast('Link copied to clipboard', 'success')
     } catch {
@@ -649,7 +649,7 @@ export default function DrivePage() {
   async function copyFolderLink(folder) {
     try {
       const data = await shareLinksApi.getOrCreateForDriveFolder(folder.id, { file_name: folder.name })
-      const url = `${window.location.origin}/share/${data.link.token}`
+      const url = `${window.location.origin}/share/${data.link.short_token || data.link.token}`
       await navigator.clipboard.writeText(url)
       showToast('Folder link copied to clipboard', 'success')
     } catch {
