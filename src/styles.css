@@ -5486,3 +5486,67 @@ body { overflow-x: hidden; }
   .share-file-row-meta { display: none; }
   .share-file-row-name { font-size: 12px; }
 }
+
+/* ── Project Files — Sort, Drag, Rubber-band ────────────────────── */
+
+/* Sort button + dropdown */
+.ufiles-sort-wrap { position: relative; }
+.ufiles-sort-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 8px; height: 30px; border-radius: var(--r-sm);
+  font-size: 12px; color: var(--t2); white-space: nowrap;
+}
+.ufiles-sort-btn.active { background: var(--bg3); color: var(--t1); }
+.ufiles-sort-label { font-size: 12px; }
+.ufiles-sort-menu {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: var(--bg2); border: 1px solid var(--bd);
+  border-radius: var(--r-md); padding: 4px; min-width: 110px;
+  z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.ufiles-sort-menu button {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 6px 8px; border-radius: var(--r-sm);
+  font-size: 12px; color: var(--t2); background: none; border: none;
+  cursor: pointer; transition: background 0.12s;
+}
+.ufiles-sort-menu button:hover { background: var(--bg3); color: var(--t1); }
+.ufiles-sort-menu button.active { color: var(--purple-l); }
+.mpv-list-sortable { display: flex; align-items: center; gap: 2px; }
+.mpv-list-sortable.sort-active { color: var(--t1); }
+
+/* Drag-to-folder */
+.ufile-card.drag-over {
+  outline: 2px solid var(--purple-l);
+  outline-offset: -2px;
+  background: rgba(139,92,246,0.12);
+}
+.ufile-folder-card.drag-over .ufile-folder-thumb { background: rgba(245,158,11,0.1); }
+.ufile-card.dragging { opacity: 0.45; }
+.mpv-list-row.drag-over { background: rgba(139,92,246,0.1); outline: 1px solid var(--purple-l); border-radius: var(--r-sm); }
+.mpv-list-row.dragging { opacity: 0.45; }
+.mpv-list-row.selected { background: rgba(139,92,246,0.08); }
+
+/* Rubber-band selection rect */
+.rubber-band-select {
+  border: 1.5px solid var(--purple-l);
+  background: rgba(139,92,246,0.1);
+  border-radius: 3px;
+}
+
+/* Bulk move dropdown */
+.bulk-move-wrap { position: relative; }
+.bulk-move-menu {
+  position: absolute; top: calc(100% + 4px); left: 0;
+  background: var(--bg2); border: 1px solid var(--bd);
+  border-radius: var(--r-md); padding: 4px; min-width: 140px;
+  max-height: 220px; overflow-y: auto;
+  z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.bulk-move-menu button {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 6px 8px; border-radius: var(--r-sm);
+  font-size: 12px; color: var(--t2); background: none; border: none;
+  cursor: pointer; transition: background 0.12s; text-align: left;
+}
+.bulk-move-menu button:hover { background: var(--bg3); color: var(--t1); }

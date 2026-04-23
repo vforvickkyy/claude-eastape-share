@@ -3,10 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   UploadSimple, FolderSimplePlus, MagnifyingGlass, Rows, SquaresFour,
-  File, FileVideo, FileImage, FileAudio, FolderOpen,
+  File, FileVideo, FileImage, FileAudio, FolderOpen, FolderSimple,
   Trash, PencilSimple, DownloadSimple, CheckCircle, X,
   CaretRight, House, Play, ArrowLeft, ArrowRight,
   CheckSquare, Square, Copy, Tag, CaretRight as ChevronRight,
+  ArrowsDownUp, ArrowUp, ArrowDown,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
@@ -33,6 +34,13 @@ const TYPE_FILTERS = [
   { key: "document", label: "Document" },
 ];
 
+const SORT_FIELDS = [
+  { key: "created_at", label: "Date" },
+  { key: "name",       label: "Name" },
+  { key: "size",       label: "Size" },
+  { key: "type",       label: "Type" },
+];
+
 function getType(item) {
   const mime = (item.mime_type || "").toLowerCase();
   if (mime.startsWith("video/") || item.type === "video") return "video";
@@ -49,6 +57,19 @@ function TypeIcon({ item, size = 18 }) {
   return <File size={size} weight="duotone" style={{ color: "var(--t3)" }} />;
 }
 
+function sortItems(items, field, dir) {
+  return [...items].sort((a, b) => {
+    let va, vb;
+    if (field === "name")  { va = (a.name || "").toLowerCase(); vb = (b.name || "").toLowerCase(); }
+    else if (field === "size") { va = a.file_size || 0; vb = b.file_size || 0; }
+    else if (field === "type") { va = getType(a); vb = getType(b); }
+    else { va = new Date(a.created_at || 0).getTime(); vb = new Date(b.created_at || 0).getTime(); }
+    if (va < vb) return dir === "asc" ? -1 : 1;
+    if (va > vb) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+}
+
 export default function ProjectFilesPage() {
   const { user } = useAuth();
   const { canEdit, canDelete, canDownload } = useProject();
@@ -57,6 +78,7 @@ export default function ProjectFilesPage() {
 
   const [items,         setItems]         = useState([]);
   const [folders,       setFolders]       = useState([]);
+  const [allFolders,    setAllFolders]    = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState("");
   const [typeFilter,    setTypeFilter]    = useState("all");
@@ -65,13 +87,23 @@ export default function ProjectFilesPage() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [selected,      setSelected]      = useState(new Set());
-  const [renameItem,    setRenameItem]    = useState(null);   // { id, name, _type: 'file'|'folder' }
+  const [renameItem,    setRenameItem]    = useState(null);
   const [renameVal,     setRenameVal]     = useState("");
   const [copied,        setCopied]        = useState(null);
 
+  // Sort
+  const [sortField,     setSortField]     = useState("created_at");
+  const [sortDir,       setSortDir]       = useState("desc");
+  const [showSortMenu,  setShowSortMenu]  = useState(false);
+
+  // Drag-to-folder
+  const [draggingItem,    setDraggingItem]    = useState(null); // { id, item, isFolder }
+  const [dragOverFolder,  setDragOverFolder]  = useState(null); // folder id being hovered
+
   // Context menu
-  const [ctxMenu, setCtxMenu] = useState(null); // { x, y, item, isFolder }
+  const [ctxMenu,   setCtxMenu]   = useState(null);
   const [statusSub, setStatusSub] = useState(false);
+  const [moveSub,   setMoveSub]   = useState(false);
   const ctxRef = useRef(null);
 
   // Preview state
@@ -80,6 +112,11 @@ export default function ProjectFilesPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const videoRef = useRef(null);
 
+  // Rubber-band selection
+  const [rubberBand, setRubberBand] = useState(null); // { x, y, w, h } in viewport coords
+  const rbStart     = useRef(null);
+  const gridRef     = useRef(null);
+
   const load = useCallback(() => {
     if (!user || !projectId) return;
     setLoading(true);
@@ -87,7 +124,11 @@ export default function ProjectFilesPage() {
     const fd = folderId || null;
     Promise.all([
       projectFoldersApi.list(projectId)
-        .then(d => (d.folders || []).filter(f => (f.parent_id || null) === fd))
+        .then(d => {
+          const all = d.folders || [];
+          setAllFolders(all);
+          return all.filter(f => (f.parent_id || null) === fd);
+        })
         .catch(() => []),
       projectMediaApi.list({ projectId, folderId: folderId || "root" })
         .then(d => (d.assets || []).map(a => ({ ...a, _source: "media" })))
@@ -97,18 +138,14 @@ export default function ProjectFilesPage() {
         .catch(() => []),
     ]).then(([fo, media, files]) => {
       setFolders(fo);
-      const merged = [...media, ...files].sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
-      );
-      setItems(merged);
+      setItems([...media, ...files]);
     }).finally(() => setLoading(false));
   }, [user, projectId, folderId]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Close context menu on outside click / scroll
   useEffect(() => {
-    function close() { setCtxMenu(null); setStatusSub(false); }
+    function close() { setCtxMenu(null); setStatusSub(false); setMoveSub(false); setShowSortMenu(false); }
     document.addEventListener("click", close);
     document.addEventListener("scroll", close, true);
     return () => {
@@ -120,15 +157,122 @@ export default function ProjectFilesPage() {
   function openCtxMenu(e, item, isFolder = false) {
     e.preventDefault();
     e.stopPropagation();
-    const x = Math.min(e.clientX, window.innerWidth - 200);
-    const y = Math.min(e.clientY, window.innerHeight - 250);
+    const x = Math.min(e.clientX, window.innerWidth - 220);
+    const y = Math.min(e.clientY, window.innerHeight - 320);
     setCtxMenu({ x, y, item, isFolder });
     setStatusSub(false);
+    setMoveSub(false);
   }
 
-  function closeCtx() { setCtxMenu(null); setStatusSub(false); }
+  function closeCtx() { setCtxMenu(null); setStatusSub(false); setMoveSub(false); }
 
-  // Preview
+  // ── Sort ────────────────────────────────────────────────────────────
+  function handleSortField(field) {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir(field === "created_at" ? "desc" : "asc"); }
+    setShowSortMenu(false);
+  }
+
+  // ── Move to folder ──────────────────────────────────────────────────
+  async function handleMoveToFolder(item, targetFolderId, isFolder = false) {
+    try {
+      if (isFolder) {
+        if (item.id === targetFolderId) return;
+        await projectFoldersApi.update(item.id, { parent_id: targetFolderId || null });
+      } else {
+        if (item._source === "media") await projectMediaApi.update(item.id, { folder_id: targetFolderId || null });
+        else await projectFilesApi.update(item.id, { folder_id: targetFolderId || null });
+      }
+      load();
+    } catch {}
+    closeCtx();
+  }
+
+  // ── Drag-to-folder ──────────────────────────────────────────────────
+  function handleDragStart(e, item, isFolder = false) {
+    e.dataTransfer.effectAllowed = "move";
+    setDraggingItem({ id: item.id, item, isFolder });
+  }
+
+  function handleDragEnd() {
+    setDraggingItem(null);
+    setDragOverFolder(null);
+  }
+
+  function handleFolderDragOver(e, folderId) {
+    if (!draggingItem || draggingItem.id === folderId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolder(folderId);
+  }
+
+  function handleFolderDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverFolder(null);
+    }
+  }
+
+  async function handleFolderDrop(e, targetFolderId) {
+    e.preventDefault();
+    if (!draggingItem || draggingItem.id === targetFolderId) return;
+    setDragOverFolder(null);
+    await handleMoveToFolder(draggingItem.item, targetFolderId, draggingItem.isFolder);
+    setDraggingItem(null);
+  }
+
+  // ── Rubber-band selection ───────────────────────────────────────────
+  function handleGridMouseDown(e) {
+    if (e.button !== 0) return;
+    if (e.target.closest(".ufile-card, button, input, a, .ctx-menu")) return;
+    e.preventDefault();
+
+    const start = { x: e.clientX, y: e.clientY };
+    rbStart.current = start;
+    setRubberBand({ x: start.x, y: start.y, w: 0, h: 0 });
+
+    function onMove(ev) {
+      const x = Math.min(ev.clientX, start.x);
+      const y = Math.min(ev.clientY, start.y);
+      const w = Math.abs(ev.clientX - start.x);
+      const h = Math.abs(ev.clientY - start.y);
+      setRubberBand({ x, y, w, h });
+    }
+
+    function onUp(ev) {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+
+      const band = {
+        left:   Math.min(ev.clientX, start.x),
+        right:  Math.max(ev.clientX, start.x),
+        top:    Math.min(ev.clientY, start.y),
+        bottom: Math.max(ev.clientY, start.y),
+      };
+      const dx = band.right - band.left;
+      const dy = band.bottom - band.top;
+
+      if (dx > 5 || dy > 5) {
+        const grid = gridRef.current;
+        if (grid) {
+          const cards = grid.querySelectorAll("[data-file-id]");
+          const newSel = new Set();
+          cards.forEach(card => {
+            const cr = card.getBoundingClientRect();
+            const overlap = !(cr.right < band.left || cr.left > band.right || cr.bottom < band.top || cr.top > band.bottom);
+            if (overlap) newSel.add(card.dataset.fileId);
+          });
+          if (newSel.size > 0) setSelected(newSel);
+        }
+      }
+      setRubberBand(null);
+      rbStart.current = null;
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  // ── Preview ─────────────────────────────────────────────────────────
   async function openPreview(item) {
     const t = getType(item);
     if (t === "document") { handleDownload(item); return; }
@@ -155,7 +299,7 @@ export default function ProjectFilesPage() {
     if (next) openPreview(next);
   }
 
-  // File actions
+  // ── File actions ─────────────────────────────────────────────────────
   async function handleDelete(item) {
     if (!confirm(`Delete "${item.name}"?`)) return;
     if (item._source === "media") await projectMediaApi.delete(item.id).catch(() => {});
@@ -172,16 +316,11 @@ export default function ProjectFilesPage() {
 
   async function handleDownload(item) {
     try {
-      let url;
-      if (item._source === "media") {
-        const d = await projectMediaApi.getDownloadUrl(item.id);
-        url = d.url;
-      } else {
-        const d = await projectFilesApi.getDownloadUrl(item.id);
-        url = d.url;
-      }
-      if (!url) return;
-      const a = document.createElement("a"); a.href = url; a.download = item.name;
+      const d = item._source === "media"
+        ? await projectMediaApi.getDownloadUrl(item.id)
+        : await projectFilesApi.getDownloadUrl(item.id);
+      if (!d.url) return;
+      const a = document.createElement("a"); a.href = d.url; a.download = item.name;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     } catch {}
   }
@@ -242,20 +381,41 @@ export default function ProjectFilesPage() {
     setSelected(new Set());
   }
 
-  const filtered = items.filter(item => {
-    if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (typeFilter !== "all" && getType(item) !== typeFilter) return false;
-    return true;
-  });
+  async function handleBulkMove(targetFolderId) {
+    await Promise.all([...selected].map(id => {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      return item._source === "media"
+        ? projectMediaApi.update(id, { folder_id: targetFolderId || null }).catch(() => {})
+        : projectFilesApi.update(id, { folder_id: targetFolderId || null }).catch(() => {});
+    }));
+    load();
+    setSelected(new Set());
+  }
 
   function toggleSelect(id, e) {
     e.stopPropagation();
     setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  // ── Derived data ─────────────────────────────────────────────────────
+  const filtered  = items.filter(item => {
+    if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (typeFilter !== "all" && getType(item) !== typeFilter) return false;
+    return true;
+  });
+  const displayed = sortItems(filtered, sortField, sortDir);
+
+  // Folders for move submenu (excluding current folder)
+  const movableFolders = allFolders.filter(f => f.id !== folderId);
+
+  // Sort button label
+  const sortLabel = SORT_FIELDS.find(f => f.key === sortField)?.label ?? "Sort";
+
   return (
     <div className="ufiles-page" onClick={closeCtx}>
-      {/* Toolbar */}
+
+      {/* ── Toolbar ── */}
       <div className="ufiles-toolbar">
         <div className="ufiles-search-wrap">
           <MagnifyingGlass size={14} />
@@ -267,6 +427,33 @@ export default function ProjectFilesPage() {
           />
         </div>
         <div className="ufiles-toolbar-right">
+          {/* Sort dropdown */}
+          <div className="ufiles-sort-wrap" onClick={e => e.stopPropagation()}>
+            <button
+              className={`icon-btn ufiles-sort-btn ${showSortMenu ? "active" : ""}`}
+              onClick={() => setShowSortMenu(v => !v)}
+              title="Sort"
+            >
+              <ArrowsDownUp size={15} weight="duotone" />
+              <span className="ufiles-sort-label">{sortLabel}</span>
+              {sortDir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
+            </button>
+            {showSortMenu && (
+              <div className="ufiles-sort-menu">
+                {SORT_FIELDS.map(f => (
+                  <button
+                    key={f.key}
+                    className={sortField === f.key ? "active" : ""}
+                    onClick={() => handleSortField(f.key)}
+                  >
+                    {f.label}
+                    {sortField === f.key && (sortDir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button className={`icon-btn ${view === "grid" ? "active" : ""}`} onClick={() => setView("grid")} title="Grid"><SquaresFour size={16} weight="duotone" /></button>
           <button className={`icon-btn ${view === "list" ? "active" : ""}`} onClick={() => setView("list")} title="List"><Rows size={16} weight="duotone" /></button>
           {canEdit && <button className="icon-btn" onClick={() => setShowNewFolder(true)} title="New Folder"><FolderSimplePlus size={17} weight="duotone" /></button>}
@@ -296,19 +483,57 @@ export default function ProjectFilesPage() {
       {selected.size > 0 && (
         <div className="mpv-bulk-bar">
           <span>{selected.size} selected</span>
+          {canEdit && movableFolders.length > 0 && (
+            <div className="bulk-move-wrap" onClick={e => e.stopPropagation()}>
+              <button className="btn-ghost-sm" onClick={e => { e.stopPropagation(); setMoveSub(v => !v); }}>
+                <FolderSimple size={13} /> Move to
+              </button>
+              {moveSub && (
+                <div className="bulk-move-menu">
+                  {folderId && (
+                    <button onClick={() => { setMoveSub(false); handleBulkMove(null); }}>
+                      <House size={12} /> Root
+                    </button>
+                  )}
+                  {movableFolders.map(f => (
+                    <button key={f.id} onClick={() => { setMoveSub(false); handleBulkMove(f.id); }}>
+                      <FolderSimple size={12} /> {f.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {canDelete && <button className="btn-danger-sm" onClick={handleBulkDelete}><Trash size={13} /> Delete</button>}
           <button className="btn-ghost-sm" onClick={() => setSelected(new Set())}><X size={13} /> Clear</button>
         </div>
       )}
 
       {/* Breadcrumb */}
-      {folderId && (
-        <div className="mpv-breadcrumb">
-          <button onClick={() => navigate(`/projects/${projectId}/files`)}><House size={13} /> Root</button>
-          <CaretRight size={11} />
-          <span>Folder</span>
-        </div>
-      )}
+      {folderId && (() => {
+        const path = [];
+        let cur = folderId;
+        while (cur) {
+          const f = allFolders.find(x => x.id === cur);
+          if (!f) break;
+          path.unshift(f);
+          cur = f.parent_id || null;
+        }
+        return (
+          <div className="mpv-breadcrumb">
+            <button onClick={() => navigate(`/projects/${projectId}/files`)}><House size={13} /> Files</button>
+            {path.map((f, i) => (
+              <React.Fragment key={f.id}>
+                <CaretRight size={11} />
+                {i < path.length - 1
+                  ? <button onClick={() => navigate(`/projects/${projectId}/files/folder/${f.id}`)}>{f.name}</button>
+                  : <span>{f.name}</span>
+                }
+              </React.Fragment>
+            ))}
+          </div>
+        );
+      })()}
 
       {loading ? (
         <div className="mpv-loading">Loading…</div>
@@ -329,7 +554,7 @@ export default function ProjectFilesPage() {
           )}
 
           {/* Empty state */}
-          {filtered.length === 0 && folders.length === 0 && (
+          {displayed.length === 0 && folders.length === 0 && (
             <div className="mpv-empty">
               <UploadSimple size={48} weight="duotone" style={{ opacity: 0.2 }} />
               <p>{search || typeFilter !== "all" ? "No files match your filters." : "No files yet. Upload your first file."}</p>
@@ -341,16 +566,26 @@ export default function ProjectFilesPage() {
             </div>
           )}
 
-          {/* Grid view — folders + files in one unified grid */}
+          {/* ── Grid view ── */}
           {view === "grid" && (
-            <div className="ufiles-grid">
+            <div
+              ref={gridRef}
+              className="ufiles-grid"
+              onMouseDown={handleGridMouseDown}
+            >
               {/* Folder cards */}
               {folders.map(folder => (
                 <motion.div
                   key={`folder-${folder.id}`}
-                  className="ufile-card ufile-folder-card"
+                  className={`ufile-card ufile-folder-card${dragOverFolder === folder.id ? " drag-over" : ""}${draggingItem?.id === folder.id ? " dragging" : ""}`}
                   initial={{ opacity: 0, scale: 0.97 }}
                   animate={{ opacity: 1, scale: 1 }}
+                  draggable={canEdit}
+                  onDragStart={e => handleDragStart(e, folder, true)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={e => handleFolderDragOver(e, folder.id)}
+                  onDragLeave={handleFolderDragLeave}
+                  onDrop={e => handleFolderDrop(e, folder.id)}
                   onClick={() => navigate(`/projects/${projectId}/files/folder/${folder.id}`)}
                   onContextMenu={e => openCtxMenu(e, folder, true)}
                 >
@@ -366,7 +601,7 @@ export default function ProjectFilesPage() {
                         onClick={e => e.stopPropagation()}
                       />
                     ) : (
-                      <FolderOpen size={44} weight="duotone" style={{ color: "#f59e0b" }} />
+                      <FolderOpen size={44} weight="duotone" style={{ color: dragOverFolder === folder.id ? "#fbbf24" : "#f59e0b" }} />
                     )}
                   </div>
                   <div className="ufile-footer">
@@ -379,7 +614,7 @@ export default function ProjectFilesPage() {
               ))}
 
               {/* File cards */}
-              {filtered.map(item => {
+              {displayed.map(item => {
                 const t = getType(item);
                 const canPreview = t !== "document";
                 const isSelected = selected.has(item.id);
@@ -387,9 +622,13 @@ export default function ProjectFilesPage() {
                 return (
                   <motion.div
                     key={item.id}
-                    className={`ufile-card ${isSelected ? "selected" : ""}`}
+                    data-file-id={item.id}
+                    className={`ufile-card${isSelected ? " selected" : ""}${draggingItem?.id === item.id ? " dragging" : ""}`}
                     initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
+                    draggable={canEdit}
+                    onDragStart={e => handleDragStart(e, item, false)}
+                    onDragEnd={handleDragEnd}
                     onContextMenu={e => openCtxMenu(e, item, false)}
                   >
                     <div className="ufile-thumb" onClick={() => canPreview ? openPreview(item) : handleDownload(item)}>
@@ -442,21 +681,43 @@ export default function ProjectFilesPage() {
             </div>
           )}
 
-          {/* List view */}
+          {/* ── List view ── */}
           {view === "list" && (
             <div className="mpv-list">
               <div className="mpv-list-header">
-                <span>Name</span><span>Type</span><span>Size</span><span>Added</span><span />
+                {[
+                  { key: "name", label: "Name" },
+                  { key: "type", label: "Type" },
+                  { key: "size", label: "Size" },
+                  { key: "created_at", label: "Added" },
+                ].map(col => (
+                  <span
+                    key={col.key}
+                    className={`mpv-list-sortable${sortField === col.key ? " sort-active" : ""}`}
+                    onClick={() => handleSortField(col.key)}
+                    style={{ cursor: "pointer", userSelect: "none" }}
+                  >
+                    {col.label}
+                    {sortField === col.key && (sortDir === "asc" ? <ArrowUp size={10} style={{ marginLeft: 3 }} /> : <ArrowDown size={10} style={{ marginLeft: 3 }} />)}
+                  </span>
+                ))}
+                <span />
               </div>
               {folders.map(folder => (
                 <div
                   key={`folder-${folder.id}`}
-                  className="mpv-list-row"
+                  className={`mpv-list-row${dragOverFolder === folder.id ? " drag-over" : ""}`}
+                  draggable={canEdit}
+                  onDragStart={e => handleDragStart(e, folder, true)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={e => handleFolderDragOver(e, folder.id)}
+                  onDragLeave={handleFolderDragLeave}
+                  onDrop={e => handleFolderDrop(e, folder.id)}
                   onClick={() => navigate(`/projects/${projectId}/files/folder/${folder.id}`)}
                   onContextMenu={e => openCtxMenu(e, folder, true)}
                 >
                   <span className="mpv-list-name">
-                    <FolderOpen size={15} weight="duotone" style={{ color: "#f59e0b" }} />
+                    <FolderOpen size={15} weight="duotone" style={{ color: dragOverFolder === folder.id ? "#fbbf24" : "#f59e0b" }} />
                     {folder.name}
                   </span>
                   <span>Folder</span>
@@ -465,13 +726,17 @@ export default function ProjectFilesPage() {
                   <span />
                 </div>
               ))}
-              {filtered.map(item => {
+              {displayed.map(item => {
                 const t = getType(item);
                 const status = item.status && STATUS_COLORS[item.status];
                 return (
                   <div
                     key={item.id}
-                    className="mpv-list-row"
+                    data-file-id={item.id}
+                    className={`mpv-list-row${selected.has(item.id) ? " selected" : ""}${draggingItem?.id === item.id ? " dragging" : ""}`}
+                    draggable={canEdit}
+                    onDragStart={e => handleDragStart(e, item, false)}
+                    onDragEnd={handleDragEnd}
                     onClick={() => t !== "document" ? openPreview(item) : handleDownload(item)}
                     onContextMenu={e => openCtxMenu(e, item, false)}
                   >
@@ -496,6 +761,22 @@ export default function ProjectFilesPage() {
         </>
       )}
 
+      {/* ── Rubber-band selection overlay ── */}
+      {rubberBand && rubberBand.w > 2 && rubberBand.h > 2 && (
+        <div
+          className="rubber-band-select"
+          style={{
+            position: "fixed",
+            left:   rubberBand.x,
+            top:    rubberBand.y,
+            width:  rubberBand.w,
+            height: rubberBand.h,
+            pointerEvents: "none",
+            zIndex: 9999,
+          }}
+        />
+      )}
+
       {/* ── Context Menu ── */}
       {ctxMenu && (
         <div
@@ -511,9 +792,37 @@ export default function ProjectFilesPage() {
                 <FolderOpen size={13} /> Open
               </button>
               {canEdit && (
-                <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "folder" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
-                  <PencilSimple size={13} /> Rename
-                </button>
+                <>
+                  <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "folder" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
+                    <PencilSimple size={13} /> Rename
+                  </button>
+                  {movableFolders.length > 0 && (
+                    <div
+                      className="ctx-submenu-wrap"
+                      onMouseEnter={() => setMoveSub(true)}
+                      onMouseLeave={() => setMoveSub(false)}
+                    >
+                      <button className="ctx-has-sub">
+                        <FolderSimple size={13} /> Move to
+                        <ChevronRight size={11} style={{ marginLeft: "auto" }} />
+                      </button>
+                      {moveSub && (
+                        <div className="ctx-submenu">
+                          {folderId && (
+                            <button onClick={() => handleMoveToFolder(ctxMenu.item, null, true)}>
+                              <House size={11} /> Root
+                            </button>
+                          )}
+                          {movableFolders.filter(f => f.id !== ctxMenu.item.id).map(f => (
+                            <button key={f.id} onClick={() => handleMoveToFolder(ctxMenu.item, f.id, true)}>
+                              <FolderSimple size={11} /> {f.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
               {canDelete && (
                 <>
@@ -537,9 +846,37 @@ export default function ProjectFilesPage() {
                 </button>
               )}
               {canEdit && (
-                <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "file" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
-                  <PencilSimple size={13} /> Rename
-                </button>
+                <>
+                  <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "file" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
+                    <PencilSimple size={13} /> Rename
+                  </button>
+                  {(allFolders.length > 0 || folderId) && (
+                    <div
+                      className="ctx-submenu-wrap"
+                      onMouseEnter={() => setMoveSub(true)}
+                      onMouseLeave={() => setMoveSub(false)}
+                    >
+                      <button className="ctx-has-sub">
+                        <FolderSimple size={13} /> Move to
+                        <ChevronRight size={11} style={{ marginLeft: "auto" }} />
+                      </button>
+                      {moveSub && (
+                        <div className="ctx-submenu">
+                          {folderId && (
+                            <button onClick={() => handleMoveToFolder(ctxMenu.item, null, false)}>
+                              <House size={11} /> Root
+                            </button>
+                          )}
+                          {allFolders.map(f => (
+                            <button key={f.id} onClick={() => handleMoveToFolder(ctxMenu.item, f.id, false)}>
+                              <FolderSimple size={11} /> {f.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
               {ctxMenu.item._source === "media" && canEdit && (
                 <>
