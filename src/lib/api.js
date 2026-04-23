@@ -359,6 +359,9 @@ export const cloudflareApi = {
 
   deleteVideo: (uid) =>
     post(`${BASE}/cloudflare-stream`, { action: 'delete', uid }, true),
+
+  ingestFromUrl: (mediaId) =>
+    post(`${BASE}/cloudflare-stream`, { action: 'ingest_from_url', media_id: mediaId }, true),
 }
 
 // ── Production Management ──────────────────────────────────────────

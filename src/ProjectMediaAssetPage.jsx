@@ -14,7 +14,7 @@ import VersionsPanel from './components/media/VersionsPanel'
 import ShareModal from './components/media/ShareModal'
 import VideoPlayer from './components/media/VideoPlayer'
 import CloudflareVideoPlayer from './components/media/CloudflareVideoPlayer'
-import { projectMediaApi, shareLinksApi, formatSize } from './lib/api'
+import { projectMediaApi, shareLinksApi, cloudflareApi, formatSize } from './lib/api'
 import './styles/videojs-theme.css'
 
 const REFRESH_INTERVAL = 3.5 * 60 * 60 * 1000
@@ -104,6 +104,23 @@ export default function ProjectMediaAssetPage() {
     if (!asset?.wasabi_status === 'ready') return
     const interval = setInterval(() => fetchPlaybackUrl(), REFRESH_INTERVAL)
     return () => clearInterval(interval)
+  }, [asset?.id])
+
+  // Auto-ingest into Cloudflare Stream for videos not yet there
+  useEffect(() => {
+    if (!asset) return
+    const isVid = asset.type === 'video' || asset.mime_type?.startsWith('video/')
+    if (!isVid) return
+    if (asset.cloudflare_uid) return // already queued or processed
+    if (asset.wasabi_status !== 'ready') return
+
+    cloudflareApi.ingestFromUrl(asset.id)
+      .then(d => {
+        if (d?.uid) {
+          setAsset(a => ({ ...a, cloudflare_uid: d.uid, cloudflare_status: 'processing' }))
+        }
+      })
+      .catch(() => {})
   }, [asset?.id])
 
   async function saveName() {
@@ -302,7 +319,7 @@ export default function ProjectMediaAssetPage() {
             <>
               {isVideo ? (
                 <div className="asset-player">
-                  {effectiveAsset.cloudflare_uid && effectiveAsset.cloudflare_status !== 'none' ? (
+                  {effectiveAsset.cloudflare_uid ? (
                     <CloudflareVideoPlayer
                       ref={playerRef}
                       key={effectiveAsset.cloudflare_uid}

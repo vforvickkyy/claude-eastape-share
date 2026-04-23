@@ -22,6 +22,52 @@ function json(data: unknown, status = 200) {
   })
 }
 
+// ── Wasabi presign helpers ─────────────────────────────────────────────────
+const enc = new TextEncoder()
+
+function hex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function hmac(key: ArrayBuffer | string, msg: string): Promise<ArrayBuffer> {
+  const raw = typeof key === 'string' ? enc.encode(key) : new Uint8Array(key)
+  const k = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return crypto.subtle.sign('HMAC', k, enc.encode(msg))
+}
+
+async function presignGet(
+  endpoint: string, bucket: string, key: string,
+  accessKeyId: string, secretAccessKey: string, region: string, expiresIn = 14400,
+): Promise<string> {
+  const now = new Date()
+  const date     = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const datetime = date + 'T' + now.toISOString().slice(11, 19).replace(/:/g, '') + 'Z'
+  const host = new URL(endpoint).host
+  const encodedKey = key.split('/').map(s => encodeURIComponent(s)).join('/')
+  const credentialScope = `${date}/${region}/s3/aws4_request`
+
+  const qp = new URLSearchParams()
+  qp.set('X-Amz-Algorithm',     'AWS4-HMAC-SHA256')
+  qp.set('X-Amz-Credential',    `${accessKeyId}/${credentialScope}`)
+  qp.set('X-Amz-Date',          datetime)
+  qp.set('X-Amz-Expires',       String(expiresIn))
+  qp.set('X-Amz-SignedHeaders', 'host')
+  const sortedQp = Array.from(qp.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  const canonicalQs = sortedQp.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const canonicalRequest = ['GET', `/${bucket}/${encodedKey}`, canonicalQs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n')
+
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(canonicalRequest))
+  const stringToSign = ['AWS4-HMAC-SHA256', datetime, credentialScope, hex(hashBuf)].join('\n')
+
+  const kDate    = await hmac(`AWS4${secretAccessKey}`, date)
+  const kRegion  = await hmac(kDate, region)
+  const kService = await hmac(kRegion, 's3')
+  const kSign    = await hmac(kService, 'aws4_request')
+  const sig      = hex(await hmac(kSign, stringToSign))
+
+  return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -79,6 +125,74 @@ serve(async (req) => {
         .eq('id', media_id)
 
       return json({ success: true, upload_url: uploadURL, uid })
+    }
+
+    // ACTION: Ingest existing Wasabi video into Cloudflare Stream via URL pull
+    if (action === 'ingest_from_url') {
+      const { media_id } = body
+      if (!media_id) return json({ error: 'media_id required' }, 400)
+
+      // Load media record — verify ownership
+      const { data: media, error: mediaErr } = await supabase
+        .from('project_media')
+        .select('wasabi_key, name, user_id, cloudflare_uid')
+        .eq('id', media_id)
+        .single()
+
+      if (mediaErr || !media) return json({ error: 'Media not found' }, 404)
+      if (media.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
+
+      // If already ingested, return existing uid
+      if (media.cloudflare_uid) {
+        return json({ success: true, uid: media.cloudflare_uid, already_exists: true })
+      }
+
+      if (!media.wasabi_key) return json({ error: 'No Wasabi key on record' }, 400)
+
+      // Wasabi credentials
+      const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
+      const BUCKET   = (Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? '')
+      const ACCESS   = (Deno.env.get('AWS_ACCESS_KEY_ID') ?? Deno.env.get('WASABI_ACCESS_KEY_ID') ?? '')
+      const SECRET   = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
+      const REGION   = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
+
+      if (!ENDPOINT || !BUCKET || !ACCESS || !SECRET) {
+        return json({ error: 'Storage not configured' }, 500)
+      }
+
+      // Generate a 4-hour presigned GET URL so Cloudflare can pull the file
+      const wasabiUrl = await presignGet(ENDPOINT, BUCKET, media.wasabi_key, ACCESS, SECRET, REGION, 14400)
+
+      // Ask Cloudflare to pull-ingest from the URL
+      const cfResponse = await fetch(`${CF_BASE}/copy`, {
+        method: 'POST',
+        headers: cfHeaders,
+        body: JSON.stringify({
+          url: wasabiUrl,
+          meta: {
+            name: media.name || media_id,
+            eastape_media_id: media_id,
+          },
+          requireSignedURLs: false,
+        }),
+      })
+
+      const cfData = await cfResponse.json()
+
+      if (!cfResponse.ok || !cfData.success) {
+        console.error('Cloudflare ingest error:', JSON.stringify(cfData))
+        return json({ error: 'Cloudflare ingest failed', details: cfData }, 500)
+      }
+
+      const uid = cfData.result?.uid
+      if (!uid) return json({ error: 'No UID returned from Cloudflare' }, 500)
+
+      await supabase
+        .from('project_media')
+        .update({ cloudflare_uid: uid, cloudflare_status: 'processing' })
+        .eq('id', media_id)
+
+      return json({ success: true, uid, status: 'processing' })
     }
 
     // ACTION: Check status of a video
