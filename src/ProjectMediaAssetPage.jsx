@@ -30,9 +30,11 @@ export default function ProjectMediaAssetPage() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { id: projectId, mediaId } = useParams()
-  const backPath  = location.state?.from === 'manage'
-    ? `/projects/${projectId}/manage`
-    : `/projects/${projectId}/files`
+  const backPath  = location.state?.from?.startsWith('/')
+    ? location.state.from
+    : location.state?.from === 'manage'
+      ? `/projects/${projectId}/manage`
+      : `/projects/${projectId}/files`
 
   const [asset,          setAsset]         = useState(null)
   const [loading,        setLoading]       = useState(true)
@@ -76,7 +78,10 @@ export default function ProjectMediaAssetPage() {
       // Fetch siblings for prev/next
       if (a?.project_id) {
         projectMediaApi.list({ projectId: a.project_id, folderId: a.folder_id || 'root' })
-          .then(sd => setSiblings(sd.assets || sd.media || []))
+          .then(sd => {
+            const list = sd.assets || sd.media || []
+            setSiblings([...list].sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+          })
           .catch(() => {})
       }
     } catch {
@@ -184,7 +189,29 @@ export default function ProjectMediaAssetPage() {
 
   if (loading) return (
     <DashboardLayout title="Media Asset">
-      <div className="empty-state"><span className="spinner" /></div>
+      <div className="asset-skeleton">
+        <div className="asset-skeleton-topbar">
+          <div className="skel skel-btn" />
+          <div className="skel skel-title" />
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <div className="skel skel-btn" />
+            <div className="skel skel-btn" />
+            <div className="skel skel-btn" />
+          </div>
+        </div>
+        <div className="asset-skeleton-body">
+          <div className="skel skel-player" />
+          <div className="asset-skeleton-sidebar">
+            <div className="skel skel-tab-row" />
+            <div className="skel skel-line" style={{ width: '90%' }} />
+            <div className="skel skel-line" style={{ width: '70%' }} />
+            <div className="skel skel-line" style={{ width: '80%' }} />
+            <div className="skel skel-line" style={{ width: '60%' }} />
+            <div className="skel skel-comment" />
+            <div className="skel skel-comment" />
+          </div>
+        </div>
+      </div>
     </DashboardLayout>
   )
 

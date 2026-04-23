@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   UploadSimple, FolderSimplePlus, MagnifyingGlass, Rows, SquaresFour,
@@ -74,6 +74,7 @@ export default function ProjectFilesPage() {
   const { user } = useAuth();
   const { canEdit, canDelete, canDownload } = useProject();
   const navigate = useNavigate();
+  const location = useLocation();
   const { id: projectId, folderId } = useParams();
 
   const [items,         setItems]         = useState([]);
@@ -91,20 +92,23 @@ export default function ProjectFilesPage() {
   const [renameVal,     setRenameVal]     = useState("");
   const [copied,        setCopied]        = useState(null);
 
-  // Sort
-  const [sortField,     setSortField]     = useState("created_at");
-  const [sortDir,       setSortDir]       = useState("desc");
+  // Sort — persisted in localStorage
+  const [sortField,     setSortField]     = useState(() => { try { return localStorage.getItem("pf_sort_field") || "name" } catch { return "name" } });
+  const [sortDir,       setSortDir]       = useState(() => { try { return localStorage.getItem("pf_sort_dir")  || "asc"  } catch { return "asc"  } });
   const [showSortMenu,  setShowSortMenu]  = useState(false);
 
   // Drag-to-folder
   const [draggingItem,    setDraggingItem]    = useState(null); // { id, item, isFolder }
   const [dragOverFolder,  setDragOverFolder]  = useState(null); // folder id being hovered
 
-  // Context menu
+  // Context menu (item)
   const [ctxMenu,   setCtxMenu]   = useState(null);
   const [statusSub, setStatusSub] = useState(false);
   const [moveSub,   setMoveSub]   = useState(false);
   const ctxRef = useRef(null);
+
+  // Background right-click context menu
+  const [bgCtxMenu, setBgCtxMenu] = useState(null);
 
   // Preview state
   const [preview,        setPreview]        = useState(null);
@@ -145,7 +149,7 @@ export default function ProjectFilesPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    function close() { setCtxMenu(null); setStatusSub(false); setMoveSub(false); setShowSortMenu(false); }
+    function close() { setCtxMenu(null); setStatusSub(false); setMoveSub(false); setShowSortMenu(false); setBgCtxMenu(null); }
     document.addEventListener("click", close);
     document.addEventListener("scroll", close, true);
     return () => {
@@ -153,6 +157,14 @@ export default function ProjectFilesPage() {
       document.removeEventListener("scroll", close, true);
     };
   }, []);
+
+  function handleGridContextMenu(e) {
+    if (e.target.closest(".ufile-card, .ctx-menu, button, input, a")) return;
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 180);
+    const y = Math.min(e.clientY, window.innerHeight - 160);
+    setBgCtxMenu({ x, y });
+  }
 
   function openCtxMenu(e, item, isFolder = false) {
     e.preventDefault();
@@ -168,8 +180,17 @@ export default function ProjectFilesPage() {
 
   // ── Sort ────────────────────────────────────────────────────────────
   function handleSortField(field) {
-    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortField(field); setSortDir(field === "created_at" ? "desc" : "asc"); }
+    let newDir;
+    if (sortField === field) {
+      newDir = sortDir === "asc" ? "desc" : "asc";
+      setSortDir(newDir);
+    } else {
+      newDir = field === "created_at" ? "desc" : "asc";
+      setSortField(field);
+      setSortDir(newDir);
+    }
+    try { localStorage.setItem("pf_sort_field", sortField === field ? sortField : field); } catch {}
+    try { localStorage.setItem("pf_sort_dir", newDir); } catch {}
     setShowSortMenu(false);
   }
 
@@ -277,7 +298,7 @@ export default function ProjectFilesPage() {
     const t = getType(item);
     if (t === "document") { handleDownload(item); return; }
     if (item._source === "media") {
-      navigate(`/projects/${projectId}/media/${item.id}`);
+      navigate(`/projects/${projectId}/media/${item.id}`, { state: { from: location.pathname } });
       return;
     }
     setPreview(item);
@@ -413,7 +434,7 @@ export default function ProjectFilesPage() {
   const sortLabel = SORT_FIELDS.find(f => f.key === sortField)?.label ?? "Sort";
 
   return (
-    <div className="ufiles-page" onClick={closeCtx}>
+    <div className="ufiles-page" onClick={closeCtx} onContextMenu={canEdit ? handleGridContextMenu : undefined}>
 
       {/* ── Toolbar ── */}
       <div className="ufiles-toolbar">
@@ -922,6 +943,24 @@ export default function ProjectFilesPage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Background context menu ── */}
+      {bgCtxMenu && (
+        <div
+          className="ctx-menu"
+          style={{ top: bgCtxMenu.y, left: bgCtxMenu.x }}
+          onClick={e => e.stopPropagation()}
+          onContextMenu={e => e.preventDefault()}
+        >
+          <button onClick={() => { setBgCtxMenu(null); setShowNewFolder(true); }}>
+            <FolderSimplePlus size={13} /> New Folder
+          </button>
+          <div className="ctx-divider" />
+          <button onClick={() => { setBgCtxMenu(null); setShowUpload(true); }}>
+            <UploadSimple size={13} /> Upload Files
+          </button>
         </div>
       )}
 
