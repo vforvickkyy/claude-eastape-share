@@ -4767,7 +4767,7 @@ body { overflow-x: hidden; }
 }
 .bam-panel {
   background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--r-lg); width: 100%; max-width: 560px;
+  border-radius: var(--r-lg); width: 100%; max-width: 640px;
   max-height: 90vh; display: flex; flex-direction: column;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
@@ -5550,3 +5550,71 @@ body { overflow-x: hidden; }
   cursor: pointer; transition: background 0.12s; text-align: left;
 }
 .bulk-move-menu button:hover { background: var(--bg3); color: var(--t1); }
+
+/* ── BulkAddShotsModal — From Files tab ─────────────────────────── */
+.bam-fromfiles-body { gap: 10px; }
+.bam-fromfiles-controls {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.bam-fromfiles-search { flex: 1; min-width: 140px; }
+.bam-fromfiles-select-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 0;
+}
+.bam-fromfiles-count { font-size: 11px; color: var(--t4); }
+.bam-fromfiles-empty {
+  text-align: center; padding: 32px 20px; font-size: 13px; color: var(--t3);
+}
+
+/* File card grid */
+.bam-fromfiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.bam-fc {
+  display: flex; flex-direction: column; gap: 5px;
+  cursor: pointer; border-radius: var(--r-md);
+  padding: 4px; transition: background 0.12s;
+  user-select: none;
+}
+.bam-fc:hover { background: rgba(255,255,255,0.04); }
+.bam-fc.selected { background: rgba(139,92,246,0.12); }
+
+.bam-fc-thumb {
+  position: relative; aspect-ratio: 16/9;
+  background: var(--bg2); border-radius: var(--r-sm);
+  overflow: hidden; border: 1.5px solid transparent;
+  transition: border-color 0.12s;
+}
+.bam-fc.selected .bam-fc-thumb { border-color: var(--purple-l); }
+.bam-fc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bam-fc-icon {
+  width: 100%; height: 100%; display: flex;
+  align-items: center; justify-content: center;
+}
+
+.bam-fc-check {
+  position: absolute; top: 4px; right: 4px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--purple); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.bam-fc-linked {
+  position: absolute; bottom: 3px; left: 3px;
+  background: rgba(0,0,0,0.65); color: var(--t3);
+  font-size: 9px; padding: 1px 4px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+.bam-fc-name {
+  font-size: 10px; color: var(--t2);
+  overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; line-height: 1.3;
+  padding: 0 2px;
+}
+.bam-fc.selected .bam-fc-name { color: var(--t1); }

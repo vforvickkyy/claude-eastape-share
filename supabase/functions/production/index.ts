@@ -708,9 +708,11 @@ Deno.serve(async (req) => {
 
         // Create shot_asset for hero media
         if (thumbId) {
-          await supabase.from('shot_assets').insert({
-            shot_id: sh.id, project_media_id: thumbId, is_hero: true, label: 'hero',
-          }).catch(() => {})
+          try {
+            await supabase.from('shot_assets').insert({
+              shot_id: sh.id, project_media_id: thumbId, is_hero: true, label: 'hero',
+            })
+          } catch (_) {}
         }
 
         created.push({ ...sh, thumbnailUrl: null, assetCount: thumbId ? 1 : 0 })

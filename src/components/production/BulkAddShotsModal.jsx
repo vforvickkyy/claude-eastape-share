@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { X, SpinnerGap, Check, Warning } from '@phosphor-icons/react'
+import { X, SpinnerGap, Check, Warning, FileVideo, FileImage, FileAudio, File } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 
 const PADDING_OPTIONS = [
@@ -14,7 +14,6 @@ const SEPARATOR_OPTIONS = [
   { label: 'None',           value: '' },
 ]
 
-// Auto-match algorithm: score each media against a shot name
 function scoreMatch(shotName, mediaName) {
   const sn = shotName.toLowerCase().replace(/\.[^.]+$/, '').trim()
   const mn = mediaName.toLowerCase().replace(/\.[^.]+$/, '').trim()
@@ -40,6 +39,14 @@ function autoMatch(shotNames, mediaList) {
       suggestion: bestScore >= 50 && bestScore < 75 ? best : null,
     }
   })
+}
+
+function MediaTypeIcon({ media, size = 28 }) {
+  const t = (media.type || media.mime_type || '').toLowerCase()
+  if (t === 'video' || t.startsWith('video/')) return <FileVideo size={size} weight="duotone" style={{ color: '#a78bfa' }} />
+  if (t === 'image' || t.startsWith('image/')) return <FileImage size={size} weight="duotone" style={{ color: '#60a5fa' }} />
+  if (t === 'audio' || t.startsWith('audio/')) return <FileAudio size={size} weight="duotone" style={{ color: '#34d399' }} />
+  return <File size={size} weight="duotone" style={{ color: 'var(--t3)' }} />
 }
 
 // ── Tab 1: Named List ─────────────────────────────────────────────────
@@ -71,11 +78,7 @@ function NamedListTab({ scene, projectMedia, onCreate, onClose }) {
           linked_media_ids: m?.media ? [m.media.id] : [],
         }
       })
-      const res = await productionApi.bulkCreateShots(
-        scene?.project_id || shots[0]?.project_id,
-        scene?.id || null,
-        shots,
-      )
+      const res = await productionApi.bulkCreateShots(scene?.project_id || shots[0]?.project_id, scene?.id || null, shots)
       onCreate(res.shots || [])
     } catch (e) {
       setError(e.message)
@@ -87,20 +90,15 @@ function NamedListTab({ scene, projectMedia, onCreate, onClose }) {
     <div className="bam-tab-body">
       <label className="bam-label">Type shot names (one per line)</label>
       <textarea
-        className="bam-textarea"
-        rows={10}
+        className="bam-textarea" rows={10}
         placeholder={'Tower_01\nTower_02\nTower_03\n...'}
-        value={text}
-        onChange={e => setText(e.target.value)}
-        spellCheck={false}
+        value={text} onChange={e => setText(e.target.value)} spellCheck={false}
       />
       <div className="bam-count">{lines.length > 0 ? `${lines.length} shot${lines.length !== 1 ? 's' : ''} will be created` : 'Enter names above'}</div>
-
       <label className="bam-checkbox-row">
         <input type="checkbox" checked={autoMatch_} onChange={e => setAutoMatch_(e.target.checked)} />
         <span>Auto-match files by name</span>
       </label>
-
       {autoMatch_ && matches.length > 0 && (
         <div className="bam-matches">
           <div className="bam-matches-title">File matches:</div>
@@ -116,14 +114,10 @@ function NamedListTab({ scene, projectMedia, onCreate, onClose }) {
               )}
             </div>
           ))}
-          <div className="bam-match-summary">
-            Found {matches.filter(m => m.media).length} of {matches.length} matches
-          </div>
+          <div className="bam-match-summary">Found {matches.filter(m => m.media).length} of {matches.length} matches</div>
         </div>
       )}
-
       {error && <div className="bam-error"><Warning size={13} /> {error}</div>}
-
       <div className="bam-footer">
         <button className="btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn-primary" onClick={handleCreate} disabled={!lines.length || creating}>
@@ -177,11 +171,7 @@ function AutoGenerateTab({ scene, projectMedia, onCreate, onClose }) {
           linked_media_ids: m?.media ? [m.media.id] : [],
         }
       })
-      const res = await productionApi.bulkCreateShots(
-        scene?.project_id,
-        scene?.id || null,
-        shots,
-      )
+      const res = await productionApi.bulkCreateShots(scene?.project_id, scene?.id || null, shots)
       onCreate(res.shots || [])
     } catch (e) {
       setError(e.message)
@@ -217,22 +207,17 @@ function AutoGenerateTab({ scene, projectMedia, onCreate, onClose }) {
           </select>
         </div>
       </div>
-
       <div className="bam-preview">
         <div className="bam-preview-label">Will create {generated.length} shots:</div>
         <div className="bam-preview-names">{preview}</div>
       </div>
-
       <label className="bam-checkbox-row">
         <input type="checkbox" checked={autoMatch_} onChange={e => setAutoMatch_(e.target.checked)} />
         <span>Auto-match files by name</span>
       </label>
-
       {autoMatch_ && matches.length > 0 && (
         <div className="bam-matches">
-          <div className="bam-matches-title">
-            Found {matches.filter(m => m.media).length} of {matches.length} matches
-          </div>
+          <div className="bam-matches-title">Found {matches.filter(m => m.media).length} of {matches.length} matches</div>
           {matches.filter(m => m.media).slice(0, 5).map(m => (
             <div key={m.name} className="bam-match-row">
               <span className="bam-match-name">{m.name}</span>
@@ -244,9 +229,7 @@ function AutoGenerateTab({ scene, projectMedia, onCreate, onClose }) {
           )}
         </div>
       )}
-
       {error && <div className="bam-error"><Warning size={13} /> {error}</div>}
-
       <div className="bam-footer">
         <button className="btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn-primary" onClick={handleCreate} disabled={!generated.length || creating}>
@@ -257,7 +240,135 @@ function AutoGenerateTab({ scene, projectMedia, onCreate, onClose }) {
   )
 }
 
-// ── Tab 3: Copy from Scene ────────────────────────────────────────────
+// ── Tab 3: From Files ─────────────────────────────────────────────────
+function FromFilesTab({ scene, projectMedia, onCreate, onClose }) {
+  const [selected,  setSelected]  = useState(new Set())
+  const [stripExt,  setStripExt]  = useState(true)
+  const [search,    setSearch]    = useState('')
+  const [creating,  setCreating]  = useState(false)
+  const [error,     setError]     = useState(null)
+
+  const filtered = projectMedia.filter(m =>
+    !search || (m.name || '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  function getShotName(media) {
+    const name = media.name || ''
+    return stripExt ? name.replace(/\.[^.]+$/, '') : name
+  }
+
+  function toggleAll() {
+    if (selected.size === filtered.length && filtered.length > 0) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filtered.map(m => m.id)))
+    }
+  }
+
+  function toggle(id) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  async function handleCreate() {
+    if (!selected.size || creating) return
+    setCreating(true)
+    setError(null)
+    try {
+      const initial = (scene?.name || 'S').charAt(0).toUpperCase()
+      const selectedMedia = projectMedia.filter(m => selected.has(m.id))
+      const shots = selectedMedia.map((m, i) => ({
+        name: getShotName(m),
+        shot_number: `${initial}${String(i + 1).padStart(2, '0')}`,
+        thumbnail_media_id: m.id,
+        linked_media_ids: [m.id],
+      }))
+      const res = await productionApi.bulkCreateShots(scene?.project_id, scene?.id || null, shots)
+      onCreate(res.shots || [])
+    } catch (e) {
+      setError(e.message)
+      setCreating(false)
+    }
+  }
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(m => selected.has(m.id))
+
+  return (
+    <div className="bam-tab-body bam-fromfiles-body">
+      {/* Header controls */}
+      <div className="bam-fromfiles-controls">
+        <input
+          className="bam-input bam-fromfiles-search"
+          placeholder="Search files…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <label className="bam-checkbox-row">
+          <input type="checkbox" checked={stripExt} onChange={e => setStripExt(e.target.checked)} />
+          <span>Remove extension</span>
+        </label>
+      </div>
+
+      <div className="bam-fromfiles-select-row">
+        <label className="bam-checkbox-row" style={{ margin: 0 }}>
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={toggleAll}
+          />
+          <span style={{ fontSize: 12, color: 'var(--t2)' }}>
+            {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+          </span>
+        </label>
+        <span className="bam-fromfiles-count">{filtered.length} file{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {projectMedia.length === 0 ? (
+        <div className="bam-fromfiles-empty">No media files found in this project.</div>
+      ) : (
+        <div className="bam-fromfiles-grid">
+          {filtered.map(m => {
+            const isSel = selected.has(m.id)
+            return (
+              <div
+                key={m.id}
+                className={`bam-fc${isSel ? ' selected' : ''}`}
+                onClick={() => toggle(m.id)}
+                title={getShotName(m)}
+              >
+                <div className="bam-fc-thumb">
+                  {m.thumbnail_url
+                    ? <img src={m.thumbnail_url} alt={m.name} loading="lazy" />
+                    : <div className="bam-fc-icon"><MediaTypeIcon media={m} size={28} /></div>
+                  }
+                  {isSel && (
+                    <div className="bam-fc-check">
+                      <Check size={13} weight="bold" />
+                    </div>
+                  )}
+                  {m.is_linked && <div className="bam-fc-linked">linked</div>}
+                </div>
+                <div className="bam-fc-name">{getShotName(m)}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {error && <div className="bam-error"><Warning size={13} /> {error}</div>}
+
+      <div className="bam-footer">
+        <button className="btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={handleCreate} disabled={!selected.size || creating}>
+          {creating
+            ? <><SpinnerGap size={13} className="spin" /> Creating…</>
+            : `Create ${selected.size || 0} Shot${selected.size !== 1 ? 's' : ''}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Tab 4: Copy from Scene ────────────────────────────────────────────
 function CopySceneTab({ scene, scenes, shots, onCreate, onClose }) {
   const [sourceId, setSourceId] = useState('')
   const [creating, setCreating] = useState(false)
@@ -277,11 +388,7 @@ function CopySceneTab({ scene, scenes, shots, onCreate, onClose }) {
         thumbnail_media_id: null,
         linked_media_ids: [],
       }))
-      const res = await productionApi.bulkCreateShots(
-        scene?.project_id,
-        scene?.id || null,
-        shotData,
-      )
+      const res = await productionApi.bulkCreateShots(scene?.project_id, scene?.id || null, shotData)
       onCreate(res.shots || [])
     } catch (e) {
       setError(e.message)
@@ -301,21 +408,16 @@ function CopySceneTab({ scene, scenes, shots, onCreate, onClose }) {
           })}
         </select>
       </div>
-
       {sourceId && (
         <div className="bam-preview">
           <div className="bam-preview-label">{sourceShots.length} shots will be copied:</div>
           <div className="bam-copy-list">
-            {sourceShots.slice(0, 8).map(s => (
-              <div key={s.id} className="bam-copy-item">{s.title}</div>
-            ))}
+            {sourceShots.slice(0, 8).map(s => <div key={s.id} className="bam-copy-item">{s.title}</div>)}
             {sourceShots.length > 8 && <div className="bam-copy-more">+{sourceShots.length - 8} more</div>}
           </div>
         </div>
       )}
-
       {error && <div className="bam-error"><Warning size={13} /> {error}</div>}
-
       <div className="bam-footer">
         <button className="btn-ghost" onClick={onClose}>Cancel</button>
         <button className="btn-primary" onClick={handleCopy} disabled={!sourceId || !sourceShots.length || creating}>
@@ -328,7 +430,7 @@ function CopySceneTab({ scene, scenes, shots, onCreate, onClose }) {
 
 // ── Main BulkAddShotsModal ────────────────────────────────────────────
 export default function BulkAddShotsModal({ projectId, scene, scenes, shots, onCreated, onClose }) {
-  const [tab,          setTab]          = useState('list')
+  const [tab,          setTab]          = useState('files')
   const [projectMedia, setProjectMedia] = useState([])
   const [mediaLoading, setMediaLoading] = useState(true)
 
@@ -348,6 +450,13 @@ export default function BulkAddShotsModal({ projectId, scene, scenes, shots, onC
 
   const commonProps = { scene, projectMedia, onCreate: handleCreated, onClose }
 
+  const TABS = [
+    { id: 'files',    label: 'From Files'      },
+    { id: 'generate', label: 'Auto Generate'   },
+    { id: 'list',     label: 'Named List'      },
+    { id: 'copy',     label: 'Copy from Scene' },
+  ]
+
   return (
     <div className="bam-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bam-panel">
@@ -357,11 +466,7 @@ export default function BulkAddShotsModal({ projectId, scene, scenes, shots, onC
         </div>
 
         <div className="bam-tabs">
-          {[
-            { id: 'list',     label: 'Named List'     },
-            { id: 'generate', label: 'Auto Generate'  },
-            { id: 'copy',     label: 'Copy from Scene' },
-          ].map(t => (
+          {TABS.map(t => (
             <button
               key={t.id}
               className={`bam-tab-btn ${tab === t.id ? 'active' : ''}`}
@@ -375,7 +480,8 @@ export default function BulkAddShotsModal({ projectId, scene, scenes, shots, onC
         <div className="bam-body">
           {mediaLoading
             ? <div style={{ padding: 40, textAlign: 'center' }}><SpinnerGap size={20} className="spin" /></div>
-            : tab === 'list'     ? <NamedListTab   {...commonProps} />
+            : tab === 'files'    ? <FromFilesTab    {...commonProps} />
+            : tab === 'list'     ? <NamedListTab    {...commonProps} />
             : tab === 'generate' ? <AutoGenerateTab {...commonProps} />
             : <CopySceneTab scene={scene} scenes={scenes} shots={shots} onCreate={handleCreated} onClose={onClose} />
           }
