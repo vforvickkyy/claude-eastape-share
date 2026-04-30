@@ -17,6 +17,7 @@ function isExpired(session) {
 }
 
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const ANON_KEY  = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const AUTH_PATHS = {
   "/api/auth/login":   `${EDGE_BASE}/auth-login`,
@@ -24,15 +25,23 @@ const AUTH_PATHS = {
   "/api/auth/refresh": `${EDGE_BASE}/auth-refresh`,
 };
 
+// Auth endpoints are called before the user has a session, so we send the
+// public anon key as the Bearer token so the Supabase gateway lets the
+// request through to the function code (without it the gateway returns 401
+// before our function runs, resulting in a generic "Request failed" error).
 async function apiPost(path, body) {
   const url = AUTH_PATHS[path] || path;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${ANON_KEY}`,
+      "apikey": ANON_KEY,
+    },
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  if (!res.ok) throw new Error(data.error || data.message || "Request failed");
   return data;
 }
 
