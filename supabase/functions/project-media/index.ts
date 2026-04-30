@@ -112,14 +112,17 @@ Deno.serve(async (req) => {
       const { data: assets, error } = await q
       if (error) return json({ error: error.message }, 500)
 
-      // Add presigned thumbnail URLs
-      const enriched = canPresign
-        ? await Promise.all((assets || []).map(async (a: any) => {
-            if (!a.wasabi_thumbnail_key) return a
-            const thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, a.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 14400).catch(() => null)
-            return { ...a, thumbnailUrl }
-          }))
-        : (assets || [])
+      // Prefer Cloudflare CDN thumbnail for videos (global CDN, no expiry); fall back to Wasabi
+      const enriched = await Promise.all((assets || []).map(async (a: any) => {
+        if (a.cloudflare_uid && (a.cloudflare_status === 'ready' || a.cloudflare_status === 'processing')) {
+          return { ...a, thumbnailUrl: `https://cloudflarestream.com/${a.cloudflare_uid}/thumbnails/thumbnail.jpg?time=2s&width=400` }
+        }
+        if (canPresign && a.wasabi_thumbnail_key) {
+          const thumbnailUrl = await presignGetSimple(ENDPOINT, BUCKET, a.wasabi_thumbnail_key, ACCESS, SECRET, REGION, 14400).catch(() => null)
+          return { ...a, thumbnailUrl }
+        }
+        return a
+      }))
 
       return json({ assets: enriched })
     }
