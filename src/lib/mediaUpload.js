@@ -1,5 +1,15 @@
 /**
- * mediaUpload.js — Wasabi S3 + Cloudflare Stream upload utilities
+ * mediaUpload.js — Upload to Wasabi S3, then pull-ingest into Cloudflare Stream.
+ *
+ * Flow for video files:
+ *   1. presign  → creates DB record, returns Wasabi PUT URL
+ *   2. generate thumbnail + duration (client-side)
+ *   3. upload to Wasabi (tracked progress)
+ *   4. media-confirm-upload → marks wasabi_status = 'ready', stores thumbnail
+ *   5. cloudflare-stream ingest_from_url → CF pulls file from Wasabi server-to-server
+ *      Returns cloudflare_uid so the asset page shows CF player immediately
+ *
+ * Non-video files skip step 5.
  */
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
@@ -108,28 +118,27 @@ export function uploadToWasabi(presignedUrl, file, onProgress) {
 }
 
 /**
- * Full upload orchestrator:
- * 1. Get presigned URL from presign edge function (creates DB record)
- * 2. Generate thumbnail + duration
- * 3. For video files: get Cloudflare direct upload URL simultaneously
- * 4. Upload to Wasabi (with progress) + Cloudflare simultaneously
- * 5. Confirm upload + save thumbnail + cloudflare fields
+ * Full upload orchestrator for project media.
+ *
+ * onProgress(0–100) tracks Wasabi upload progress only.
+ * Cloudflare ingestion happens after confirm and is non-blocking to the
+ * progress bar — it resolves quickly (CF just queues the pull job).
  */
 export async function uploadMediaFile(file, projectId, folderId, onProgress) {
   const token = await getTokenAsync()
   const isVideo = file.type.startsWith('video/')
 
-  // 1. Get presigned URL + pre-create DB record
+  // ── 1. Create DB record + get Wasabi PUT URL ───────────────────────────────
   const presignRes = await fetch(`${BASE}/presign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({
       upload_type: 'project_media',
-      filename: file.name,
-      filesize: file.size,
-      mimetype: file.type,
-      project_id: projectId,
-      folder_id: folderId || null,
+      filename:    file.name,
+      filesize:    file.size,
+      mimetype:    file.type,
+      project_id:  projectId,
+      folder_id:   folderId || null,
     }),
   })
 
@@ -143,9 +152,9 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
   const uploadUrl = presignData.uploadUrl || presignData.upload_url
   const assetId   = presignData.assetId   || presignData.asset_id || presignData.media_id
 
-  // 2. Generate thumbnail + duration
+  // ── 2. Generate thumbnail + duration (client-side, parallel) ──────────────
   let thumbnailBase64 = null
-  let duration = null
+  let duration        = null
 
   if (isVideo) {
     ;[thumbnailBase64, duration] = await Promise.all([
@@ -156,62 +165,17 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
     thumbnailBase64 = await generateImageThumbnail(file)
   }
 
-  // 3. For video files: get Cloudflare direct upload URL
-  let cloudflareUploadUrl = null
-  let cloudflareUid = null
+  // ── 3. Upload to Wasabi (with progress) ───────────────────────────────────
+  await uploadToWasabi(uploadUrl, file, onProgress)
 
-  if (isVideo) {
-    try {
-      const cfRes = await fetch(`${BASE}/cloudflare-stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'get_upload_url', file_size: file.size, file_name: file.name, media_id: assetId }),
-      })
-      if (cfRes.ok) {
-        const cfData = await cfRes.json()
-        if (cfData.success) {
-          cloudflareUploadUrl = cfData.upload_url
-          cloudflareUid = cfData.uid
-        }
-      }
-    } catch (err) {
-      console.error('Cloudflare upload URL failed (non-fatal):', err)
-    }
-  }
-
-  // 4. Upload to Wasabi + Cloudflare simultaneously
-  const uploadPromises = [
-    uploadToWasabi(uploadUrl, file, onProgress),
-  ]
-
-  if (isVideo && cloudflareUploadUrl) {
-    // Cloudflare direct_upload URL expects multipart/form-data POST with file field
-    const cfForm = new FormData()
-    cfForm.append('file', file)
-    uploadPromises.push(
-      fetch(cloudflareUploadUrl, {
-        method: 'POST',
-        body: cfForm,
-        // No Content-Type header — browser sets multipart boundary automatically
-      }).catch(err => {
-        console.error('Cloudflare upload failed (non-fatal):', err)
-        return null
-      })
-    )
-  }
-
-  await Promise.allSettled(uploadPromises)
-
-  // 5. Confirm upload
+  // ── 4. Confirm upload (marks wasabi_status = 'ready', stores thumbnail) ───
   const confirmRes = await fetch(`${BASE}/media-confirm-upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      asset_id: assetId,
+      asset_id:         assetId,
       thumbnail_base64: thumbnailBase64,
       duration,
-      cloudflare_uid: cloudflareUid,
-      cloudflare_status: cloudflareUid ? 'processing' : 'none',
     }),
   })
 
@@ -221,5 +185,30 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
   }
 
   const { asset } = await confirmRes.json()
+
+  // ── 5. For videos: trigger Cloudflare Stream pull-ingest from Wasabi ───────
+  // Cloudflare fetches the file server-to-server from Wasabi — no second
+  // browser upload needed. We await this so the returned asset includes the
+  // cloudflare_uid, letting the asset page show the CF player immediately.
+  if (isVideo) {
+    try {
+      const cfRes = await fetch(`${BASE}/cloudflare-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'ingest_from_url', media_id: assetId }),
+      })
+      if (cfRes.ok) {
+        const cfData = await cfRes.json()
+        if (cfData.uid && asset) {
+          asset.cloudflare_uid    = cfData.uid
+          asset.cloudflare_status = 'processing'
+        }
+      }
+    } catch (err) {
+      // Non-fatal — auto-ingest will retry when user views the asset
+      console.error('CF ingest failed (non-fatal):', err)
+    }
+  }
+
   return asset
 }

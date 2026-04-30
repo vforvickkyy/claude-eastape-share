@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     const SECRET   = (Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? Deno.env.get('WASABI_SECRET_ACCESS_KEY') ?? '')
     const REGION   = (Deno.env.get('AWS_REGION') ?? Deno.env.get('WASABI_REGION') ?? 'us-east-1')
 
-    const { asset_id, media_id, thumbnail_base64, duration, width, height, cloudflare_uid, cloudflare_status } = await req.json()
+    const { asset_id, media_id, thumbnail_base64, duration, width, height } = await req.json()
     const id = media_id || asset_id
     if (!id) return json({ error: 'media_id required' }, 400)
 
@@ -94,11 +94,6 @@ Deno.serve(async (req) => {
       width: width || null,
       height: height || null,
       updated_at: new Date().toISOString(),
-    }
-
-    if (cloudflare_uid) {
-      updateData.cloudflare_uid = cloudflare_uid
-      updateData.cloudflare_status = cloudflare_status || 'processing'
     }
 
     const { data: updated, error } = await supabase
