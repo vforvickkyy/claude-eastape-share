@@ -186,29 +186,25 @@ export async function uploadMediaFile(file, projectId, folderId, onProgress) {
 
   const { asset } = await confirmRes.json()
 
-  // ── 5. For videos: trigger Cloudflare Stream pull-ingest from Wasabi ───────
-  // Cloudflare fetches the file server-to-server from Wasabi — no second
-  // browser upload needed. We await this so the returned asset includes the
-  // cloudflare_uid, letting the asset page show the CF player immediately.
-  if (isVideo) {
-    try {
-      const cfRes = await fetch(`${BASE}/cloudflare-stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'ingest_from_url', media_id: assetId }),
-      })
-      if (cfRes.ok) {
-        const cfData = await cfRes.json()
-        if (cfData.uid && asset) {
-          asset.cloudflare_uid    = cfData.uid
-          asset.cloudflare_status = 'processing'
-        }
-      }
-    } catch (err) {
-      // Non-fatal — auto-ingest will retry when user views the asset
-      console.error('CF ingest failed (non-fatal):', err)
-    }
-  }
-
   return asset
+}
+
+/**
+ * Trigger Cloudflare Stream pull-ingest for a single media asset.
+ * Called by UploadPanel sequentially so bulk uploads don't rate-limit CF.
+ */
+export async function ingestToCloudflare(assetId) {
+  const token = await getTokenAsync()
+  try {
+    const cfRes = await fetch(`${BASE}/cloudflare-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'ingest_from_url', media_id: assetId }),
+    })
+    if (cfRes.ok) {
+      const cfData = await cfRes.json()
+      return cfData.uid || null
+    }
+  } catch {}
+  return null
 }

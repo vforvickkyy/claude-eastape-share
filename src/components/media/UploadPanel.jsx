@@ -1,6 +1,9 @@
 /**
- * UploadPanel — drag-and-drop upload to Wasabi S3.
- * Appears as a full slide-in overlay within the project view.
+ * UploadPanel — drag-and-drop upload to Wasabi S3 + sequential CF ingest.
+ *
+ * All files upload to Wasabi in parallel (fast, tracked progress).
+ * After each video upload completes, it joins a sequential CF ingest queue
+ * processed one-at-a-time to avoid Cloudflare API rate limits.
  */
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
@@ -8,7 +11,7 @@ import {
   CloudArrowUp, X, CheckCircle, Warning,
   File, FileVideo, FileImage, FileAudio, MusicNote,
 } from '@phosphor-icons/react'
-import { uploadMediaFile } from '../../lib/mediaUpload'
+import { uploadMediaFile, ingestToCloudflare } from '../../lib/mediaUpload'
 import { formatSize } from '../../lib/userApi'
 
 const ACCEPTED = [
@@ -38,6 +41,33 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
   const [dragCount, setDragCount] = useState(0)
   const fileInputRef = useRef(null)
 
+  // Sequential CF ingest queue — prevents rate-limiting when bulk-uploading
+  const cfQueue     = useRef([])   // [{ assetId, fileId }]
+  const cfRunning   = useRef(false)
+
+  async function processCfQueue() {
+    if (cfRunning.current) return
+    cfRunning.current = true
+    while (cfQueue.current.length > 0) {
+      const { assetId, fileId } = cfQueue.current.shift()
+      updateFile(fileId, { cfStatus: 'ingesting' })
+      try {
+        const uid = await ingestToCloudflare(assetId)
+        updateFile(fileId, { cfStatus: uid ? 'cf_ready' : 'cf_failed' })
+      } catch {
+        updateFile(fileId, { cfStatus: 'cf_failed' })
+      }
+      // 800 ms gap between CF API calls
+      if (cfQueue.current.length > 0) await new Promise(r => setTimeout(r, 800))
+    }
+    cfRunning.current = false
+  }
+
+  function enqueueCfIngest(assetId, fileId) {
+    cfQueue.current.push({ assetId, fileId })
+    processCfQueue()
+  }
+
   function addFiles(newFiles) {
     const items = Array.from(newFiles).map(f => ({
       file: f,
@@ -46,6 +76,7 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
       progress: 0,
       assetId: null,
       error: null,
+      cfStatus: null, // null | 'ingesting' | 'cf_ready' | 'cf_failed'
     }))
     setFiles(prev => [...prev, ...items])
     items.forEach(item => startUpload(item))
@@ -87,6 +118,12 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
       )
       updateFile(item.id, { status: 'ready', progress: 100, assetId: asset.id })
       onUploaded?.(asset)
+
+      // Queue CF ingest for videos (sequential to avoid rate limiting)
+      const isVideo = item.file.type.startsWith('video/')
+      if (isVideo && asset?.id) {
+        enqueueCfIngest(asset.id, item.id)
+      }
     } catch (err) {
       updateFile(item.id, {
         status: 'error',
@@ -144,10 +181,13 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
                 <div className="upload-queue-info">
                   <span className="upload-queue-name">{item.file.name}</span>
                   <span className="upload-queue-size">{formatSize(item.file.size)}</span>
-                  {(item.status === 'uploading') && (
+                  {item.status === 'uploading' && (
                     <div className="progress-track" style={{ marginTop: 4 }}>
                       <div className="progress-fill" style={{ width: `${item.progress}%` }} />
                     </div>
+                  )}
+                  {item.status === 'ready' && item.cfStatus === 'ingesting' && (
+                    <span style={{ fontSize: 11, color: 'var(--purple-l)' }}>Queuing for Cloudflare Stream…</span>
                   )}
                   {item.error && (
                     <span style={{ fontSize: 11, color: '#f87171' }}>{item.error}</span>
@@ -156,8 +196,11 @@ export default function UploadPanel({ projectId, folderId, onClose, onUploaded }
                 <div className="upload-queue-status">
                   {item.status === 'queued'    && <span className="spinner" />}
                   {item.status === 'uploading' && <span style={{ fontSize: 11, color: 'var(--t2)' }}>{item.progress}%</span>}
-                  {item.status === 'ready'     && <CheckCircle size={18} style={{ color: '#22c55e' }} />}
-                  {item.status === 'error'     && <Warning size={18} style={{ color: '#f87171' }} />}
+                  {item.status === 'ready' && !item.cfStatus && <CheckCircle size={18} style={{ color: '#22c55e' }} />}
+                  {item.status === 'ready' && item.cfStatus === 'ingesting' && <span className="spinner" style={{ width: 16, height: 16 }} />}
+                  {item.status === 'ready' && item.cfStatus === 'cf_ready'  && <CheckCircle size={18} style={{ color: '#22c55e' }} />}
+                  {item.status === 'ready' && item.cfStatus === 'cf_failed' && <CheckCircle size={18} style={{ color: '#22c55e' }} />}
+                  {item.status === 'error' && <Warning size={18} style={{ color: '#f87171' }} />}
                 </div>
               </div>
             ))}

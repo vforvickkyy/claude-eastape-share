@@ -339,19 +339,18 @@ export default function ProjectMediaAssetPage() {
                         !previewVersion && setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
                       }
                     />
-                  ) : videoSrc ? (
-                    <VideoPlayer
-                      ref={playerRef}
-                      src={videoSrc}
-                      mimeType={asset.mime_type}
-                      poster={thumbSrc}
-                      initialTime={seekTarget}
-                      onTimeUpdate={setCurrentTime}
-                    />
                   ) : (
+                    // No CF uid yet — auto-ingest is running; never fall back to Wasabi
                     <div className="asset-player asset-player-processing">
-                      <span className="spinner" style={{ width: 32, height: 32 }} />
-                      <p style={{ marginTop: 12 }}>Loading…</p>
+                      <div style={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        border: '3px solid rgba(124,58,237,0.2)',
+                        borderTop: '3px solid #7c3aed',
+                        animation: 'cf-spin 1s linear infinite',
+                      }} />
+                      <p style={{ color: 'white', fontSize: 15, fontWeight: 600, margin: '16px 0 4px' }}>Preparing video stream…</p>
+                      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: 0 }}>This usually takes 30–60 seconds</p>
+                      <style>{`@keyframes cf-spin { 0% { transform:rotate(0deg) } 100% { transform:rotate(360deg) } }`}</style>
                     </div>
                   )}
                 </div>
