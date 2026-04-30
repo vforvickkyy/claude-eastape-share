@@ -7,12 +7,13 @@ import {
   Trash, PencilSimple, DownloadSimple, CheckCircle, X,
   CaretRight, House, Play, ArrowLeft, ArrowRight,
   CheckSquare, Square, Copy, Tag, CaretRight as ChevronRight,
-  ArrowsDownUp, ArrowUp, ArrowDown,
+  ArrowsDownUp, ArrowUp, ArrowDown, CloudArrowUp,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
 import { projectMediaApi, projectFilesApi, projectFoldersApi, shareLinksApi, formatSize } from "./lib/api";
-import UploadPanel from "./components/media/UploadPanel";
+import { useUpload } from "./context/UploadContext";
+import { uploadMediaFile, ingestToCloudflare } from "./lib/mediaUpload";
 
 const STATUS_COLORS = {
   in_review: { label: "In Review", class: "badge-review"    },
@@ -73,6 +74,7 @@ function sortItems(items, field, dir) {
 export default function ProjectFilesPage() {
   const { user } = useAuth();
   const { canEdit, canDelete, canDownload } = useProject();
+  const { addCustomUpload } = useUpload();
   const navigate = useNavigate();
   const location = useLocation();
   const { id: projectId, folderId } = useParams();
@@ -84,7 +86,7 @@ export default function ProjectFilesPage() {
   const [search,        setSearch]        = useState("");
   const [typeFilter,    setTypeFilter]    = useState("all");
   const [view,          setView]          = useState("grid");
-  const [showUpload,    setShowUpload]    = useState(false);
+  const [isDragOver,    setIsDragOver]    = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [selected,      setSelected]      = useState(new Set());
@@ -115,6 +117,11 @@ export default function ProjectFilesPage() {
   const [previewUrl,     setPreviewUrl]     = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const videoRef = useRef(null);
+
+  // File input ref + CF ingest queue
+  const fileInputRef = useRef(null);
+  const cfQueue      = useRef([]);
+  const cfRunning    = useRef(false);
 
   // Rubber-band selection
   const [rubberBand, setRubberBand] = useState(null); // { x, y, w, h } in viewport coords
@@ -147,6 +154,54 @@ export default function ProjectFilesPage() {
   }, [user, projectId, folderId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Upload files via Drive-style queue panel ─────────────────────────
+  const handleUploadFiles = useCallback((files) => {
+    async function runCfQueue() {
+      if (cfRunning.current) return;
+      cfRunning.current = true;
+      while (cfQueue.current.length > 0) {
+        const assetId = cfQueue.current.shift();
+        try { await ingestToCloudflare(assetId); } catch {}
+        if (cfQueue.current.length > 0) await new Promise(r => setTimeout(r, 800));
+      }
+      cfRunning.current = false;
+    }
+    Array.from(files).forEach(file => {
+      addCustomUpload(file.name, file.size, async (onProgress) => {
+        const asset = await uploadMediaFile(file, projectId, folderId, onProgress);
+        load();
+        if (file.type.startsWith("video/") && asset?.id) {
+          cfQueue.current.push(asset.id);
+          runCfQueue();
+        }
+      });
+    });
+  }, [addCustomUpload, projectId, folderId, load]);
+
+  // Window-level drag-and-drop (OS file drops only, not internal item drags)
+  useEffect(() => {
+    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).some(t => t.toLowerCase() === "files");
+    const dragCount = { n: 0 };
+    function onEnter(e) { if (!hasFiles(e)) return; e.preventDefault(); dragCount.n++; setIsDragOver(true); }
+    function onLeave(e) { if (!hasFiles(e)) return; e.preventDefault(); dragCount.n--; if (dragCount.n <= 0) { dragCount.n = 0; setIsDragOver(false); } }
+    function onOver(e)  { if (hasFiles(e)) e.preventDefault(); }
+    function onDrop(e)  {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); dragCount.n = 0; setIsDragOver(false);
+      if (canEdit && e.dataTransfer.files?.length) handleUploadFiles(e.dataTransfer.files);
+    }
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("dragover",  onOver);
+    window.addEventListener("drop",      onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("dragover",  onOver);
+      window.removeEventListener("drop",      onDrop);
+    };
+  }, [canEdit, handleUploadFiles]);
 
   useEffect(() => {
     function close() { setCtxMenu(null); setStatusSub(false); setMoveSub(false); setShowSortMenu(false); setBgCtxMenu(null); }
@@ -479,7 +534,7 @@ export default function ProjectFilesPage() {
           <button className={`icon-btn ${view === "list" ? "active" : ""}`} onClick={() => setView("list")} title="List"><Rows size={16} weight="duotone" /></button>
           {canEdit && <button className="icon-btn" onClick={() => setShowNewFolder(true)} title="New Folder"><FolderSimplePlus size={17} weight="duotone" /></button>}
           {canEdit && (
-            <button className="ufiles-upload-btn" onClick={() => setShowUpload(true)}>
+            <button className="ufiles-upload-btn" onClick={() => fileInputRef.current?.click()}>
               <UploadSimple size={15} weight="bold" />
               Upload
             </button>
@@ -580,7 +635,7 @@ export default function ProjectFilesPage() {
               <UploadSimple size={48} weight="duotone" style={{ opacity: 0.2 }} />
               <p>{search || typeFilter !== "all" ? "No files match your filters." : "No files yet. Upload your first file."}</p>
               {!search && typeFilter === "all" && (
-                <button className="ufiles-upload-btn" onClick={() => setShowUpload(true)}>
+                <button className="ufiles-upload-btn" onClick={() => fileInputRef.current?.click()}>
                   <UploadSimple size={14} weight="bold" /> Upload Files
                 </button>
               )}
@@ -958,23 +1013,36 @@ export default function ProjectFilesPage() {
             <FolderSimplePlus size={13} /> New Folder
           </button>
           <div className="ctx-divider" />
-          <button onClick={() => { setBgCtxMenu(null); setShowUpload(true); }}>
+          <button onClick={() => { setBgCtxMenu(null); fileInputRef.current?.click(); }}>
             <UploadSimple size={13} /> Upload Files
           </button>
         </div>
       )}
 
-      {/* Upload panel */}
+      {/* Drop overlay */}
       <AnimatePresence>
-        {showUpload && (
-          <UploadPanel
-            projectId={projectId}
-            folderId={folderId}
-            onClose={() => setShowUpload(false)}
-            onUploaded={() => { setShowUpload(false); load(); }}
-          />
+        {isDragOver && canEdit && (
+          <motion.div
+            className="files-drop-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <CloudArrowUp size={52} weight="thin" />
+            <p>Drop files to upload</p>
+          </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={e => { if (e.target.files?.length) handleUploadFiles(e.target.files); e.target.value = ""; }}
+      />
 
       {/* Preview modal */}
       <AnimatePresence>
