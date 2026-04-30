@@ -106,13 +106,19 @@ export default function ProjectMediaAssetPage() {
     return () => clearInterval(interval)
   }, [asset?.id])
 
-  // Auto-ingest into Cloudflare Stream for videos not yet there
+  // Auto-ingest into Cloudflare Stream for videos not yet there,
+  // or re-ingest if stuck in 'pending' (old TUS placeholder that was never uploaded).
   useEffect(() => {
     if (!asset) return
     const isVid = asset.type === 'video' || asset.mime_type?.startsWith('video/')
     if (!isVid) return
-    if (asset.cloudflare_uid) return // already queued or processed
     if (asset.wasabi_status !== 'ready') return
+
+    // Skip if already successfully ingested and processing/ready
+    const alreadyOk = asset.cloudflare_uid &&
+      asset.cloudflare_status !== 'none' &&
+      asset.cloudflare_status !== 'pending'
+    if (alreadyOk) return
 
     cloudflareApi.ingestFromUrl(asset.id)
       .then(d => {

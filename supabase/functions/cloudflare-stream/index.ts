@@ -135,19 +135,41 @@ serve(async (req) => {
       // Load media record — verify ownership
       const { data: media, error: mediaErr } = await supabase
         .from('project_media')
-        .select('wasabi_key, name, user_id, cloudflare_uid')
+        .select('wasabi_key, name, user_id, cloudflare_uid, cloudflare_status')
         .eq('id', media_id)
         .single()
 
       if (mediaErr || !media) return json({ error: 'Media not found' }, 404)
       if (media.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
-
-      // If already ingested, return existing uid
-      if (media.cloudflare_uid) {
-        return json({ success: true, uid: media.cloudflare_uid, already_exists: true })
-      }
-
       if (!media.wasabi_key) return json({ error: 'No Wasabi key on record' }, 400)
+
+      // If a CF uid exists, check its actual state before deciding to re-ingest
+      if (media.cloudflare_uid) {
+        const cfCheckRes = await fetch(`${CF_BASE}/${media.cloudflare_uid}`, { headers: cfHeaders })
+        if (cfCheckRes.ok) {
+          const cfCheckData = await cfCheckRes.json()
+          const cfState = cfCheckData.result?.status?.state
+
+          console.log(`CF uid ${media.cloudflare_uid} state: ${cfState}`)
+
+          if (cfState === 'ready' || cfState === 'inprogress' || cfState === 'downloading') {
+            // Already good — return existing uid
+            return json({ success: true, uid: media.cloudflare_uid, already_exists: true, cf_state: cfState })
+          }
+
+          // 'pendingupload' or 'error' — stale placeholder, delete and re-ingest
+          console.log(`Deleting stale CF video ${media.cloudflare_uid} (state: ${cfState})`)
+          await fetch(`${CF_BASE}/${media.cloudflare_uid}`, { method: 'DELETE', headers: cfHeaders }).catch(() => {})
+          await supabase.from('project_media')
+            .update({ cloudflare_uid: null, cloudflare_status: null })
+            .eq('id', media_id)
+        } else {
+          // CF returned an error for this uid (e.g. 404 — already deleted) — clear it
+          await supabase.from('project_media')
+            .update({ cloudflare_uid: null, cloudflare_status: null })
+            .eq('id', media_id)
+        }
+      }
 
       // Wasabi credentials
       const ENDPOINT = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '')
@@ -162,6 +184,7 @@ serve(async (req) => {
 
       // Generate a 4-hour presigned GET URL so Cloudflare can pull the file
       const wasabiUrl = await presignGet(ENDPOINT, BUCKET, media.wasabi_key, ACCESS, SECRET, REGION, 14400)
+      console.log(`Sending ingest request for media ${media_id}, wasabi key: ${media.wasabi_key}`)
 
       // Ask Cloudflare to pull-ingest from the URL
       const cfResponse = await fetch(`${CF_BASE}/copy`, {
@@ -173,11 +196,11 @@ serve(async (req) => {
             name: media.name || media_id,
             eastape_media_id: media_id,
           },
-          requireSignedURLs: false,
         }),
       })
 
       const cfData = await cfResponse.json()
+      console.log(`CF copy response status: ${cfResponse.status}, success: ${cfData.success}, state: ${cfData.result?.status?.state}`)
 
       if (!cfResponse.ok || !cfData.success) {
         console.error('Cloudflare ingest error:', JSON.stringify(cfData))
@@ -187,12 +210,13 @@ serve(async (req) => {
       const uid = cfData.result?.uid
       if (!uid) return json({ error: 'No UID returned from Cloudflare' }, 500)
 
+      const cfState = cfData.result?.status?.state || 'downloading'
       await supabase
         .from('project_media')
         .update({ cloudflare_uid: uid, cloudflare_status: 'processing' })
         .eq('id', media_id)
 
-      return json({ success: true, uid, status: 'processing' })
+      return json({ success: true, uid, status: 'processing', cf_state: cfState })
     }
 
     // ACTION: Check status of a video
