@@ -5,6 +5,8 @@
 import { supabase } from './supabaseClient'
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+const ANON_HEADERS = { Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY }
 
 // ── Token management ────────────────────────────────────────────────────────
 
@@ -69,7 +71,8 @@ async function fetchWithAuth(fetchFn) {
 async function post(url, body, auth = false) {
   const token = auth ? await getToken() : null
   const makeReq = async (overrideHeaders) => {
-    const headers = { 'Content-Type': 'application/json', ...(auth ? (overrideHeaders || await authHeaders(token)) : {}) }
+    const baseHeaders = auth ? (overrideHeaders || await authHeaders(token)) : ANON_HEADERS
+    const headers = { 'Content-Type': 'application/json', ...baseHeaders }
     return fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
   }
   const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
@@ -89,12 +92,12 @@ async function get(url, params = {}, auth = false) {
   ).toString()
   const fullUrl = qs ? `${url}?${qs}` : url
   const makeReq = async (overrideHeaders) => {
-    const headers = auth ? (overrideHeaders || await authHeaders(token)) : {}
+    const headers = auth ? (overrideHeaders || await authHeaders(token)) : ANON_HEADERS
     return fetch(fullUrl, { headers })
   }
   const res = auth ? await fetchWithAuth(makeReq) : await makeReq()
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Request failed')
+  if (!res.ok) throw new Error(data.error || data.message || 'Request failed')
   return data
 }
 
