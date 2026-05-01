@@ -1,635 +1,261 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  HardDrive,
-  Files,
-  User,
-  ArrowDown,
-  MagnifyingGlass,
-  Trash,
-  Warning,
-  Database,
+  HardDrive, Files, User, Database, Warning,
+  MagnifyingGlass, FileVideo, File, ArrowsDownUp,
 } from "@phosphor-icons/react";
 import AdminStatsCard from "../components/AdminStatsCard.jsx";
-import ConfirmModal from "../components/ConfirmModal.jsx";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
 function getAuth() {
   const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
-  return { token: s.access_token, userId: s.user?.id };
+  return { token: s.access_token };
 }
-
 async function apiFetch(path, opts = {}) {
   const { token } = getAuth();
-  const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`,
-    {
-      ...opts,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...(opts.headers || {}),
-      },
-    }
-  );
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) },
+  });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
 }
 
-/* ── Format helpers ──────────────────────────────────────── */
-function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return "0 B";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  if (bytes < 1024 * 1024 * 1024)
-    return (bytes / 1024 / 1024).toFixed(1) + " MB";
-  return (bytes / 1024 / 1024 / 1024).toFixed(2) + " GB";
+function formatBytes(b) {
+  if (!b) return "0 B";
+  if (b < 1024) return b + " B";
+  if (b < 1024 ** 2) return (b / 1024).toFixed(1) + " KB";
+  if (b < 1024 ** 3) return (b / 1024 ** 2).toFixed(1) + " MB";
+  return (b / 1024 ** 3).toFixed(2) + " GB";
 }
 
-/* ── Avatar initials ─────────────────────────────────────── */
-function Avatar({ name, size = 28 }) {
+function Avatar({ name, avatarUrl, size = 28 }) {
   const initial = (name || "?").charAt(0).toUpperCase();
+  if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
   return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: "linear-gradient(135deg, #7c3aed, #3b82f6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: size * 0.4,
-        fontWeight: 600,
-        color: "#fff",
-        flexShrink: 0,
-      }}
-    >
+    <div style={{ width: size, height: size, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.38, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
       {initial}
     </div>
   );
 }
 
-/* ── Main page ───────────────────────────────────────────── */
+function StorageBar({ pct }) {
+  const color = pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : "#22c55e";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 140 }}>
+      <div style={{ flex: 1, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 3, transition: "width 0.4s" }} />
+      </div>
+      <span style={{ fontSize: 11, minWidth: 28, textAlign: "right", fontWeight: 600, color: pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : "var(--admin-text-dim)" }}>
+        {pct}%
+      </span>
+    </div>
+  );
+}
+
 export default function AdminStorage() {
-  /* Overview */
-  const [overview, setOverview] = useState(null);
-  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overview, setOverview]         = useState(null);
+  const [overviewLoading, setOvLoad]    = useState(true);
+  const [userRows, setUserRows]         = useState([]);
+  const [userLoading, setUserLoading]   = useState(true);
+  const [search, setSearch]             = useState("");
+  const [sortField, setSortField]       = useState("total");
+  const [sortDir, setSortDir]           = useState("desc");
+  const [page, setPage]                 = useState(1);
+  const PER_PAGE = 25;
 
-  /* Per-user storage */
-  const [userRows, setUserRows] = useState([]);
-  const [userLoading, setUserLoading] = useState(true);
-
-  /* File browser */
-  const [search, setSearch] = useState("");
-  const [fileSearch, setFileSearch] = useState("");
-  const [fileResults, setFileResults] = useState([]);
-  const [fileLoading, setFileLoading] = useState(false);
-
-  /* Delete modal */
-  const [deletingFile, setDeletingFile] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-
-  /* ── Load overview + user rows ──────────────────────────── */
-  const loadData = useCallback(async () => {
-    setOverviewLoading(true);
-    setUserLoading(true);
+  const load = useCallback(async () => {
+    setOvLoad(true); setUserLoading(true);
     try {
-      const data = await apiFetch("/admin-storage-stats?page=1&limit=50");
+      const data = await apiFetch("/admin-storage-stats?limit=500");
       setOverview(data.overview || {});
       setUserRows(Array.isArray(data.users) ? data.users : []);
     } catch {
-      setOverview({});
-      setUserRows([]);
-    } finally {
-      setOverviewLoading(false);
-      setUserLoading(false);
-    }
+      setOverview({}); setUserRows([]);
+    } finally { setOvLoad(false); setUserLoading(false); }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { load(); }, [load]);
 
-  /* ── Debounced file search ──────────────────────────────── */
-  useEffect(() => {
-    if (!fileSearch.trim()) {
-      setFileResults([]);
-      return;
-    }
-    setFileLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const data = await apiFetch(
-          `/admin-storage-stats?search=${encodeURIComponent(fileSearch)}`
-        );
-        setFileResults(Array.isArray(data.files) ? data.files : []);
-      } catch {
-        setFileResults([]);
-      } finally {
-        setFileLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [fileSearch]);
-
-  /* ── Delete file ─────────────────────────────────────────── */
-  async function handleDeleteFile() {
-    if (!deletingFile) return;
-    setDeleteLoading(true);
-    try {
-      await apiFetch("/admin-delete-file", {
-        method: "POST",
-        body: JSON.stringify({ fileId: deletingFile.id }),
-      });
-      setDeletingFile(null);
-      loadData();
-      setFileResults((prev) => prev.filter((f) => f.id !== deletingFile.id));
-    } catch {
-      // ignore
-    } finally {
-      setDeleteLoading(false);
-    }
+  /* ── Sort + filter ─────────────────────────────────────── */
+  function toggleSort(field) {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("desc"); }
+    setPage(1);
   }
 
-  /* ── Derived values ─────────────────────────────────────── */
-  const totalBytes = overview?.total_bytes || 0;
-  const totalFiles = overview?.total_files || 0;
-  const userCount = overview?.user_count || 0;
-  const largestBytes = overview?.largest_file_bytes || 0;
-  const largestName = overview?.largest_file_name || "";
-  const avgBytes = userCount > 0 ? totalBytes / userCount : 0;
-
-  const overQuotaUsers = userRows.filter((u) => {
-    const quota = (u.storage_limit_gb || 5) * 1024 * 1024 * 1024;
-    return (u.total_bytes || 0) > quota;
+  const filtered = userRows.filter(u => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return u.email?.toLowerCase().includes(q) || u.full_name?.toLowerCase().includes(q);
   });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let va, vb;
+    if (sortField === "name") { va = (a.full_name || a.email || "").toLowerCase(); vb = (b.full_name || b.email || "").toLowerCase(); }
+    else if (sortField === "drive") { va = a.drive_bytes || 0; vb = b.drive_bytes || 0; }
+    else if (sortField === "media") { va = a.media_bytes || 0; vb = b.media_bytes || 0; }
+    else if (sortField === "files") { va = a.file_count || 0; vb = b.file_count || 0; }
+    else { va = a.total_bytes || 0; vb = b.total_bytes || 0; }
+    return sortDir === "asc" ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+  });
+
+  const totalPages = Math.ceil(sorted.length / PER_PAGE);
+  const paged = sorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  const ov = overview || {};
+  const overQuota = userRows.filter(u => u.pct >= 100);
+
+  function SortHeader({ field, children }) {
+    const active = sortField === field;
+    return (
+      <th style={{ cursor: "pointer", userSelect: "none", color: active ? "var(--admin-accent)" : undefined }}
+        onClick={() => toggleSort(field)}>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {children}
+          {active && <ArrowsDownUp size={11} weight="bold" style={{ opacity: 0.7 }} />}
+        </span>
+      </th>
+    );
+  }
 
   return (
     <div>
       <div className="admin-page-title">Storage</div>
-      <div className="admin-page-sub">
-        Monitor and manage file storage across all users.
+      <div className="admin-page-sub">Monitor file storage across all users — Drive and Project Media.</div>
+
+      {/* ── Overview stats ─────────────────────────────── */}
+      <div className="admin-stats-grid" style={{ marginBottom: 24 }}>
+        <AdminStatsCard icon={<HardDrive size={18} />}    label="Total Storage"    value={formatBytes(ov.total_bytes)}          loading={overviewLoading} color="#f97316" />
+        <AdminStatsCard icon={<File size={18} />}         label="Drive Storage"    value={formatBytes(ov.drive_bytes)}          loading={overviewLoading} color="#3b82f6" />
+        <AdminStatsCard icon={<FileVideo size={18} />}    label="Media Storage"    value={formatBytes(ov.media_bytes)}          loading={overviewLoading} color="#7c3aed" />
+        <AdminStatsCard icon={<Files size={18} />}        label="Total Files"      value={(ov.total_files || 0).toLocaleString()} loading={overviewLoading} color="#059669" />
+        <AdminStatsCard icon={<User size={18} />}         label="Avg Per User"     value={formatBytes(ov.avg_bytes_per_user)}   loading={overviewLoading} color="#0891b2" />
+        <AdminStatsCard icon={<Database size={18} />}     label="Largest File"
+          value={ov.largest_file_bytes ? `${formatBytes(ov.largest_file_bytes)}${ov.largest_file_name ? " · " + ov.largest_file_name.slice(0,20) : ""}` : "—"}
+          loading={overviewLoading} color="#fbbf24" />
       </div>
 
-      {/* Overview stats */}
-      <div className="admin-stats-grid">
-        <AdminStatsCard
-          icon={<HardDrive size={18} />}
-          label="Total Storage"
-          value={formatBytes(totalBytes)}
-          loading={overviewLoading}
-          color="#f97316"
-        />
-        <AdminStatsCard
-          icon={<Files size={18} />}
-          label="Total Files"
-          value={totalFiles.toLocaleString()}
-          loading={overviewLoading}
-          color="#3b82f6"
-        />
-        <AdminStatsCard
-          icon={<User size={18} />}
-          label="Avg Per User"
-          value={formatBytes(avgBytes)}
-          loading={overviewLoading}
-          color="#a78bfa"
-        />
-        <AdminStatsCard
-          icon={<ArrowDown size={18} />}
-          label="Largest File"
-          value={`${formatBytes(largestBytes)}${largestName ? " · " + largestName : ""}`}
-          loading={overviewLoading}
-          color="#fbbf24"
-        />
-      </div>
+      {/* ── Over-quota warning ─────────────────────────── */}
+      {overQuota.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          className="admin-section" style={{ border: "1px solid rgba(239,68,68,0.35)", marginBottom: 20 }}>
+          <div className="admin-section-title" style={{ color: "#ef4444" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Warning size={16} weight="fill" style={{ color: "#ef4444" }} />
+              Over Quota — {overQuota.length} user{overQuota.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="admin-section-body" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {overQuota.map(u => (
+              <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.18)" }}>
+                <Warning size={15} weight="fill" style={{ color: "#ef4444", flexShrink: 0 }} />
+                <Avatar name={u.full_name || u.email} size={26} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--admin-text)" }}>{u.full_name || "—"}</div>
+                  <div style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{u.email}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{formatBytes(u.total_bytes)} / {u.storage_limit_gb} GB</div>
+                  <div style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{u.pct}% used · {u.plan_name}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
-      {/* Per-user storage table */}
-      <div className="admin-section" style={{ marginBottom: "20px" }}>
+      {/* ── Per-user storage table ─────────────────────── */}
+      <div className="admin-section">
         <div className="admin-section-title">
-          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Database size={16} />
-            Storage by User
-          </span>
-          <span
-            style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}
-          >
-            {userRows.length} users · sorted by usage
-          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}><Database size={15} /> Storage by User</span>
+          <span style={{ fontSize: 12, color: "var(--admin-text-muted)", fontWeight: 400 }}>{filtered.length} users · sorted by {sortField}</span>
         </div>
+
+        {/* Search */}
+        <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--admin-border)" }}>
+          <div style={{ position: "relative", maxWidth: 280 }}>
+            <MagnifyingGlass size={13} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--admin-text-muted)", pointerEvents: "none" }} />
+            <input className="admin-table-search" style={{ paddingLeft: 30, width: "100%", boxSizing: "border-box" }}
+              placeholder="Search user…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          </div>
+        </div>
+
         <div style={{ overflowX: "auto" }}>
           <table className="admin-table">
             <thead>
               <tr>
-                <th>User</th>
+                <SortHeader field="name">User</SortHeader>
                 <th>Plan</th>
-                <th>Files</th>
-                <th>Storage Used</th>
-                <th>Quota</th>
-                <th style={{ minWidth: "180px" }}>Usage Bar</th>
+                <SortHeader field="drive">Drive</SortHeader>
+                <SortHeader field="media">Media</SortHeader>
+                <SortHeader field="total">Total</SortHeader>
+                <SortHeader field="files">Files</SortHeader>
+                <th style={{ minWidth: 160 }}>Usage</th>
               </tr>
             </thead>
             <tbody>
               {userLoading ? (
-                [0, 1, 2, 3, 4, 5].map((i) => (
-                  <tr key={i} className="admin-table-skeleton">
-                    {[0, 1, 2, 3, 4, 5].map((j) => (
-                      <td key={j}>
-                        <span
-                          className="admin-table-skeleton-row"
-                          style={{ width: "70%" }}
-                        />
-                      </td>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    {[1,2,3,4,5,6,7].map(c => (
+                      <td key={c}><div style={{ height: 12, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${50 + c * 8}%` }} /></td>
                     ))}
                   </tr>
                 ))
-              ) : userRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="admin-empty">No users found.</div>
+              ) : paged.length === 0 ? (
+                <tr><td colSpan={7}><div className="admin-empty">No users found.</div></td></tr>
+              ) : paged.map(u => (
+                <tr key={u.id}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      <Avatar name={u.full_name || u.email} avatarUrl={u.avatar_url} size={28} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--admin-text)" }}>{u.full_name || "—"}</div>
+                        <div style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{u.email}</div>
+                      </div>
+                      {u.pct >= 90 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, background: u.pct >= 100 ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)", color: u.pct >= 100 ? "#ef4444" : "#f59e0b", padding: "2px 6px", borderRadius: 999 }}>
+                          {u.pct >= 100 ? "Over" : "Near"}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: u.plan_name === "Free" ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.15)", color: u.plan_name === "Free" ? "var(--admin-text-dim)" : "#a78bfa", fontWeight: 600 }}>
+                      {u.plan_name}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{formatBytes(u.drive_bytes)}</td>
+                  <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{formatBytes(u.media_bytes)}</td>
+                  <td style={{ fontSize: 13, fontWeight: 600, color: "var(--admin-text)" }}>{formatBytes(u.total_bytes)}</td>
+                  <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>
+                    <span title={`Drive: ${u.drive_count} · Media: ${u.media_count}`}>{(u.file_count || 0).toLocaleString()}</span>
+                  </td>
+                  <td>
+                    <StorageBar pct={u.pct || 0} />
+                    <div style={{ fontSize: 10, color: "var(--admin-text-muted)", marginTop: 2 }}>of {u.storage_limit_gb} GB</div>
                   </td>
                 </tr>
-              ) : (
-                userRows.map((u) => {
-                  const quota =
-                    (u.storage_limit_gb || 5) * 1024 * 1024 * 1024;
-                  const pct = Math.min(
-                    100,
-                    ((u.total_bytes || 0) / quota) * 100
-                  );
-                  const barColor =
-                    pct > 90
-                      ? "#ef4444"
-                      : pct > 70
-                      ? "#f59e0b"
-                      : "#4ade80";
-                  const isOver =
-                    (u.total_bytes || 0) > quota;
-                  return (
-                    <tr key={u.id}>
-                      <td>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
-                          <Avatar name={u.full_name || u.email} />
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "var(--t1)",
-                              }}
-                            >
-                              {u.full_name || "—"}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "11px",
-                                color: "var(--t3)",
-                              }}
-                            >
-                              {u.email || "—"}
-                            </div>
-                          </div>
-                          {isOver && (
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                fontWeight: 700,
-                                background: "rgba(239,68,68,0.15)",
-                                color: "#ef4444",
-                                padding: "2px 6px",
-                                borderRadius: "999px",
-                                marginLeft: "4px",
-                              }}
-                            >
-                              Over Quota
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            padding: "2px 8px",
-                            borderRadius: "999px",
-                            background: "rgba(255,255,255,0.05)",
-                            color: "var(--t2)",
-                          }}
-                        >
-                          {u.plan_name || "Free"}
-                        </span>
-                      </td>
-                      <td>{(u.file_count || 0).toLocaleString()}</td>
-                      <td
-                        style={{
-                          color: isOver ? "#ef4444" : "var(--t1)",
-                          fontWeight: isOver ? 600 : 400,
-                        }}
-                      >
-                        {formatBytes(u.total_bytes || 0)}
-                      </td>
-                      <td style={{ color: "var(--t3)", fontSize: "12px" }}>
-                        {u.storage_limit_gb || 5} GB
-                      </td>
-                      <td>
-                        <div
-                          style={{
-                            width: "100%",
-                            background: "var(--border)",
-                            borderRadius: 4,
-                            height: 6,
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${pct}%`,
-                              background: barColor,
-                              borderRadius: 4,
-                              height: 6,
-                            }}
-                          />
-                        </div>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: pct > 90 ? "#ef4444" : "var(--t3)",
-                          }}
-                        >
-                          {formatBytes(u.total_bytes || 0)} /{" "}
-                          {u.storage_limit_gb || 5} GB
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* File browser section */}
-      <div className="admin-section" style={{ marginBottom: "20px" }}>
-        <div className="admin-section-title">
-          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Files size={16} />
-            File Browser
-          </span>
-          <span
-            style={{ fontSize: "12px", color: "var(--t3)", fontWeight: 400 }}
-          >
-            Search files across all users
-          </span>
-        </div>
-
-        {/* Search */}
-        <div
-          style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}
-        >
-          <div style={{ position: "relative", maxWidth: "320px" }}>
-            <MagnifyingGlass
-              size={14}
-              style={{
-                position: "absolute",
-                left: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "var(--t3)",
-                pointerEvents: "none",
-              }}
-            />
-            <input
-              className="admin-table-search"
-              style={{ paddingLeft: "30px", width: "100%" }}
-              placeholder="Search filename…"
-              value={fileSearch}
-              onChange={(e) => setFileSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {fileSearch.trim() && (
-          <div style={{ overflowX: "auto" }}>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Filename</th>
-                  <th>Owner</th>
-                  <th>Size</th>
-                  <th>Type</th>
-                  <th>Uploaded</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fileLoading ? (
-                  [0, 1, 2, 3].map((i) => (
-                    <tr key={i} className="admin-table-skeleton">
-                      {[0, 1, 2, 3, 4, 5].map((j) => (
-                        <td key={j}>
-                          <span
-                            className="admin-table-skeleton-row"
-                            style={{ width: "70%" }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : fileResults.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>
-                      <div className="admin-empty">
-                        No files matching &ldquo;{fileSearch}&rdquo;.
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  fileResults.map((f) => (
-                    <tr key={f.id}>
-                      <td>
-                        <span
-                          style={{
-                            fontWeight: 500,
-                            maxWidth: "220px",
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={f.filename}
-                        >
-                          {f.filename || "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ lineHeight: 1.4 }}>
-                          <div style={{ fontSize: "13px" }}>
-                            {f.profiles?.full_name || f.full_name || "—"}
-                          </div>
-                          <div
-                            style={{ fontSize: "11px", color: "var(--t3)" }}
-                          >
-                            {f.profiles?.email || f.email || "—"}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        {formatBytes(f.file_size)}
-                      </td>
-                      <td>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            color: "var(--t3)",
-                            fontFamily: "monospace",
-                          }}
-                        >
-                          {f.content_type || "—"}
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          whiteSpace: "nowrap",
-                          color: "var(--t3)",
-                          fontSize: "12px",
-                        }}
-                      >
-                        {f.created_at
-                          ? new Date(f.created_at).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                      <td>
-                        <button
-                          className="admin-action-btn danger"
-                          onClick={() => setDeletingFile(f)}
-                        >
-                          <Trash size={13} /> Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {!fileSearch.trim() && (
-          <div
-            style={{
-              padding: "32px 20px",
-              textAlign: "center",
-              color: "var(--t3)",
-              fontSize: "13px",
-            }}
-          >
-            Type a filename above to search files across all users.
-          </div>
-        )}
-      </div>
-
-      {/* Over-quota warning */}
-      {overQuotaUsers.length > 0 && (
-        <div
-          className="admin-section"
-          style={{
-            border: "1px solid rgba(239,68,68,0.35)",
-            marginBottom: "20px",
-          }}
-        >
-          <div
-            className="admin-section-title"
-            style={{ color: "#ef4444" }}
-          >
-            <span
-              style={{ display: "flex", alignItems: "center", gap: "8px" }}
-            >
-              <Warning size={16} weight="fill" style={{ color: "#ef4444" }} />
-              Over Quota — {overQuotaUsers.length} user
-              {overQuotaUsers.length !== 1 ? "s" : ""}
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderTop: "1px solid var(--admin-border)" }}>
+            <span style={{ fontSize: 12, color: "var(--admin-text-muted)" }}>
+              {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, sorted.length)} of {sorted.length}
             </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="admin-action-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</button>
+              <button className="admin-action-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</button>
+            </div>
           </div>
-          <div
-            className="admin-section-body"
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-          >
-            {overQuotaUsers.map((u) => {
-              const quota =
-                (u.storage_limit_gb || 5) * 1024 * 1024 * 1024;
-              const pct = Math.round(((u.total_bytes || 0) / quota) * 100);
-              return (
-                <div
-                  key={u.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "16px",
-                    padding: "12px 16px",
-                    borderRadius: "8px",
-                    background: "rgba(239,68,68,0.06)",
-                    border: "1px solid rgba(239,68,68,0.2)",
-                  }}
-                >
-                  <Warning
-                    size={16}
-                    weight="fill"
-                    style={{ color: "#ef4444", flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: "13px" }}>
-                      {u.full_name || u.email || "Unknown"}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "var(--t3)" }}>
-                      {u.email}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        color: "#ef4444",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {formatBytes(u.total_bytes || 0)} /{" "}
-                      {u.storage_limit_gb || 5} GB
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--t3)" }}>
-                      {pct}% used · {u.plan_name || "Free"}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Delete confirm modal */}
-      <AnimatePresence>
-        {deletingFile && (
-          <ConfirmModal
-            key="delete-file"
-            title="Delete File"
-            message={`Delete "${deletingFile.filename}"? This cannot be undone.`}
-            confirmLabel="Delete File"
-            onConfirm={handleDeleteFile}
-            onClose={() => setDeletingFile(null)}
-            loading={deleteLoading}
-          />
         )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }

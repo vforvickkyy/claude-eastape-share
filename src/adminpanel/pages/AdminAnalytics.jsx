@@ -171,8 +171,8 @@ export default function AdminAnalytics() {
         const { headers } = getAuth();
         const [usersRes, filesRes, videosRes, commentsRes, plansRes] = await Promise.all([
           fetch(`${BASE}/rest/v1/profiles?select=created_at&order=created_at.asc`, { headers }),
-          fetch(`${BASE}/rest/v1/shares?select=created_at,file_size&order=created_at.asc`, { headers }),
-          fetch(`${BASE}/rest/v1/media_assets?select=created_at&order=created_at.asc`, { headers }),
+          fetch(`${BASE}/rest/v1/drive_files?select=created_at,file_size&is_trashed=eq.false&order=created_at.asc`, { headers }),
+          fetch(`${BASE}/rest/v1/project_media?select=created_at&is_trashed=eq.false&order=created_at.asc`, { headers }),
           fetch(`${BASE}/rest/v1/media_comments?select=created_at&order=created_at.asc`, { headers }),
           fetch(`${BASE}/rest/v1/user_plans?select=plans(name)&is_active=eq.true`, { headers }),
         ]);

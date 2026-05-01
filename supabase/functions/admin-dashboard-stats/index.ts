@@ -20,56 +20,135 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
     const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     if (!profile?.is_admin) return json({ error: 'Forbidden' }, 403)
-    const adminId = user.id
 
-    async function auditLog(action: string, targetType: string, targetId: string, metadata: Record<string, unknown> = {}) {
-      await supabase.from('admin_audit_logs').insert({ admin_id: adminId, action, target_type: targetType, target_id: targetId, metadata })
-    }
-
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const todayIso = today.toISOString()
+    const now = new Date()
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+    const weekStart  = new Date(now); weekStart.setDate(now.getDate() - 7)
+    const monthStart = new Date(now); monthStart.setDate(now.getDate() - 30)
+    const prevMonthStart = new Date(now); prevMonthStart.setDate(now.getDate() - 60)
 
     const [
       { count: totalUsers },
       { count: newToday },
+      { count: newThisWeek },
+      { count: newThisMonth },
+      { count: newPrevMonth },
       { count: activePlans },
-      { count: totalFiles },
-      { count: totalVideos },
+      { count: totalDriveFiles },
+      { count: totalProjectMedia },
       { count: totalProjects },
       { count: totalComments },
-      { data: storageData },
+      { data: driveStorageData },
+      { data: mediaStorageData },
       { data: recentUsers },
       { data: recentActivity },
+      { count: cfReady },
+      { count: cfProcessing },
+      { count: cfFailed },
+      { count: suspendedUsers },
     ] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayIso),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString()),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekStart.toISOString()),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', monthStart.toISOString()),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', prevMonthStart.toISOString()).lt('created_at', monthStart.toISOString()),
       supabase.from('user_plans').select('*', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('shares').select('*', { count: 'exact', head: true }).eq('is_trashed', false),
-      supabase.from('media_assets').select('*', { count: 'exact', head: true }),
-      supabase.from('media_projects').select('*', { count: 'exact', head: true }),
+      supabase.from('drive_files').select('*', { count: 'exact', head: true }).eq('is_trashed', false),
+      supabase.from('project_media').select('*', { count: 'exact', head: true }).eq('is_trashed', false),
+      supabase.from('projects').select('*', { count: 'exact', head: true }),
       supabase.from('media_comments').select('*', { count: 'exact', head: true }),
-      supabase.from('shares').select('file_size').eq('is_trashed', false),
-      supabase.from('profiles').select('id, full_name, email, avatar_url, created_at, is_suspended, is_admin, user_plans(is_active, plans(name))').order('created_at', { ascending: false }).limit(10),
-      supabase.from('admin_audit_logs').select('*, profiles(full_name, email)').order('created_at', { ascending: false }).limit(20),
+      supabase.from('drive_files').select('file_size').eq('is_trashed', false),
+      supabase.from('project_media').select('file_size').eq('is_trashed', false),
+      supabase.from('profiles')
+        .select('id, full_name, email, avatar_url, created_at, is_suspended, is_admin, user_plans(is_active, plans(name, storage_limit_gb))')
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabase.from('admin_audit_logs')
+        .select('*, profiles(full_name, email)')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      supabase.from('project_media').select('*', { count: 'exact', head: true }).eq('cloudflare_status', 'ready'),
+      supabase.from('project_media').select('*', { count: 'exact', head: true }).eq('cloudflare_status', 'processing'),
+      supabase.from('project_media').select('*', { count: 'exact', head: true }).eq('cloudflare_status', 'error'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_suspended', true),
     ])
 
-    const totalStorageBytes = (storageData || []).reduce((sum: number, s: any) => sum + (s.file_size || 0), 0)
+    const driveStorageBytes = (driveStorageData || []).reduce((sum: number, f: any) => sum + (f.file_size || 0), 0)
+    const mediaStorageBytes = (mediaStorageData || []).reduce((sum: number, f: any) => sum + (f.file_size || 0), 0)
+    const totalStorageBytes = driveStorageBytes + mediaStorageBytes
+
+    // Growth rate: % change in signups month over month
+    const growthRate = newPrevMonth && newPrevMonth > 0
+      ? Math.round(((newThisMonth || 0) - newPrevMonth) / newPrevMonth * 100)
+      : null
+
+    // Per-user storage breakdown (top 10)
+    const [{ data: driveByUser }, { data: mediaByUser }, { data: allProfiles }] = await Promise.all([
+      supabase.from('drive_files').select('user_id, file_size').eq('is_trashed', false),
+      supabase.from('project_media').select('user_id, file_size').eq('is_trashed', false),
+      supabase.from('profiles').select('id, full_name, email, avatar_url, user_plans(is_active, plans(name, storage_limit_gb))'),
+    ])
+
+    const storageByUser: Record<string, { drive: number, media: number }> = {}
+    for (const f of (driveByUser || [])) {
+      if (!f.user_id) continue
+      if (!storageByUser[f.user_id]) storageByUser[f.user_id] = { drive: 0, media: 0 }
+      storageByUser[f.user_id].drive += f.file_size || 0
+    }
+    for (const f of (mediaByUser || [])) {
+      if (!f.user_id) continue
+      if (!storageByUser[f.user_id]) storageByUser[f.user_id] = { drive: 0, media: 0 }
+      storageByUser[f.user_id].media += f.file_size || 0
+    }
+
+    const topUsersByStorage = (allProfiles || [])
+      .map((p: any) => {
+        const usage = storageByUser[p.id] || { drive: 0, media: 0 }
+        const plan = (p.user_plans || []).find((up: any) => up.is_active)?.plans
+        const limitGb = plan?.storage_limit_gb ?? 2
+        const totalBytes = usage.drive + usage.media
+        return {
+          id: p.id,
+          full_name: p.full_name,
+          email: p.email,
+          avatar_url: p.avatar_url,
+          plan_name: plan?.name || 'Free',
+          storage_limit_gb: limitGb,
+          total_bytes: totalBytes,
+          drive_bytes: usage.drive,
+          media_bytes: usage.media,
+          pct: Math.min(100, Math.round(totalBytes / (limitGb * 1024 * 1024 * 1024) * 100)),
+        }
+      })
+      .filter((u: any) => u.total_bytes > 0)
+      .sort((a: any, b: any) => b.total_bytes - a.total_bytes)
+      .slice(0, 8)
 
     return json({
       stats: {
         total_users: totalUsers || 0,
+        suspended_users: suspendedUsers || 0,
         new_today: newToday || 0,
+        new_this_week: newThisWeek || 0,
+        new_this_month: newThisMonth || 0,
+        growth_rate: growthRate,
         active_plans: activePlans || 0,
-        total_files: totalFiles || 0,
-        total_videos: totalVideos || 0,
+        total_drive_files: totalDriveFiles || 0,
+        total_project_media: totalProjectMedia || 0,
         total_projects: totalProjects || 0,
         total_comments: totalComments || 0,
         storage_bytes: totalStorageBytes,
+        drive_storage_bytes: driveStorageBytes,
+        media_storage_bytes: mediaStorageBytes,
+        cf_ready: cfReady || 0,
+        cf_processing: cfProcessing || 0,
+        cf_failed: cfFailed || 0,
       },
       recent_users: recentUsers || [],
       recent_activity: recentActivity || [],
+      top_users_by_storage: topUsersByStorage,
     })
-  } catch (err) {
+  } catch (err: any) {
     return json({ error: err.message }, 500)
   }
 })
