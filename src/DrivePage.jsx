@@ -29,6 +29,25 @@ import { showToast } from './components/ui/Toast'
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
+const isTouch = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(hover: none) and (pointer: coarse)').matches
+
+function useLongPress(callback, ms = 500) {
+  const timer = useRef(null)
+  const fired = useRef(false)
+  const start = useCallback((e, ...args) => {
+    fired.current = false
+    timer.current = setTimeout(() => {
+      fired.current = true
+      callback(e, ...args)
+    }, ms)
+  }, [callback, ms])
+  const cancel = useCallback(() => clearTimeout(timer.current), [])
+  const wasFired = useCallback(() => fired.current, [])
+  return { start, cancel, wasFired }
+}
+
 function fmtBytes(b) {
   if (!b) return '0 B'
   if (b < 1024) return `${b} B`
@@ -951,9 +970,9 @@ export default function DrivePage() {
               <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List"><Rows size={16} /></button>
             </div>
 
-            {/* New / Upload button */}
+            {/* New / Upload button — desktop only; mobile uses FAB */}
             {currentView === 'myDrive' && (
-              <div ref={newMenuRef} style={{ position: 'relative' }}>
+              <div ref={newMenuRef} data-new-menu="1" style={{ position: 'relative' }}>
                 <button className="btn-primary" style={{ height: 34, gap: 5 }} onClick={() => setShowNewMenu(m => !m)}>
                   <Plus size={14} /> New <CaretDown size={10} />
                 </button>
@@ -986,6 +1005,39 @@ export default function DrivePage() {
               </button>
             )}
           </div>
+
+          {/* ── Mobile FAB (New / Upload) ── */}
+          {currentView === 'myDrive' && (
+            <div className="drive-fab-wrap">
+              <div ref={newMenuRef} style={{ position: 'relative' }}>
+                <button
+                  className="drive-fab"
+                  onClick={() => setShowNewMenu(m => !m)}
+                  aria-label="New"
+                >
+                  <Plus size={22} weight="bold" />
+                </button>
+                {showNewMenu && (
+                  <div style={{ position: 'absolute', bottom: '110%', right: 0, zIndex: 200, background: '#1a1a24', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 6, minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+                    {[
+                      { icon: <FolderSimplePlus size={16} />, label: 'New Folder',    action: () => { setShowNewFolderIn(currentFolderId); setShowNewMenu(false) } },
+                      null,
+                      { icon: <UploadSimple size={16} />,    label: 'Upload Files',  action: () => { fileInputRef.current?.click(); setShowNewMenu(false) } },
+                      { icon: <FolderSimple size={16} />,    label: 'Upload Folder', action: () => { folderInputRef.current?.click(); setShowNewMenu(false) } },
+                    ].map((item, i) => item === null ? (
+                      <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 0' }} />
+                    ) : (
+                      <button key={i} onClick={item.action}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'left' }}
+                      >
+                        {item.icon} {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ── Filter bar ── */}
           {currentView === 'myDrive' && !search && (
@@ -1436,6 +1488,15 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
   function handleFileCtx(e, file) { e.preventDefault(); e.stopPropagation(); onCtxFile(file, e.clientX, e.clientY) }
   function handleFolderCtx(e, folder) { e.preventDefault(); e.stopPropagation(); onCtxFolder(folder, e.clientX, e.clientY) }
 
+  const folderLP = useLongPress((e, folder) => {
+    const touch = e.changedTouches?.[0] || e
+    onCtxFolder(folder, touch.clientX, touch.clientY)
+  })
+  const fileLP = useLongPress((e, file) => {
+    const touch = e.changedTouches?.[0] || e
+    onCtxFile(file, touch.clientX, touch.clientY)
+  })
+
   return (
     <div className="drive-area">
       {/* Folders */}
@@ -1462,7 +1523,15 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                   onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingItem?.id !== folder.id) onDrop(null, folder.id, 'hover') }}
                   onDragLeave={e => { e.stopPropagation(); onDrop(null, null, 'hover') }}
                   onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop(e, folder.id) }}
-                  onClick={e => { if (e.detail === 2) onFolderOpen(folder); else onToggleSelect(selKey) }}
+                  onClick={e => {
+                    if (folderLP.wasFired()) return
+                    if (isTouch()) onFolderOpen(folder)
+                    else if (e.detail === 2) onFolderOpen(folder)
+                    else onToggleSelect(selKey)
+                  }}
+                  onTouchStart={e => folderLP.start(e, folder)}
+                  onTouchEnd={folderLP.cancel}
+                  onTouchMove={folderLP.cancel}
                   onContextMenu={e => handleFolderCtx(e, folder)}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
@@ -1507,7 +1576,15 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                   draggable={currentView === 'myDrive'}
                   onDragStart={e => { e.stopPropagation(); onDragStart(e, file.id, 'file', file.name) }}
                   onDragEnd={onDragEnd}
-                  onClick={e => { if (e.detail === 2) { e.preventDefault(); onPreview(file) } else onToggleSelect(selKey) }}
+                  onClick={e => {
+                    if (fileLP.wasFired()) return
+                    if (isTouch()) { e.preventDefault(); onPreview(file) }
+                    else if (e.detail === 2) { e.preventDefault(); onPreview(file) }
+                    else onToggleSelect(selKey)
+                  }}
+                  onTouchStart={e => fileLP.start(e, file)}
+                  onTouchEnd={fileLP.cancel}
+                  onTouchMove={fileLP.cancel}
                   onContextMenu={e => handleFileCtx(e, file)}
                 >
                   {/* Thumbnail */}
@@ -1564,6 +1641,14 @@ function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {}
 }
 
 function ListView({ files, folders, uploadingItems = [], selected, onToggleSelect, sortBy, sortDir, setSortBy, setSortDir, renamingId, renamingType, renameVal, renameInputRef, onRenameChange, onRenameSave, onRenameCancel, showNewFolderIn, currentFolderId, newFolderName, newFolderInputRef, onNewFolderChange, onNewFolderCreate, onNewFolderCancel, onFolderOpen, onCtxFile, onCtxFolder, onPreview, currentView, allFolders, draggingItem, dragOverFolder, onDragStart, onDragEnd, onDrop }) {
+  const folderLPList = useLongPress((e, folder) => {
+    const touch = e.changedTouches?.[0] || e
+    onCtxFolder(folder, touch.clientX, touch.clientY)
+  })
+  const fileLPList = useLongPress((e, file) => {
+    const touch = e.changedTouches?.[0] || e
+    onCtxFile(file, touch.clientX, touch.clientY)
+  })
 
   const thStyle = { padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none' }
   const tdStyle = { padding: '0 10px', fontSize: 13, color: 'rgba(255,255,255,0.65)', verticalAlign: 'middle' }
@@ -1622,7 +1707,15 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
               onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingItem?.id !== folder.id) onDrop(null, folder.id, 'hover') }}
               onDragLeave={e => { e.stopPropagation(); onDrop(null, null, 'hover') }}
               onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop(e, folder.id) }}
-              onClick={e => { if (e.detail === 2) onFolderOpen(folder); else onToggleSelect(selKey) }}
+              onClick={e => {
+                if (folderLPList.wasFired()) return
+                if (isTouch()) onFolderOpen(folder)
+                else if (e.detail === 2) onFolderOpen(folder)
+                else onToggleSelect(selKey)
+              }}
+              onTouchStart={e => folderLPList.start(e, folder)}
+              onTouchEnd={folderLPList.cancel}
+              onTouchMove={folderLPList.cancel}
               onContextMenu={e => { e.preventDefault(); onCtxFolder(folder, e.clientX, e.clientY) }}
             >
               <td style={{ ...tdStyle, paddingLeft: 8, width: 40 }}>
@@ -1661,7 +1754,15 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
               draggable={currentView === 'myDrive'}
               onDragStart={e => { e.stopPropagation(); onDragStart(e, file.id, 'file', file.name) }}
               onDragEnd={onDragEnd}
-              onClick={e => { if (e.detail === 2) { e.preventDefault(); onPreview(file) } else onToggleSelect(selKey) }}
+              onClick={e => {
+                if (fileLPList.wasFired()) return
+                if (isTouch()) { e.preventDefault(); onPreview(file) }
+                else if (e.detail === 2) { e.preventDefault(); onPreview(file) }
+                else onToggleSelect(selKey)
+              }}
+              onTouchStart={e => fileLPList.start(e, file)}
+              onTouchEnd={fileLPList.cancel}
+              onTouchMove={fileLPList.cancel}
               onContextMenu={e => { e.preventDefault(); onCtxFile(file, e.clientX, e.clientY) }}
             >
               <td style={{ ...tdStyle, paddingLeft: 8, width: 40 }}>

@@ -21,7 +21,7 @@ const logo = `
 `
 
 const footer = `
-  <p style="color:#404050;font-size:11px;text-align:center;margin-top:24px;line-height:1.6">
+  <p class="ets-footer" style="color:#404050;font-size:11px;text-align:center;margin-top:24px;line-height:1.6">
     © 2026 Eastape Films. All rights reserved.<br>
     <a href="${APP_URL}" style="color:#505060;text-decoration:none">${APP_URL.replace('https://', '')}</a>
   </p>
@@ -29,10 +29,25 @@ const footer = `
 
 const wrapper = (content: string) => `
   <!DOCTYPE html>
-  <html>
-  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+  <html lang="en" style="color-scheme:dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+    <style>
+      :root { color-scheme: dark; }
+      body { margin:0; padding:0; background:#0a0a0f !important; }
+      /* Force dark — override any email client light-mode injection */
+      @media (prefers-color-scheme: light) {
+        body, .ets-wrap { background:#0a0a0f !important; }
+        .ets-card { background:#13131a !important; border-color:#2a2a3a !important; }
+        .ets-footer { color:#404050 !important; }
+      }
+    </style>
+  </head>
   <body style="margin:0;padding:0;background:#0a0a0f">
-  <div style="background:#0a0a0f;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div class="ets-wrap" style="background:#0a0a0f;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <div style="max-width:480px;margin:0 auto">
     ${logo}
     ${content}
@@ -44,7 +59,7 @@ const wrapper = (content: string) => `
 `
 
 const card = (content: string, borderColor = '#2a2a3a') => `
-  <div style="background:#13131a;border:1px solid ${borderColor};border-radius:16px;padding:32px">
+  <div class="ets-card" style="background:#13131a;border:1px solid ${borderColor};border-radius:16px;padding:32px">
     ${content}
   </div>
 `

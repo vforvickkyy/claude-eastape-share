@@ -5284,6 +5284,42 @@ body { overflow-x: hidden; }
 .drive-file-card .card-menu-btn:hover,
 .drive-list-row .card-menu-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
 
+/* ── Drive FAB (mobile only) ── */
+.drive-fab-wrap {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: 120;
+}
+.drive-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #3b82f6);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.5);
+  transition: transform 0.18s, box-shadow 0.18s;
+  -webkit-tap-highlight-color: transparent;
+}
+.drive-fab:active { transform: scale(0.92); box-shadow: 0 2px 10px rgba(124,58,237,0.4); }
+
+/* Touch devices: always show 3-dot menu btn so users can access context actions */
+@media (hover: none) and (pointer: coarse) {
+  .drive-folder-card .card-menu-btn,
+  .drive-file-card .card-menu-btn,
+  .drive-list-row .card-menu-btn { opacity: 1 !important; }
+
+  .drive-folder-card,
+  .drive-file-card { min-height: 44px; }
+  .drive-list-row   { height: 52px !important; }
+}
+
 /* Mobile adjustments */
 @media (max-width: 640px) {
   .drive-folder-card { padding: 9px 10px; }
@@ -5392,17 +5428,17 @@ body { overflow-x: hidden; }
     z-index: 59;
   }
 
-  /* Toolbar: tighter on mobile */
+  /* Toolbar: tighter on mobile — hide the desktop New button, use FAB instead */
   .drive-toolbar { gap: 6px; padding: 0 10px; height: 48px; }
+  .drive-toolbar > div[data-new-menu] { display: none; }
 
-  /* Hide search on mobile — show icon-only search button instead */
+  /* Show FAB on mobile */
+  .drive-fab-wrap { display: block; }
+
+  /* Hide search box, sort label, desktop New label on mobile */
   .drive-search-wrap { display: none; }
   .drive-search-mobile { display: flex !important; }
-
-  /* Hide sort label text on mobile */
   .drive-sort-label { display: none; }
-
-  /* New button: icon only on mobile */
   .drive-new-label { display: none; }
 
   /* Breadcrumb: scrollable */
@@ -5417,8 +5453,8 @@ body { overflow-x: hidden; }
 }
 
 @media (max-width: 480px) {
-  /* Tighter file content padding on small phones */
-  .drive-content-area { padding: 10px 10px 80px !important; }
+  /* Tighter padding, account for FAB */
+  .drive-content-area { padding: 10px 10px 88px !important; }
 
   /* Folder grid: 2 columns on small phones */
   .drive-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
