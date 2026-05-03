@@ -403,33 +403,13 @@ export const productionApi = {
   createComment:  (shotId, body)   => post(`${PROD}?resource=shot_comments&shot_id=${shotId}`, body, true),
   deleteComment:  (shotId, id)     => del(PROD, { resource: 'shot_comments', shot_id: shotId, id }, true),
 
-  // Pipeline Stages
-  listPipelineStages:      (projectId)             => get(PROD, { resource: 'pipeline_stages', project_id: projectId }, true),
-  listAllPipelineStages:   (projectId)             => get(PROD, { resource: 'pipeline_stages', project_id: projectId, show_hidden: 'true' }, true),
-  createPipelineStage:     (projectId, body)       => post(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, body, true),
-  updatePipelineStage:     (id, body)              => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, body, true),
-  patchPipelineStage:      (id, body)              => patch(`${PROD}?resource=pipeline_stages&id=${id}&project_id=_`, {}, { id, ...body }, true),
-  deletePipelineStage:     (id)                    => del(PROD, { resource: 'pipeline_stages', id }, true),
-  hideStage:               (id)                    => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, { is_hidden: true }, true),
-  showStage:               (id)                    => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, { is_hidden: false }, true),
-  updateStageWidth:        (id, width)             => put(`${PROD}?resource=pipeline_stages&id=${id}`, {}, { width }, true),
-  reorderPipelineStages:   (projectId, items)      => patch(`${PROD}?resource=pipeline_stages&project_id=${projectId}`, {}, { reorder: true, items }, true),
-
-  // Team members for pipeline assign
+  // Team members
   getProjectMembers: (projectId) =>
     get(PROD, { resource: 'project_members_list', project_id: projectId }, true),
 
   // Shots with media/thumbnails
   listShotsWithMedia: (projectId, filters = {}) =>
     get(PROD, { resource: 'shots_with_media', project_id: projectId, ...filters }, true),
-
-  // Update shot pipeline stage progress
-  updateShotPipeline: (shotId, stageName, progress) =>
-    patch(`${PROD}?resource=shot_pipeline&shot_id=${shotId}`, {}, { stage_name: stageName, progress }, true),
-
-  // Save default manage view for project
-  saveDefaultView: (projectId, view) =>
-    patch(`${PROD}?resource=project_view&project_id=${projectId}`, {}, { default_manage_view: view }, true),
 
   // Save which built-in columns (shot, status, assigned_to) are hidden
   saveBuiltinColVisibility: (projectId, hiddenCols) =>
@@ -460,10 +440,6 @@ export const productionApi = {
     post(`${PROD}?resource=custom_assignees&project_id=${projectId}`, { name }, true),
   removeCustomAssignee: (id) =>
     del(PROD, { resource: 'custom_assignees', id }, true),
-
-  // Update shot pipeline cell value (supports boolean, number, string)
-  updateShotPipeline: (shotId, stageName, value) =>
-    patch(`${PROD}?resource=shot_pipeline&shot_id=${shotId}`, {}, { stage_name: stageName, value }, true),
 
   // Update shot assignee
   updateShotAssignee: (shotId, assignedTo, customAssignee) =>

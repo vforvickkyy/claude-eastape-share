@@ -1,48 +1,39 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  ListBullets, CalendarBlank, ChartBar, SlidersHorizontal,
-  SpinnerGap, Warning, SquaresFour, Kanban, Gear,
+  ListBullets, SlidersHorizontal, SpinnerGap, Warning, Plus,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 import { useProject } from '../../context/ProjectContext'
 
-import FirstTimeExperience    from './FirstTimeExperience'
-import ShotCardsView          from './views/ShotCardsView'
-import PipelineView           from './views/PipelineView'
-import ShotListView           from './views/ShotListView'
-import CalendarView           from './views/CalendarView'
-import ProgressDashboard      from './views/ProgressDashboard'
-import ColumnManager          from './ColumnManager'
-import PipelineStageManager   from './PipelineStageManager'
+import ShotListView from './views/ShotListView'
+import ColumnManager from './ColumnManager'
 
-const VIEWS = [
-  { id: 'cards',    label: 'Cards',    icon: <SquaresFour   size={14} weight="duotone" /> },
-  { id: 'pipeline', label: 'Pipeline', icon: <Kanban        size={14} weight="duotone" /> },
-  { id: 'list',     label: 'List',     icon: <ListBullets   size={14} weight="duotone" /> },
-  { id: 'calendar', label: 'Calendar', icon: <CalendarBlank size={14} weight="duotone" /> },
-  { id: 'progress', label: 'Progress', icon: <ChartBar      size={14} weight="duotone" /> },
+const SCENE_COLORS = [
+  '#6366f1','#3b82f6','#06b6d4','#10b981',
+  '#84cc16','#f59e0b','#ef4444','#ec4899',
 ]
 
 export default function ManageTab() {
-  const { id: projectId }         = useParams()
-  const { project, refetch, canEdit, canDelete } = useProject()
+  const { id: projectId }              = useParams()
+  const { canEdit, canDelete }         = useProject()
 
-  const [view,            setView]            = useState(null)
   const [statuses,        setStatuses]        = useState([])
   const [scenes,          setScenes]          = useState([])
   const [columns,         setColumns]         = useState([])
   const [shots,           setShots]           = useState([])
-  const [stages,          setStages]          = useState([])
   const [teamMembers,     setTeamMembers]     = useState([])
   const [loading,         setLoading]         = useState(true)
   const [loadError,       setLoadError]       = useState(null)
-  const [seeding,    setSeeding]    = useState(false)
-  const [seedError,  setSeedError]  = useState(null)
-  const [seeded,     setSeeded]     = useState(false)
-  const [showColMgr,   setShowColMgr]   = useState(false)
-  const [showStageMgr, setShowStageMgr] = useState(false)
-  const [hiddenCols,   setHiddenCols]   = useState(() => {
+  const [seeding,         setSeeding]         = useState(false)
+  const [seedError,       setSeedError]       = useState(null)
+  const [seeded,          setSeeded]          = useState(false)
+  const [showColMgr,      setShowColMgr]      = useState(false)
+  const [selectedSceneId, setSelectedSceneId] = useState(null)
+  const [addingScene,     setAddingScene]     = useState(false)
+  const [newSceneName,    setNewSceneName]    = useState('')
+  const newSceneInputRef = useRef(null)
+  const [hiddenCols, setHiddenCols] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`list-cols-${projectId}`)) || {} } catch { return {} }
   })
 
@@ -54,30 +45,21 @@ export default function ManageTab() {
     })
   }
 
-  // Set initial view from project once loaded
-  useEffect(() => {
-    if (project?.default_manage_view && view === null) {
-      setView(project.default_manage_view)
-    }
-  }, [project?.default_manage_view])
-
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const [stsRes, scnRes, colRes, shotsRes, stagesRes, membersRes] = await Promise.all([
+      const [stsRes, scnRes, colRes, shotsRes, membersRes] = await Promise.all([
         productionApi.listStatuses(projectId),
         productionApi.listScenes(projectId),
         productionApi.listColumns(projectId),
         productionApi.listShotsWithMedia(projectId),
-        productionApi.listPipelineStages(projectId),
         productionApi.getProjectMembers(projectId).catch(() => ({ members: [] })),
       ])
-      setStatuses(stsRes.statuses   || [])
-      setScenes(scnRes.scenes       || [])
-      setColumns(colRes.columns     || [])
-      setShots(shotsRes.shots       || [])
-      setStages(stagesRes.stages    || [])
+      setStatuses(stsRes.statuses    || [])
+      setScenes(scnRes.scenes        || [])
+      setColumns(colRes.columns      || [])
+      setShots(shotsRes.shots        || [])
       setTeamMembers(membersRes.members || [])
     } catch (err) {
       setLoadError(err?.message || 'Failed to load production data')
@@ -100,13 +82,6 @@ export default function ManageTab() {
     setSeeding(false)
   }
 
-  async function handleFTEChoose(chosenView) {
-    await productionApi.saveDefaultView(projectId, chosenView)
-    setView(chosenView)
-    await refetch()
-  }
-
-  // Shot CRUD helpers
   async function createShot(body) {
     const res  = await productionApi.createShot(projectId, body)
     const shot = res.shot
@@ -128,11 +103,34 @@ export default function ManageTab() {
 
   async function createScene(name) {
     const res = await productionApi.createScene(projectId, { name, position: scenes.length })
-    setScenes(prev => [...prev, res.scene])
-    return res.scene
+    const newScene = res.scene
+    setScenes(prev => [...prev, newScene])
+    setSelectedSceneId(newScene.id)
+    return newScene
   }
 
-  // ── Loading ──────────────────────────────────────────────────────
+  function startAddScene() {
+    setAddingScene(true)
+    setNewSceneName('')
+    setTimeout(() => newSceneInputRef.current?.focus(), 50)
+  }
+
+  async function commitAddScene(e) {
+    e?.preventDefault()
+    const name = newSceneName.trim()
+    setAddingScene(false)
+    setNewSceneName('')
+    if (name) {
+      try { await createScene(name) } catch {}
+    }
+  }
+
+  function cancelAddScene() {
+    setAddingScene(false)
+    setNewSceneName('')
+  }
+
+  // ── Loading ──────────────────────────────────────────────────────────
   if (loading) return (
     <div className="manage-loading">
       <SpinnerGap size={28} className="spin" />
@@ -148,7 +146,7 @@ export default function ManageTab() {
     </div>
   )
 
-  // ── Empty / first-time seed ──────────────────────────────────────
+  // ── Empty / first-time seed ──────────────────────────────────────────
   const isEmpty = statuses.length === 0 && !seeded
   if (isEmpty) return (
     <div className="manage-empty">
@@ -164,64 +162,117 @@ export default function ManageTab() {
     </div>
   )
 
-  // ── First Time Experience — choose default view ──────────────────
-  const activeView = view || project?.default_manage_view
-  if (!activeView) {
-    return (
-      <FirstTimeExperience onChoose={handleFTEChoose} />
-    )
-  }
+  const filteredShots = selectedSceneId
+    ? shots.filter(s => s.scene_id === selectedSceneId)
+    : shots
+
+  const activeSceneName = selectedSceneId
+    ? scenes.find(s => s.id === selectedSceneId)?.name
+    : 'All Shots'
 
   const sharedProps = {
-    projectId, statuses, scenes, stages, columns, shots,
+    projectId, statuses, scenes, columns,
+    shots: filteredShots,
+    filterSceneId: selectedSceneId,
     teamMembers,
     canEdit,
     canDelete,
-    onShotCreate:  canEdit  ? createShot  : null,
-    onShotUpdate:  canEdit  ? updateShot  : null,
-    onShotDelete:  canDelete ? deleteShot : null,
-    onSceneCreate: canEdit  ? createScene : null,
+    onShotCreate:  canEdit   ? createShot  : null,
+    onShotUpdate:  canEdit   ? updateShot  : null,
+    onShotDelete:  canDelete ? deleteShot  : null,
+    onSceneCreate: canEdit   ? createScene : null,
     onReload:      load,
+    hiddenCols,
+    onManageColumns: () => setShowColMgr(true),
   }
-
-  // If stored view is the old 'review' tab (now removed), fall back to cards
-  const resolvedView = activeView === 'review' ? 'cards' : activeView
 
   return (
     <div className="manage-tab">
-      {/* Toolbar */}
-      <div className="manage-toolbar">
-        <div className="manage-view-switcher">
-          {VIEWS.map(v => (
-            <button
-              key={v.id}
-              className={`manage-view-btn ${resolvedView === v.id ? 'active' : ''}`}
-              onClick={() => setView(v.id)}
-            >
-              {v.icon} {v.label}
-            </button>
-          ))}
-        </div>
-        <div className="manage-toolbar-right">
-          {canEdit && (activeView === 'cards' || activeView === 'pipeline') && (
-            <button className="btn-ghost" onClick={() => setShowStageMgr(true)}>
-              <Gear size={14} /> Stages
-            </button>
-          )}
-          {canEdit && (
-            <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
-              <SlidersHorizontal size={14} /> Columns
-            </button>
-          )}
-        </div>
+      {/* ── Scene Sidebar ────────────────────────────────── */}
+      <div className="manage-sidebar">
+        <div className="manage-sidebar-header">Scenes</div>
+
+        <nav className="manage-sidebar-nav">
+          <button
+            className={`manage-sidebar-item ${!selectedSceneId ? 'active' : ''}`}
+            onClick={() => setSelectedSceneId(null)}
+          >
+            <ListBullets size={13} weight="duotone" style={{ flexShrink: 0 }} />
+            <span className="manage-sidebar-label">All Shots</span>
+            <span className="manage-sidebar-count">{shots.length}</span>
+          </button>
+
+          {scenes.map((scene, idx) => {
+            const color = SCENE_COLORS[idx % SCENE_COLORS.length]
+            const count = shots.filter(s => s.scene_id === scene.id).length
+            return (
+              <button
+                key={scene.id}
+                className={`manage-sidebar-item ${selectedSceneId === scene.id ? 'active' : ''}`}
+                onClick={() => setSelectedSceneId(scene.id)}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                <span className="manage-sidebar-label">{scene.name}</span>
+                <span className="manage-sidebar-count">{count}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        {canEdit && (
+          <div className="manage-sidebar-footer">
+            {addingScene ? (
+              <form onSubmit={commitAddScene} style={{ padding: '4px 8px' }}>
+                <input
+                  ref={newSceneInputRef}
+                  value={newSceneName}
+                  onChange={e => setNewSceneName(e.target.value)}
+                  onBlur={commitAddScene}
+                  onKeyDown={e => { if (e.key === 'Escape') cancelAddScene() }}
+                  placeholder="Scene name…"
+                  style={{
+                    width: '100%', background: 'rgba(255,255,255,0.07)',
+                    border: '1px solid rgba(99,102,241,0.5)', borderRadius: 6,
+                    color: '#e8e8ff', fontSize: 12, padding: '5px 8px', outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </form>
+            ) : (
+              <button className="manage-sidebar-add" onClick={startAddScene}>
+                <Plus size={12} weight="bold" /> New Scene
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* View content */}
-      {resolvedView === 'cards'    && <ShotCardsView {...sharedProps} />}
-      {resolvedView === 'pipeline' && <PipelineView  {...sharedProps} onManageStages={() => setShowStageMgr(true)} />}
-      {resolvedView === 'list'     && <ShotListView     {...sharedProps} hiddenCols={hiddenCols} onManageColumns={() => setShowColMgr(true)} />}
-      {resolvedView === 'calendar' && <CalendarView      {...sharedProps} />}
-      {resolvedView === 'progress' && <ProgressDashboard {...sharedProps} />}
+      {/* ── Main Content ─────────────────────────────────── */}
+      <div className="manage-content">
+        <div className="manage-toolbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
+              {activeSceneName}
+            </span>
+            <span style={{
+              fontSize: 11, color: 'var(--t4)',
+              background: 'rgba(255,255,255,0.06)',
+              borderRadius: 99, padding: '2px 8px',
+            }}>
+              {filteredShots.length} shot{filteredShots.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="manage-toolbar-right">
+            {canEdit && (
+              <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
+                <SlidersHorizontal size={14} /> Columns
+              </button>
+            )}
+          </div>
+        </div>
+
+        <ShotListView {...sharedProps} />
+      </div>
 
       {showColMgr && (
         <ColumnManager
@@ -231,15 +282,6 @@ export default function ManageTab() {
           onToggleHide={toggleHideCol}
           onClose={() => setShowColMgr(false)}
           onSaved={cols => setColumns(cols)}
-        />
-      )}
-
-      {showStageMgr && (
-        <PipelineStageManager
-          projectId={projectId}
-          stages={stages}
-          onClose={() => setShowStageMgr(false)}
-          onSaved={updated => setStages(updated)}
         />
       )}
     </div>

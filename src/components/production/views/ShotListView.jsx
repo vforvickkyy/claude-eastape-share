@@ -12,37 +12,10 @@ const SCENE_COLORS = [
   '#84cc16','#f59e0b','#ef4444','#ec4899',
 ]
 
-// Colors for custom columns (cycles)
 const COL_COLORS = [
   '#8b5cf6','#06b6d4','#10b981','#f59e0b',
   '#ef4444','#ec4899','#3b82f6','#84cc16',
 ]
-
-// ── Completion helpers ────────────────────────────────────────────────
-function pipelineCompletion(shot, stages) {
-  if (!stages?.length) return null
-  const numStages = stages.filter(s => !s.builtin_key)
-  if (!numStages.length) return null
-  const vals = numStages.map(s => {
-    const v = shot.pipeline_stages?.[s.name]
-    if (s.cell_type === 'percentage') return Number(v || 0)
-    if (s.cell_type === 'checkbox')   return (v === true || v === 1 || v === 100) ? 100 : 0
-    return 0
-  })
-  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
-}
-function groupCompletion(shots, stages) {
-  if (!shots.length) return null
-  const vals = shots.map(s => pipelineCompletion(s, stages)).filter(v => v !== null)
-  if (!vals.length) return null
-  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
-}
-function completionColor(pct) {
-  if (pct == null) return '#404050'
-  if (pct >= 80)   return '#10b981'
-  if (pct >= 40)   return '#f59e0b'
-  return '#404050'
-}
 
 // ── Status Pill ───────────────────────────────────────────────────────
 function StatusPill({ shot, statuses, onUpdate }) {
@@ -132,7 +105,7 @@ function ActionsMenu({ shot, linkedId, onOpen, onLink, onEdit, onDelete, onClose
   )
 }
 
-// ── Pipeline-style column header ──────────────────────────────────────
+// ── Column header with resize ─────────────────────────────────────────
 function ColHeader({ label, color, width, widthKey, sortKey, sort, onSort, onResizeDown, stat, noResize }) {
   const [hoverResize, setHoverResize] = useState(false)
   const isSort = sort?.col === sortKey
@@ -203,7 +176,7 @@ function CustomCell({ shot, col, colWidths, onShotUpdate }) {
   )
 }
 
-// ── Custom column stat ────────────────────────────────────────────────
+// ── Custom column stat (for header) ──────────────────────────────────
 function colStat(col, shots) {
   if (col.type === 'checkbox') {
     const done = shots.filter(s => !!s.custom_data?.[col.name]).length
@@ -217,9 +190,71 @@ function colStat(col, shots) {
   return null
 }
 
+// ── Inline add-shot row ───────────────────────────────────────────────
+function AddShotRow({ colCount, sceneId, onShotCreate }) {
+  const [active, setActive] = useState(false)
+  const [val, setVal]       = useState('')
+  const inputRef = useRef()
+
+  function activate() {
+    setActive(true)
+    setTimeout(() => inputRef.current?.focus(), 30)
+  }
+
+  async function commit(e) {
+    e?.preventDefault()
+    const title = val.trim()
+    setActive(false)
+    setVal('')
+    if (title) {
+      try { await onShotCreate({ title, scene_id: sceneId || null }) } catch {}
+    }
+  }
+
+  if (!active) {
+    return (
+      <tr>
+        <td colSpan={colCount} style={{ padding: '6px 16px' }}>
+          <button
+            onClick={activate}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--t4)', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#a5b4fc' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--t4)' }}
+          >
+            <Plus size={12} weight="bold" /> Add Shot
+          </button>
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr style={{ background: 'rgba(99,102,241,0.04)', borderBottom: '1px solid rgba(99,102,241,0.2)' }}>
+      <td colSpan={colCount} style={{ padding: '8px 16px' }}>
+        <form onSubmit={commit} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            ref={inputRef}
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Escape') { setActive(false); setVal('') } }}
+            placeholder="Shot name…"
+            style={{
+              flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid #6366f1',
+              borderRadius: 6, color: '#e8e8ff', fontSize: 13, padding: '5px 10px', outline: 'none',
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--t4)' }}>↵ to add</span>
+        </form>
+      </td>
+    </tr>
+  )
+}
+
 // ── Main ShotListView ─────────────────────────────────────────────────
 export default function ShotListView({
-  projectId, statuses, scenes, stages = [], columns = [], shots,
+  projectId, statuses, scenes, columns = [], shots,
+  filterSceneId = null,
   hiddenCols = {},
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload, onManageColumns,
 }) {
@@ -246,7 +281,6 @@ export default function ShotListView({
 
   useEffect(() => { setLocalShots(shots) }, [shots])
 
-  // Load thumbnails — same method as ShotCardsView
   useEffect(() => {
     projectMediaApi.list({ projectId })
       .then(d => {
@@ -257,7 +291,6 @@ export default function ShotListView({
       .catch(() => {})
   }, [projectId])
 
-  // ── Collapse ───────────────────────────────────────────────────────
   function toggleCollapse(id) {
     setCollapsed(prev => {
       const next = { ...prev, [id]: !prev[id] }
@@ -266,7 +299,6 @@ export default function ShotListView({
     })
   }
 
-  // ── Sort ───────────────────────────────────────────────────────────
   function handleSort(col) {
     setSort(prev => prev.col === col
       ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
@@ -287,7 +319,6 @@ export default function ShotListView({
     })
   }
 
-  // ── Column resize ──────────────────────────────────────────────────
   function onResizeDown(e, key, defaultW) {
     e.preventDefault(); e.stopPropagation()
     const startX = e.clientX
@@ -308,7 +339,6 @@ export default function ShotListView({
     document.addEventListener('mouseup', onUp)
   }
 
-  // ── Shot actions ───────────────────────────────────────────────────
   async function handleStatusUpdate(shotId, statusId) {
     setLocalShots(prev => prev.map(s => s.id === shotId ? { ...s, status_id: statusId } : s))
     try { await onShotUpdate(shotId, { status_id: statusId }) }
@@ -341,25 +371,169 @@ export default function ShotListView({
 
   // ── Widths ─────────────────────────────────────────────────────────
   const W = {
-    thumb:  colWidths.thumb  || 60,
+    thumb:  colWidths.thumb  || 100,
     title:  colWidths.title  || 220,
     status: colWidths.status || 150,
   }
+
+  const thumbImgW = Math.max(W.thumb - 16, 44)
+  const thumbImgH = Math.min(thumbImgW * 0.6, 68)
+  const rowH = Math.max(thumbImgH + 16, 64)
 
   const showThumb  = !hiddenCols['thumbnail']
   const showTitle  = !hiddenCols['title']
   const showStatus = !hiddenCols['status']
   const visibleCols = columns.filter(c => !hiddenCols[c.id])
 
-  // ── Groups ─────────────────────────────────────────────────────────
-  const groups = scenes.map((scene, idx) => ({
-    scene, color: SCENE_COLORS[idx % SCENE_COLORS.length],
-    shots: localShots.filter(s => s.scene_id === scene.id),
-  }))
-  const ungrouped = localShots.filter(s => !s.scene_id)
-  if (ungrouped.length > 0) groups.push({ scene: null, color: 'var(--t4)', shots: ungrouped })
-
   const colCount = (showThumb ? 1 : 0) + (showTitle ? 1 : 0) + (showStatus ? 1 : 0) + visibleCols.length + 1 + 1
+
+  // ── Groups ─────────────────────────────────────────────────────────
+  // When a specific scene is selected via sidebar, show flat list (no grouping)
+  const flatMode = !!filterSceneId
+
+  const groups = flatMode
+    ? null
+    : (() => {
+        const g = scenes.map((scene, idx) => ({
+          scene, color: SCENE_COLORS[idx % SCENE_COLORS.length],
+          shots: localShots.filter(s => s.scene_id === scene.id),
+        }))
+        const ungrouped = localShots.filter(s => !s.scene_id)
+        if (ungrouped.length > 0) g.push({ scene: null, color: 'var(--t4)', shots: ungrouped })
+        return g
+      })()
+
+  const flatShots = flatMode ? localShots : null
+  const activeScene = filterSceneId ? scenes.find(s => s.id === filterSceneId) : null
+
+  // ── Empty state ────────────────────────────────────────────────────
+  const allEmpty = localShots.length === 0
+  if (allEmpty && !canEdit) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 24px', textAlign: 'center' }}>
+        <FilmSlate size={48} weight="duotone" style={{ color: 'var(--t4)', opacity: 0.3, marginBottom: 16 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t2)', marginBottom: 6 }}>No shots yet</div>
+        <div style={{ fontSize: 13, color: 'var(--t4)' }}>
+          {filterSceneId ? 'This scene has no shots.' : 'No shots have been added to this project.'}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Shot row renderer ──────────────────────────────────────────────
+  function renderShotRow(shot, rowIdx) {
+    const thumbUrl = mediaThumbs[shot.thumbnail_media_id] || null
+    const linkedId = shot.linked_media_id || shot.thumbnail_media_id
+    const isEditing = editingName === shot.id
+
+    return (
+      <tr
+        key={shot.id}
+        onClick={() => setSelectedShot(shot)}
+        style={{ height: rowH, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.04)', background: rowIdx % 2 === 1 ? 'rgba(255,255,255,0.01)' : 'transparent', transition: 'background 150ms' }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+          const btn = e.currentTarget.querySelector('.shot-action-btn')
+          if (btn) btn.style.opacity = '1'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = rowIdx % 2 === 1 ? 'rgba(255,255,255,0.01)' : 'transparent'
+          const btn = e.currentTarget.querySelector('.shot-action-btn')
+          if (btn) btn.style.opacity = '0'
+        }}
+      >
+        {/* Thumbnail */}
+        {showThumb && (
+          <td
+            style={{ width: W.thumb, minWidth: W.thumb, padding: '6px 8px', verticalAlign: 'middle' }}
+            onClick={e => { if (linkedId) { e.stopPropagation(); navigate(`/projects/${projectId}/media/${linkedId}`, { state: { from: 'manage' } }) } }}
+          >
+            <div style={{ width: thumbImgW, height: thumbImgH, borderRadius: 7, overflow: 'hidden', cursor: linkedId ? 'pointer' : 'default' }}>
+              {thumbUrl
+                ? <img src={thumbUrl} alt="" style={{ width: thumbImgW, height: thumbImgH, objectFit: 'cover', display: 'block' }} onError={e => { e.target.style.display = 'none' }} />
+                : <div style={{ width: thumbImgW, height: thumbImgH, background: '#1a1a24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FilmSlate size={Math.round(thumbImgH * 0.35)} weight="duotone" style={{ color: '#404050' }} />
+                  </div>
+              }
+            </div>
+          </td>
+        )}
+
+        {/* Shot Name */}
+        {showTitle && (
+          <td
+            style={{ width: colWidths.title || W.title, minWidth: colWidths.title || W.title, padding: '0 10px', verticalAlign: 'middle', overflow: 'hidden' }}
+            onClick={e => { e.stopPropagation(); if (!isEditing) { setEditingName(shot.id); setEditNameVal(shot.title) } }}
+          >
+            {isEditing ? (
+              <input
+                autoFocus value={editNameVal}
+                onChange={e => setEditNameVal(e.target.value)}
+                onBlur={() => handleNameEdit(shot)}
+                onKeyDown={e => { if (e.key === 'Enter') handleNameEdit(shot); if (e.key === 'Escape') setEditingName(null) }}
+                onClick={e => e.stopPropagation()}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid #6366f1', borderRadius: 5, color: '#e8e8ff', fontSize: 13, padding: '3px 8px', outline: 'none' }}
+              />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+                {shot.shot_number && (
+                  <span style={{ fontSize: 10, color: 'var(--t4)', fontFamily: 'monospace', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
+                )}
+                {linkedId && <LinkIcon size={12} style={{ color: '#7c3aed', flexShrink: 0 }} />}
+                <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {shot.title}
+                </span>
+              </div>
+            )}
+          </td>
+        )}
+
+        {/* Status */}
+        {showStatus && (
+          <td
+            style={{ width: colWidths.status || W.status, minWidth: colWidths.status || W.status, padding: '0 10px', verticalAlign: 'middle' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <StatusPill shot={shot} statuses={statuses} onUpdate={handleStatusUpdate} />
+          </td>
+        )}
+
+        {/* Custom columns */}
+        {visibleCols.map(col => (
+          <CustomCell key={col.id} shot={shot} col={col} colWidths={colWidths} onShotUpdate={onShotUpdate} />
+        ))}
+
+        <td style={{ width: 40 }} />
+
+        {/* Actions */}
+        <td
+          style={{ width: 48, minWidth: 48, padding: '0 4px', verticalAlign: 'middle', position: 'relative' }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+            <button
+              className="shot-action-btn"
+              onClick={e => { e.stopPropagation(); setActionMenu(actionMenu === shot.id ? null : shot.id) }}
+              style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', opacity: 0, transition: 'opacity 0.15s' }}
+            >
+              <DotsThree size={16} weight="bold" />
+            </button>
+            {actionMenu === shot.id && (
+              <ActionsMenu
+                shot={shot}
+                linkedId={linkedId}
+                onOpen={() => navigate(`/projects/${projectId}/media/${linkedId}`, { state: { from: 'manage' } })}
+                onLink={() => { setLinkingShot(shot); setActionMenu(null) }}
+                onEdit={() => { setSelectedShot(shot); setActionMenu(null) }}
+                onDelete={() => handleDelete(shot)}
+                onClose={() => setActionMenu(null)}
+              />
+            )}
+          </div>
+        </td>
+      </tr>
+    )
+  }
 
   return (
     <>
@@ -370,15 +544,13 @@ export default function ShotListView({
           <thead>
             <tr style={{ background: '#0d0d15', borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'sticky', top: 0, zIndex: 10 }}>
 
-              {/* Thumbnail */}
               {showThumb && (
                 <th style={{ width: W.thumb, minWidth: W.thumb, maxWidth: W.thumb, position: 'relative', padding: 0 }}>
-                  <div onMouseDown={e => onResizeDown(e, 'thumb', 60)}
+                  <div onMouseDown={e => onResizeDown(e, 'thumb', 100)}
                     style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 1 }} />
                 </th>
               )}
 
-              {/* Shot Name */}
               {showTitle && (
                 <ColHeader
                   label="Shot Name" color="#6366f1" sortKey="title"
@@ -387,7 +559,6 @@ export default function ShotListView({
                 />
               )}
 
-              {/* Status */}
               {showStatus && (
                 <ColHeader
                   label="Status" color="#10b981" sortKey="status"
@@ -396,7 +567,6 @@ export default function ShotListView({
                 />
               )}
 
-              {/* Custom columns */}
               {visibleCols.map((col, idx) => (
                 <ColHeader
                   key={col.id}
@@ -410,7 +580,6 @@ export default function ShotListView({
                 />
               ))}
 
-              {/* Add column button */}
               <th style={{ width: 40, padding: 0, background: 'rgba(255,255,255,0.02)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
                 <button
                   onClick={onManageColumns}
@@ -421,197 +590,83 @@ export default function ShotListView({
                 </button>
               </th>
 
-              {/* Actions */}
               <th style={{ width: 48, minWidth: 48 }} />
             </tr>
           </thead>
 
           <tbody>
-            {groups.map(({ scene, color, shots: groupShots }) => {
-              const groupId     = scene?.id || '__ungrouped__'
-              const isCollapsed = !!collapsed[groupId]
-              const sorted      = sortShots(groupShots)
-              const pct         = groupCompletion(groupShots, stages)
-
-              return (
-                <React.Fragment key={groupId}>
-                  {/* Scene group row */}
-                  <tr
-                    onClick={() => toggleCollapse(groupId)}
-                    style={{ height: 40, cursor: 'pointer', background: 'rgba(255,255,255,0.025)', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
-                  >
-                    <td colSpan={colCount} style={{ padding: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 40 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ color: 'var(--t4)', display: 'flex', flexShrink: 0 }}>
-                            {isCollapsed ? <CaretRight size={14} weight="bold" /> : <CaretDown size={14} weight="bold" />}
-                          </span>
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#e8e8ff', userSelect: 'none' }}>
-                            {scene ? scene.name : 'Ungrouped'}
-                          </span>
-                          <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--t4)' }}>
-                            {groupShots.length} shot{groupShots.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }} onClick={e => e.stopPropagation()}>
-                          {pct !== null && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 12, color: completionColor(pct) }}>{pct}%</span>
-                              <div style={{ width: 80, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${pct}%`, background: completionColor(pct), borderRadius: 2, transition: 'width 0.3s' }} />
-                              </div>
-                            </div>
-                          )}
-                          {scene && canEdit && (
-                            <button
-                              onClick={() => onShotCreate({ title: 'New Shot', scene_id: scene.id, position: groupShots.length })}
-                              style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 12, cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                            >
-                              + Add Shot
-                            </button>
-                          )}
-                        </div>
-                      </div>
+            {flatMode ? (
+              /* ── Flat mode: single scene selected from sidebar ── */
+              <>
+                {localShots.length === 0 ? (
+                  <tr>
+                    <td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center' }}>
+                      <FilmSlate size={36} weight="duotone" style={{ color: 'var(--t4)', opacity: 0.3, display: 'block', margin: '0 auto 12px' }} />
+                      <div style={{ fontSize: 14, color: 'var(--t3)', marginBottom: 4 }}>No shots in this scene</div>
+                      {canEdit && <div style={{ fontSize: 12, color: 'var(--t4)' }}>Use "Add Shot" below to get started</div>}
                     </td>
                   </tr>
+                ) : (
+                  sortShots(localShots).map((shot, idx) => renderShotRow(shot, idx))
+                )}
+                {canEdit && (
+                  <AddShotRow colCount={colCount} sceneId={filterSceneId} onShotCreate={onShotCreate} />
+                )}
+              </>
+            ) : (
+              /* ── Grouped mode: all shots grouped by scene ── */
+              groups.map(({ scene, color, shots: groupShots }) => {
+                const groupId     = scene?.id || '__ungrouped__'
+                const isCollapsed = !!collapsed[groupId]
+                const sorted      = sortShots(groupShots)
 
-                  {/* Shot rows */}
-                  {!isCollapsed && sorted.map((shot, rowIdx) => {
-                    const thumbUrl = mediaThumbs[shot.thumbnail_media_id] || null
-                    const linkedId = shot.linked_media_id || shot.thumbnail_media_id
-                    const isEditing = editingName === shot.id
-
-                    return (
-                      <tr
-                        key={shot.id}
-                        onClick={() => setSelectedShot(shot)}
-                        style={{ height: 52, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.04)', background: rowIdx % 2 === 1 ? 'rgba(255,255,255,0.01)' : 'transparent', transition: 'background 150ms' }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
-                          const btn = e.currentTarget.querySelector('.shot-action-btn')
-                          if (btn) btn.style.opacity = '1'
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = rowIdx % 2 === 1 ? 'rgba(255,255,255,0.01)' : 'transparent'
-                          const btn = e.currentTarget.querySelector('.shot-action-btn')
-                          if (btn) btn.style.opacity = '0'
-                        }}
-                      >
-                        {/* Thumbnail */}
-                        {showThumb && (
-                          <td
-                            style={{ width: W.thumb, minWidth: W.thumb, padding: '6px 8px', verticalAlign: 'middle' }}
-                            onClick={e => { if (linkedId) { e.stopPropagation(); navigate(`/projects/${projectId}/media/${linkedId}`, { state: { from: 'manage' } }) } }}
-                          >
-                            <div style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden', cursor: linkedId ? 'pointer' : 'default' }}>
-                              {thumbUrl
-                                ? <img src={thumbUrl} alt="" style={{ width: 44, height: 44, objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                                : <div style={{ width: 44, height: 44, background: '#1a1a24', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <FilmSlate size={18} weight="duotone" style={{ color: '#404050' }} />
-                                  </div>
-                              }
-                            </div>
-                          </td>
-                        )}
-
-                        {/* Shot Name — click to inline edit */}
-                        {showTitle && (
-                          <td
-                            style={{ width: colWidths.title || W.title, minWidth: colWidths.title || W.title, padding: '0 10px', verticalAlign: 'middle', overflow: 'hidden' }}
-                            onClick={e => { e.stopPropagation(); if (!isEditing) { setEditingName(shot.id); setEditNameVal(shot.title) } }}
-                          >
-                            {isEditing ? (
-                              <input
-                                autoFocus value={editNameVal}
-                                onChange={e => setEditNameVal(e.target.value)}
-                                onBlur={() => handleNameEdit(shot)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleNameEdit(shot); if (e.key === 'Escape') setEditingName(null) }}
-                                onClick={e => e.stopPropagation()}
-                                style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid #6366f1', borderRadius: 5, color: '#e8e8ff', fontSize: 13, padding: '3px 8px', outline: 'none' }}
-                              />
-                            ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
-                                {shot.shot_number && (
-                                  <span style={{ fontSize: 10, color: 'var(--t4)', fontFamily: 'monospace', fontWeight: 600, flexShrink: 0 }}>#{shot.shot_number}</span>
-                                )}
-                                {linkedId && <LinkIcon size={12} style={{ color: '#7c3aed', flexShrink: 0 }} />}
-                                <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {shot.title}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                        )}
-
-                        {/* Status */}
-                        {showStatus && (
-                          <td
-                            style={{ width: colWidths.status || W.status, minWidth: colWidths.status || W.status, padding: '0 10px', verticalAlign: 'middle' }}
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <StatusPill shot={shot} statuses={statuses} onUpdate={handleStatusUpdate} />
-                          </td>
-                        )}
-
-                        {/* Custom columns */}
-                        {visibleCols.map(col => (
-                          <CustomCell key={col.id} shot={shot} col={col} colWidths={colWidths} onShotUpdate={onShotUpdate} />
-                        ))}
-
-                        {/* Add col ghost cell */}
-                        <td style={{ width: 40 }} />
-
-                        {/* Actions */}
-                        <td
-                          style={{ width: 48, minWidth: 48, padding: '0 4px', verticalAlign: 'middle', position: 'relative' }}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                            <button
-                              className="shot-action-btn"
-                              onClick={e => { e.stopPropagation(); setActionMenu(actionMenu === shot.id ? null : shot.id) }}
-                              style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', opacity: 0, transition: 'opacity 0.15s' }}
-                            >
-                              <DotsThree size={16} weight="bold" />
-                            </button>
-                            {actionMenu === shot.id && (
-                              <ActionsMenu
-                                shot={shot}
-                                linkedId={linkedId}
-                                onOpen={() => navigate(`/projects/${projectId}/media/${linkedId}`, { state: { from: 'manage' } })}
-                                onLink={() => { setLinkingShot(shot); setActionMenu(null) }}
-                                onEdit={() => { setSelectedShot(shot); setActionMenu(null) }}
-                                onDelete={() => handleDelete(shot)}
-                                onClose={() => setActionMenu(null)}
-                              />
-                            )}
+                return (
+                  <React.Fragment key={groupId}>
+                    {/* Scene group header row */}
+                    <tr
+                      onClick={() => toggleCollapse(groupId)}
+                      style={{ height: 40, cursor: 'pointer', background: 'rgba(255,255,255,0.025)', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                    >
+                      <td colSpan={colCount} style={{ padding: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 40 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ color: 'var(--t4)', display: 'flex', flexShrink: 0 }}>
+                              {isCollapsed ? <CaretRight size={14} weight="bold" /> : <CaretDown size={14} weight="bold" />}
+                            </span>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#e8e8ff', userSelect: 'none' }}>
+                              {scene ? scene.name : 'Ungrouped'}
+                            </span>
+                            <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--t4)' }}>
+                              {groupShots.length} shot{groupShots.length !== 1 ? 's' : ''}
+                            </span>
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </React.Fragment>
-              )
-            })}
+                          {scene && canEdit && (
+                            <div onClick={e => e.stopPropagation()}>
+                              <button
+                                onClick={() => onShotCreate({ title: 'New Shot', scene_id: scene.id, position: groupShots.length })}
+                                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 12, cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                              >
+                                + Add Shot
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Shot rows */}
+                    {!isCollapsed && sorted.map((shot, rowIdx) => renderShotRow(shot, rowIdx))}
+                  </React.Fragment>
+                )
+              })
+            )}
           </tbody>
         </table>
-      </div>
-
-      {/* Add scene */}
-      <div style={{ padding: '12px 16px' }}>
-        <button
-          onClick={() => { const name = window.prompt('Scene name:'); if (name?.trim()) onSceneCreate(name.trim()) }}
-          style={{ background: 'none', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 7, color: 'var(--t4)', fontSize: 12, padding: '6px 14px', cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#a5b4fc' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'var(--t4)' }}
-        >
-          + Add Scene
-        </button>
       </div>
 
       {selectedShot && (
