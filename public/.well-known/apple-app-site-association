@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "974LS7947P.eastape.Eastape-Studio",
+        "paths": ["/share/*"]
+      }
+    ]
+  }
+}
