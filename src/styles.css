@@ -4486,12 +4486,23 @@ body { overflow-x: hidden; }
   position: sticky; top: 0;
   max-height: calc(100vh - 120px);
   overflow: hidden;
+  transition: width 0.2s var(--ease);
 }
+.manage-sidebar.collapsed { width: 48px; }
+.manage-sidebar.collapsed .manage-sidebar-count { margin-left: auto; }
 .manage-sidebar-header {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--t4);
-  padding: 14px 14px 8px;
+  padding: 10px 10px 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
 }
+.manage-side-toggle {
+  background: none; border: none; cursor: pointer;
+  color: var(--t4); padding: 3px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.15s, background 0.15s; flex-shrink: 0; margin-left: auto;
+}
+.manage-side-toggle:hover { color: var(--text); background: var(--bg-3); }
 .manage-sidebar-nav {
   flex: 1; overflow-y: auto; padding: 0 6px 8px;
   display: flex; flex-direction: column; gap: 1px;
@@ -4534,7 +4545,11 @@ body { overflow-x: hidden; }
 
 /* Toolbar */
 .manage-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; gap: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 46px; }
-.manage-toolbar-right { display: flex; gap: 6px; }
+.manage-toolbar-right { display: flex; gap: 6px; align-items: center; }
+.manage-view-toggle { display: flex; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 2px; gap: 1px; }
+.manage-view-btn { background: none; border: none; cursor: pointer; color: var(--t4); padding: 4px 7px; border-radius: 4px; display: flex; align-items: center; transition: color 0.15s, background 0.15s; }
+.manage-view-btn:hover { color: var(--text-2); }
+.manage-view-btn.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 .manage-stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .manage-stat-total {
   font-size: 11px; font-weight: 700; color: var(--t2);
@@ -4546,6 +4561,103 @@ body { overflow-x: hidden; }
   background: color-mix(in oklch, var(--sc, var(--accent)) 12%, transparent);
   padding: 2px 8px; border-radius: 99px;
 }
+
+/* ── Shot Card View ── */
+.shot-card-area { padding: 16px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+.shot-card-group {}
+.shot-card-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 4px; margin-bottom: 12px; cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+.shot-card-group-header:hover { background: var(--bg-3); border-radius: var(--r-sm); }
+.shot-card-group-name { font-size: 13px; font-weight: 700; color: var(--t1); flex: 1; }
+.shot-card-group-count {
+  font-size: 10.5px; font-weight: 600; padding: 1px 7px;
+  border-radius: 99px; flex-shrink: 0;
+}
+.shot-card-group-add {
+  background: none; border: none; cursor: pointer;
+  font-size: 11.5px; color: var(--t4); padding: 3px 8px;
+  border-radius: var(--r-sm); display: flex; align-items: center; gap: 4px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.shot-card-group-add:hover { background: var(--bg-3); }
+.shot-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.shot-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-md); overflow: hidden;
+  cursor: pointer; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  display: flex; flex-direction: column;
+}
+.shot-card:hover { border-color: var(--line-2); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+.shot-card-thumb {
+  height: 110px; display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden; flex-shrink: 0;
+}
+.shot-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shot-card-play {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.15s;
+}
+.shot-card:hover .shot-card-play { opacity: 1; }
+.shot-card-play-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,0.9); color: #111;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; padding-left: 2px;
+}
+.shot-card-body { padding: 10px 10px 10px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
+.shot-card-title-row { display: flex; align-items: flex-start; gap: 4px; }
+.shot-card-num { font-size: 10px; color: var(--t4); font-family: monospace; font-weight: 600; flex-shrink: 0; margin-top: 1px; }
+.shot-card-title { font-size: 12.5px; font-weight: 600; color: var(--t1); flex: 1; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; }
+.shot-card-menu-wrap { position: relative; flex-shrink: 0; }
+.shot-card-menu-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--t4); padding: 2px; border-radius: 4px;
+  display: flex; align-items: center; opacity: 0; transition: opacity 0.15s, color 0.15s;
+}
+.shot-card:hover .shot-card-menu-btn { opacity: 1; }
+.shot-card-menu-btn:hover { color: var(--text); }
+.shot-card-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 200;
+  background: var(--panel); border: 1px solid var(--line-2);
+  border-radius: 10px; padding: 4px; min-width: 150px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.shot-card-menu button {
+  display: block; width: 100%; background: none; border: none;
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; color: var(--t2); text-align: left; transition: background 0.12s;
+}
+.shot-card-menu button:hover { background: var(--bg-3); }
+.shot-card-menu button.danger { color: var(--danger); }
+.shot-card-menu button.danger:hover { background: rgba(239,68,68,0.1); }
+.shot-card-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+.shot-card-status {
+  font-size: 10.5px; font-weight: 500; padding: 2px 7px;
+  border-radius: 99px; display: inline-flex; align-items: center;
+}
+.shot-card-scene {
+  font-size: 10px; font-weight: 600; padding: 2px 7px;
+  border-radius: 99px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; max-width: 100px;
+}
+.shot-card-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; background: none; border: 1px dashed var(--line-2);
+  border-radius: var(--r-md); cursor: pointer; color: var(--t4);
+  min-height: 110px; transition: border-color 0.15s, color 0.15s, background 0.15s;
+  font-size: 12px;
+}
+.shot-card-add:hover { border-color: var(--accent-soft); color: var(--accent); background: var(--accent-tint); }
 
 /* ── Shot List View ── */
 .shot-list-view { display: flex; flex-direction: column; gap: 2px; }

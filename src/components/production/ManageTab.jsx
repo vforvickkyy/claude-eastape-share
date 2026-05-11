@@ -2,12 +2,14 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ListBullets, SlidersHorizontal, SpinnerGap, Warning, Plus,
-  FilmSlate, Funnel, DownloadSimple,
+  FilmSlate, Funnel, DownloadSimple, Rows, SquaresFour,
+  CaretLeft, CaretRight,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 import { useProject } from '../../context/ProjectContext'
 
 import ShotListView from './views/ShotListView'
+import ShotCardView from './views/ShotCardView'
 import ColumnManager from './ColumnManager'
 
 const SCENE_COLORS = [
@@ -33,10 +35,23 @@ export default function ManageTab() {
   const [selectedSceneId, setSelectedSceneId] = useState(null)
   const [addingScene,     setAddingScene]     = useState(false)
   const [newSceneName,    setNewSceneName]    = useState('')
+  const [viewMode,        setViewMode]        = useState(() => localStorage.getItem(`manage-view-${projectId}`) || 'list')
+  const [sideCollapsed,   setSideCollapsed]   = useState(() => localStorage.getItem(`manage-side-${projectId}`) === '1')
   const newSceneInputRef = useRef(null)
   const [hiddenCols, setHiddenCols] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`list-cols-${projectId}`)) || {} } catch { return {} }
   })
+
+  function setView(v) {
+    setViewMode(v)
+    localStorage.setItem(`manage-view-${projectId}`, v)
+  }
+  function toggleSide() {
+    setSideCollapsed(c => {
+      localStorage.setItem(`manage-side-${projectId}`, c ? '0' : '1')
+      return !c
+    })
+  }
 
   function toggleHideCol(colId, hidden) {
     setHiddenCols(prev => {
@@ -190,18 +205,26 @@ export default function ManageTab() {
   return (
     <div className="manage-tab">
       {/* ── Scene Sidebar ────────────────────────────────── */}
-      <div className="manage-sidebar">
-        <div className="manage-sidebar-header">Scenes</div>
+      <div className={`manage-sidebar ${sideCollapsed ? 'collapsed' : ''}`}>
+        <div className="manage-sidebar-header">
+          {!sideCollapsed && <span>Scenes</span>}
+          <button className="manage-side-toggle" onClick={toggleSide} title={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            {sideCollapsed ? <CaretRight size={12} weight="bold" /> : <CaretLeft size={12} weight="bold" />}
+          </button>
+        </div>
 
         <nav className="manage-sidebar-nav">
           <button
             className={`manage-sidebar-item ${!selectedSceneId ? 'active' : ''}`}
             onClick={() => setSelectedSceneId(null)}
+            title="All Shots"
           >
             <ListBullets size={13} weight="duotone" className="manage-sidebar-icon" />
-            <div className="manage-sidebar-text">
-              <span className="manage-sidebar-label">All Shots</span>
-            </div>
+            {!sideCollapsed && (
+              <div className="manage-sidebar-text">
+                <span className="manage-sidebar-label">All Shots</span>
+              </div>
+            )}
             <span className="manage-sidebar-count">{shots.length}</span>
           </button>
 
@@ -213,21 +236,24 @@ export default function ManageTab() {
                 key={scene.id}
                 className={`manage-sidebar-item ${selectedSceneId === scene.id ? 'active' : ''}`}
                 onClick={() => setSelectedSceneId(scene.id)}
+                title={scene.name}
               >
                 <FilmSlate size={13} weight="duotone" className="manage-sidebar-icon" style={{ color }} />
-                <div className="manage-sidebar-text">
-                  <span className="manage-sidebar-label">{scene.name}</span>
-                  <span className="manage-sidebar-sub">
-                    {scene.location ? scene.location.toUpperCase() : '—'}
-                  </span>
-                </div>
+                {!sideCollapsed && (
+                  <div className="manage-sidebar-text">
+                    <span className="manage-sidebar-label">{scene.name}</span>
+                    <span className="manage-sidebar-sub">
+                      {scene.location ? scene.location.toUpperCase() : '—'}
+                    </span>
+                  </div>
+                )}
                 <span className="manage-sidebar-count">{count}</span>
               </button>
             )
           })}
         </nav>
 
-        {canEdit && (
+        {canEdit && !sideCollapsed && (
           <div className="manage-sidebar-footer">
             {addingScene ? (
               <form onSubmit={commitAddScene} style={{ padding: '4px 8px' }}>
@@ -271,13 +297,30 @@ export default function ManageTab() {
             })}
           </div>
           <div className="manage-toolbar-right">
+            {/* View toggle */}
+            <div className="manage-view-toggle">
+              <button
+                className={`manage-view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                onClick={() => setView('list')}
+                title="List view"
+              >
+                <Rows size={14} weight="duotone" />
+              </button>
+              <button
+                className={`manage-view-btn ${viewMode === 'card' ? 'active' : ''}`}
+                onClick={() => setView('card')}
+                title="Card view"
+              >
+                <SquaresFour size={14} weight="duotone" />
+              </button>
+            </div>
             <button className="btn-ghost" disabled title="Filter (coming soon)">
               <Funnel size={13} weight="duotone" /> Filter
             </button>
             <button className="btn-ghost" disabled title="Export CSV (coming soon)">
               <DownloadSimple size={13} weight="duotone" /> Export
             </button>
-            {canEdit && (
+            {canEdit && viewMode === 'list' && (
               <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
                 <SlidersHorizontal size={13} /> Columns
               </button>
@@ -285,7 +328,22 @@ export default function ManageTab() {
           </div>
         </div>
 
-        <ShotListView {...sharedProps} />
+        {viewMode === 'list'
+          ? <ShotListView {...sharedProps} />
+          : <ShotCardView
+              projectId={projectId}
+              statuses={statuses}
+              scenes={scenes}
+              shots={filteredShots}
+              filterSceneId={selectedSceneId}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onShotCreate={canEdit   ? createShot  : null}
+              onShotUpdate={canEdit   ? updateShot  : null}
+              onShotDelete={canDelete ? deleteShot  : null}
+              onReload={load}
+            />
+        }
       </div>
 
       {showColMgr && (
