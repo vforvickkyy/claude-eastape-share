@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   SquaresFour, HardDrive, Clock, Trash, CaretDown, SignOut, List, X,
   UserCircle, CurrencyInr, FolderOpen, CaretRight, Gear, Question,
-  Scales, CloudArrowUp, Plus, Briefcase, Sidebar,
+  Scales, CloudArrowUp, Plus, Briefcase, Sidebar, MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { projectsApi } from "./lib/api";
@@ -270,6 +270,13 @@ export default function DashboardLayout({ children, title, crumbs }) {
           </div>
 
           <div className="db-topbar-spacer" />
+
+          {/* Search bar */}
+          <button className="db-topbar-search" onClick={() => {}} type="button">
+            <MagnifyingGlass size={13} style={{ color: "var(--text-4)", flexShrink: 0 }} />
+            <span>Search files, projects…</span>
+            <kbd>⌘K</kbd>
+          </button>
 
           {/* User menu */}
           {!loading && user && (

@@ -163,13 +163,13 @@ function FolderTreeItem({ node, depth, currentFolderId, expandedSet, onToggle, o
           display: 'flex', alignItems: 'center',
           paddingLeft: 8 + depth * 14, paddingRight: 4,
           height: 30, borderRadius: 7, cursor: 'pointer',
-          background: isActive ? 'rgba(124,58,237,0.18)' : 'transparent',
-          color: isActive ? '#fff' : 'rgba(255,255,255,0.7)',
+          background: isActive ? 'var(--accent-tint)' : 'transparent',
+          color: isActive ? 'var(--text)' : 'var(--text-3)',
           position: 'relative',
         }}
         onClick={() => onNavigate(node)}
         onContextMenu={e => { e.preventDefault(); setCtxPos({ x: e.clientX, y: e.clientY }); setShowCtx(true) }}
-        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
       >
         <button
@@ -808,16 +808,16 @@ export default function DrivePage() {
         <aside className={`drive-inner-sidebar${sidebarOpen ? ' open' : ''}`}>
           {/* Storage */}
           {storage && (
-            <div style={{ padding: '16px 14px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{ padding: '14px 14px 12px', borderBottom: '1px solid var(--line)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Storage</span>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Storage</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
               </div>
-              <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${usedPct}%`, borderRadius: 3, background: barColor, transition: 'width 0.6s ease' }} />
+              <div style={{ height: 4, borderRadius: 2, background: 'var(--line-2)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${usedPct}%`, borderRadius: 2, background: barColor, transition: 'width 0.6s ease' }} />
               </div>
               {usedPct >= 80 && (
-                <p style={{ fontSize: 11, color: usedPct >= 90 ? '#f87171' : '#fbbf24', marginTop: 4 }}>
+                <p style={{ fontSize: 11, color: usedPct >= 90 ? '#f87171' : 'var(--accent)', marginTop: 4 }}>
                   {fmtBytes((storage.limit_bytes - storage.used_bytes))} remaining
                 </p>
               )}
@@ -825,7 +825,7 @@ export default function DrivePage() {
           )}
 
           {/* Nav items */}
-          <nav style={{ padding: '10px 8px', flex: 1 }}>
+          <nav style={{ padding: '8px 8px', flex: 1 }}>
             {/* My Drive */}
             <div
               className={`drive-nav-item ${currentView === 'myDrive' && !currentFolderId ? 'active' : ''}`}
@@ -834,26 +834,6 @@ export default function DrivePage() {
               <House size={15} weight="duotone" />
               <span>My Drive</span>
             </div>
-
-            {/* Folder tree */}
-            <div style={{ marginLeft: 4, marginTop: 2, marginBottom: 8 }}>
-              {folderTree.map(node => (
-                <FolderTreeItem
-                  key={node.id}
-                  node={node}
-                  depth={0}
-                  currentFolderId={currentFolderId}
-                  expandedSet={sidebarExpanded}
-                  onToggle={id => setSidebarExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })}
-                  onNavigate={f => { navigate(`/drive/folder/${f.id}`); setSidebarOpen(false) }}
-                  onRename={f => startRename(f, 'folder')}
-                  onTrash={trashFolder}
-                  onNewSubfolder={pid => { setShowNewFolderIn(pid); navigate(`/drive/folder/${pid}`); setSidebarOpen(false) }}
-                />
-              ))}
-            </div>
-
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '6px 4px 8px' }} />
 
             {/* Recent */}
             <div
@@ -871,6 +851,41 @@ export default function DrivePage() {
             >
               <Trash size={15} weight="duotone" />
               <span>Trash</span>
+            </div>
+
+            <div style={{ height: 1, background: 'var(--line)', margin: '8px 4px' }} />
+
+            {/* Folders section header */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '4px 10px 6px', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Folders</span>
+              <button
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: '2px 4px', borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                onClick={() => { setShowNewFolderIn(null); setSidebarOpen(false) }}
+                title="New folder"
+              >
+                <Plus size={12} weight="bold" />
+              </button>
+            </div>
+
+            {/* Folder tree */}
+            <div style={{ marginBottom: 4 }}>
+              {folderTree.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text-4)', padding: '4px 10px', fontStyle: 'italic' }}>No folders yet</div>
+              )}
+              {folderTree.map(node => (
+                <FolderTreeItem
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  currentFolderId={currentFolderId}
+                  expandedSet={sidebarExpanded}
+                  onToggle={id => setSidebarExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })}
+                  onNavigate={f => { navigate(`/drive/folder/${f.id}`); setSidebarOpen(false) }}
+                  onRename={f => startRename(f, 'folder')}
+                  onTrash={trashFolder}
+                  onNewSubfolder={pid => { setShowNewFolderIn(pid); navigate(`/drive/folder/${pid}`); setSidebarOpen(false) }}
+                />
+              ))}
             </div>
           </nav>
 

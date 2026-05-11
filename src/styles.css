@@ -90,18 +90,6 @@ body.scrollable,
   overflow: auto;
 }
 
-/* ═══════════════════════════════════════════════
-   ANIMATED DOT BACKGROUND
-═══════════════════════════════════════════════ */
-
-.dot-bg-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  width: 100%;
-  height: 100%;
-}
 
 /* ═══════════════════════════════════════════════
    ANIMATED BACKGROUND (legacy blobs)
@@ -648,7 +636,7 @@ body.scrollable,
 .auth-page {
   position: relative;
   min-height: 100vh;
-  background: transparent;
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1175,7 +1163,7 @@ body.scrollable,
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: transparent;
+  background: var(--bg);
   position: relative;
   z-index: 1;
 }
@@ -1350,6 +1338,24 @@ body.scrollable,
 .db-topbar-breadcrumbs .sep { color: var(--text-4); }
 .db-topbar-breadcrumbs .current { color: var(--text); font-weight: 500; }
 .db-topbar-spacer { flex: 1; }
+.db-topbar-search {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 12px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 8px; cursor: pointer;
+  color: var(--text-4); font-size: 12.5px; font-family: var(--font);
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap; flex-shrink: 0;
+  min-width: 0; max-width: 240px;
+}
+.db-topbar-search:hover { background: var(--bg-3); border-color: var(--line-2); color: var(--text-3); }
+.db-topbar-search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.db-topbar-search kbd {
+  font-size: 10px; font-family: var(--mono);
+  background: var(--bg-3); border: 1px solid var(--line-2);
+  border-radius: 4px; padding: 1px 5px; color: var(--text-4);
+  flex-shrink: 0; margin-left: 4px;
+}
 .db-page-title {
   font-family: var(--font);
   font-size: 14px;
@@ -3485,6 +3491,7 @@ body { overflow-x: hidden; }
   .db-topbar { gap: 8px; padding: 0 12px; }
   .user-name  { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .db-page-title { font-size: 15px; }
+  .db-topbar-search { display: none; }
 
   /* Dashboard stats bar: wrap into 2 columns */
   .stats-bar { gap: 8px; }
@@ -3936,7 +3943,7 @@ body { overflow-x: hidden; }
   transition: background 0.15s, transform 0.1s;
   box-shadow: 0 2px 12px color-mix(in oklch, var(--accent) 30%, transparent);
 }
-.ufiles-upload-btn:hover { background: var(--purple-d); transform: translateY(-1px); box-shadow: 0 4px 18px rgba(99,102,241,0.45); }
+.ufiles-upload-btn:hover { background: var(--purple-d); transform: translateY(-1px); box-shadow: 0 4px 18px color-mix(in oklch, var(--accent) 45%, transparent); }
 .ufiles-upload-btn:active { transform: translateY(0); }
 
 /* Project files — full-page drag-and-drop overlay */
@@ -3960,7 +3967,7 @@ body { overflow-x: hidden; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .ufiles-type-pill:hover { color: var(--t1); border-color: var(--border-hover); }
-.ufiles-type-pill.active { background: rgba(99,102,241,0.15); border-color: var(--purple); color: var(--purple-l); font-weight: 600; }
+.ufiles-type-pill.active { background: var(--accent-tint); border-color: var(--purple); color: var(--purple-l); font-weight: 600; }
 
 /* Grid */
 .ufiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
@@ -3973,7 +3980,7 @@ body { overflow-x: hidden; }
   display: flex; flex-direction: column;
 }
 .ufile-card:hover { border-color: var(--border-hover); box-shadow: 0 6px 24px rgba(0,0,0,0.2); }
-.ufile-card.selected { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
+.ufile-card.selected { border-color: var(--purple); box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 25%, transparent); }
 
 /* Thumb */
 .ufile-thumb {
@@ -4058,7 +4065,7 @@ body { overflow-x: hidden; }
   cursor: pointer; width: 100%; text-align: left;
   transition: background 0.1s, color 0.1s;
 }
-.ctx-menu button:hover, .ctx-menu button.active { background: rgba(99,102,241,0.12); color: var(--t1); }
+.ctx-menu button:hover, .ctx-menu button.active { background: var(--accent-tint); color: var(--t1); }
 .ctx-menu button.danger { color: #f87171; }
 .ctx-menu button.danger:hover { background: rgba(239,68,68,0.12); }
 .ctx-divider { height: 1px; background: var(--border); margin: 3px 0; }
@@ -4078,7 +4085,7 @@ body { overflow-x: hidden; }
   cursor: pointer; width: 100%; text-align: left;
   transition: background 0.1s, color 0.1s;
 }
-.ctx-submenu button:hover, .ctx-submenu button.active { background: rgba(99,102,241,0.12); color: var(--t1); }
+.ctx-submenu button:hover, .ctx-submenu button.active { background: var(--accent-tint); color: var(--t1); }
 .ctx-status-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
@@ -4165,7 +4172,7 @@ body { overflow-x: hidden; }
 .mpv-bulk-bar span:first-child { flex: 1; }
 .mpv-card-file-icon { display: flex; align-items: center; justify-content: center; background: var(--bg3); }
 .mpv-card-size { font-size: 11px; color: var(--t4); margin-top: 1px; }
-.drag-overlay { position: absolute; inset: 0; background: rgba(99,102,241,0.12); border: 2px dashed var(--purple); border-radius: var(--r-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--purple); font-size: 15px; font-weight: 600; pointer-events: none; z-index: 5; }
+.drag-overlay { position: absolute; inset: 0; background: var(--accent-tint); border: 2px dashed var(--purple); border-radius: var(--r-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--purple); font-size: 15px; font-weight: 600; pointer-events: none; z-index: 5; }
 .form-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -5105,18 +5112,18 @@ body { overflow-x: hidden; }
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #3b82f6);
+  background: var(--accent);
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  box-shadow: 0 4px 20px rgba(124,58,237,0.5);
+  box-shadow: 0 4px 20px color-mix(in oklch, var(--accent) 50%, transparent);
   transition: transform 0.18s, box-shadow 0.18s;
   -webkit-tap-highlight-color: transparent;
 }
-.drive-fab:active { transform: scale(0.92); box-shadow: 0 2px 10px rgba(124,58,237,0.4); }
+.drive-fab:active { transform: scale(0.92); box-shadow: 0 2px 10px color-mix(in oklch, var(--accent) 40%, transparent); }
 
 /* Touch devices: always show 3-dot menu btn so users can access context actions */
 @media (hover: none) and (pointer: coarse) {
@@ -5137,13 +5144,13 @@ body { overflow-x: hidden; }
 
 /* Drag-over folder highlight */
 .drive-folder-card.drag-over {
-  border-color: rgba(124,58,237,0.7) !important;
-  background: rgba(124,58,237,0.2) !important;
-  box-shadow: 0 0 0 2px rgba(124,58,237,0.3);
+  border-color: color-mix(in oklch, var(--accent) 70%, transparent) !important;
+  background: var(--accent-tint) !important;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 30%, transparent);
 }
 .drive-list-row.drag-over {
-  background: rgba(124,58,237,0.15) !important;
-  outline: 1px solid rgba(124,58,237,0.5);
+  background: var(--accent-tint) !important;
+  outline: 1px solid color-mix(in oklch, var(--accent) 50%, transparent);
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -5156,8 +5163,8 @@ body { overflow-x: hidden; }
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(255,255,255,0.015);
-  border-right: 1px solid rgba(255,255,255,0.06);
+  background: var(--panel);
+  border-right: 1px solid var(--line);
   overflow-y: auto;
   overflow-x: hidden;
   transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
@@ -5193,7 +5200,7 @@ body { overflow-x: hidden; }
   width: 180px;
   transition: width 0.2s, border-color 0.2s;
 }
-.drive-search-input:focus { width: 240px; border-color: rgba(124,58,237,0.5); }
+.drive-search-input:focus { width: 240px; border-color: var(--accent-soft); }
 
 /* Drive toolbar */
 .drive-toolbar {

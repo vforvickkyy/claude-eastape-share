@@ -88,10 +88,10 @@ function PageHeader() {
           onClick={() => navigate('/signup')}
           style={{
             height: 33, padding: '0 16px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
-            background: '#7c3aed', border: 'none', color: '#fff', fontWeight: 600,
+            background: 'var(--accent)', border: 'none', color: '#000', fontWeight: 600,
           }}
-          onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'}
-          onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
         >Sign Up Free</button>
       </div>
     </header>
@@ -182,9 +182,9 @@ function ViewToggle({ view, onChange }) {
         <button key={v} onClick={() => onChange(v)}
           style={{
             width: 30, height: 26, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: view === v ? 'rgba(124,58,237,0.45)' : 'transparent',
+            background: view === v ? 'var(--accent-soft)' : 'transparent',
             border: 'none', cursor: 'pointer',
-            color: view === v ? '#c4b5fd' : 'rgba(255,255,255,0.35)',
+            color: view === v ? 'var(--accent)' : 'rgba(255,255,255,0.35)',
           }}
         ><Icon size={13} /></button>
       ))}
@@ -202,8 +202,8 @@ function FolderCard({ folder, onClick }) {
       onMouseLeave={() => setHov(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-        background: hov ? 'rgba(124,58,237,0.1)' : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${hov ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.07)'}`,
+        background: hov ? 'var(--accent-tint)' : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${hov ? 'var(--accent-soft)' : 'rgba(255,255,255,0.07)'}`,
         borderRadius: 9, cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
       }}
     >

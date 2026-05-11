@@ -232,8 +232,8 @@ export default function ManageTab() {
                   placeholder="Scene name…"
                   style={{
                     width: '100%', background: 'rgba(255,255,255,0.07)',
-                    border: '1px solid rgba(99,102,241,0.5)', borderRadius: 6,
-                    color: '#e8e8ff', fontSize: 12, padding: '5px 8px', outline: 'none',
+                    border: '1px solid var(--accent-soft)', borderRadius: 6,
+                    color: 'var(--text)', fontSize: 12, padding: '5px 8px', outline: 'none',
                     boxSizing: 'border-box',
                   }}
                 />
