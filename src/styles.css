@@ -1568,15 +1568,19 @@ body.scrollable,
 .db-sidebar.collapsed .db-brand-name { opacity: 0; width: 0; overflow: hidden; }
 .db-collapse-btn {
   margin-left: auto; flex-shrink: 0;
-  width: 22px; height: 22px; border-radius: 5px;
+  width: 24px; height: 24px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-4); border: none; background: none; cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-  opacity: 1;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.db-sidebar.collapsed .db-collapse-btn { opacity: 1; pointer-events: auto; margin-left: 0; }
-.db-sidebar.collapsed .db-collapse-btn svg { transform: rotate(180deg); transition: transform 0.22s; }
-.db-collapse-btn:hover { color: var(--text-2); background: var(--bg-3); }
+.db-sidebar.collapsed .db-collapse-btn { margin-left: 0; }
+.db-collapse-btn:hover {
+  color: var(--text); background: var(--accent-tint);
+  border-color: var(--accent-soft);
+}
 .db-sidebar-close { display: none; background: none; border: none; color: var(--text-2); cursor: pointer; }
 
 /* Collapsed rail — show icon only */
@@ -2349,6 +2353,121 @@ body.scrollable,
 .db-settings-logout { color: var(--danger); }
 .db-settings-logout:hover { background: color-mix(in oklch, var(--danger) 10%, transparent); }
 .db-settings-divider { height: 1px; background: var(--line); margin: 2px 4px; }
+
+/* ═══════════════════════════════════════════════
+   NEW BUTTON MODAL
+═══════════════════════════════════════════════ */
+
+.new-modal {
+  min-width: 220px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-top-color: var(--line-strong);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.3);
+}
+.new-modal-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 8px 10px; border-radius: 8px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-2); font-size: 13px; text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.new-modal-item:hover { background: var(--bg-3); color: var(--text); }
+.new-modal-icon { color: var(--text-3); flex-shrink: 0; }
+.new-modal-label { flex: 1; }
+.new-modal-kbd {
+  font-size: 10px; color: var(--text-4);
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px; padding: 1px 5px; font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   COMMAND PALETTE
+═══════════════════════════════════════════════ */
+
+.cmd-overlay {
+  position: fixed; inset: 0; z-index: 1300;
+  background: rgba(0,0,0,0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.cmd-panel {
+  position: fixed; z-index: 1301;
+  top: 12vh; left: 50%; transform: translateX(-50%);
+  width: 92vw; max-width: 660px;
+  background: var(--panel);
+  border: 1px solid var(--line-2); border-top-color: var(--line-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(0,0,0,0.4);
+  display: flex; flex-direction: column; overflow: hidden;
+  max-height: 76vh;
+}
+.cmd-search-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cmd-search-icon { color: var(--text-4); flex-shrink: 0; }
+.cmd-input {
+  flex: 1; background: none; border: none; outline: none;
+  font-size: 14.5px; color: var(--text); font-family: var(--font-body);
+}
+.cmd-input::placeholder { color: var(--text-4); }
+.cmd-clear {
+  background: rgba(255,255,255,0.07); border: none; cursor: pointer;
+  color: var(--text-3); width: 20px; height: 20px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.cmd-results {
+  flex: 1; overflow-y: auto; padding: 6px 0;
+}
+.cmd-section { padding: 0 6px 4px; }
+.cmd-section-title {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--text-4); padding: 8px 8px 4px;
+}
+.cmd-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px; border-radius: 8px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-2); font-size: 13px; text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.cmd-item:hover, .cmd-item.active {
+  background: rgba(255,255,255,0.07); color: var(--text);
+}
+.cmd-item-icon { color: var(--text-3); flex-shrink: 0; }
+.cmd-item-label {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+}
+.cmd-item-sub {
+  font-size: 11px; color: var(--text-4);
+}
+.cmd-item-kbd {
+  font-size: 10px; color: var(--text-4);
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px; padding: 1px 5px; font-family: var(--font-mono, monospace);
+  white-space: nowrap; flex-shrink: 0;
+}
+.cmd-empty {
+  text-align: center; color: var(--text-4); font-size: 13px;
+  padding: 28px 16px;
+}
+.cmd-footer {
+  border-top: 1px solid var(--border);
+  padding: 8px 14px;
+  display: flex; gap: 14px; align-items: center;
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.cmd-footer span { font-size: 11px; color: var(--text-4); display: flex; align-items: center; gap: 4px; }
+.cmd-key {
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px; padding: 1px 5px; font-size: 10px;
+  color: var(--text-3); font-family: var(--font-mono, monospace);
+}
 
 /* ── Read-only inputs ── */
 .form-input[readonly] {

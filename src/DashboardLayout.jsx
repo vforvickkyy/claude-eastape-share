@@ -1,45 +1,256 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   SquaresFour, HardDrive, Trash, CaretDown, SignOut, List, X,
-  UserCircle, CurrencyInr, Gear, Question,
-  Scales, Plus, Briefcase, Sidebar, MagnifyingGlass, Eye, Users,
+  UserCircle, CurrencyInr, Gear, Question, Scales,
+  Plus, Briefcase, MagnifyingGlass, Eye, Users,
+  CaretLeft, CaretRight, FolderPlus, UploadSimple,
+  FolderOpen, FilmSlate, Link as LinkIcon, UserPlus,
+  House, ArrowSquareOut, Clock,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { projectsApi } from "./lib/api";
 
+// ── New button modal ───────────────────────────────────────────────────────────
+function NewModal({ open, anchorRect, onClose, navigate, fileInputRef, folderInputRef }) {
+  const ref = useRef();
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (!ref.current?.contains(e.target)) onClose(); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  if (!open || !anchorRect) return null;
+
+  const items = [
+    { icon: <FilmSlate size={14} weight="duotone" />, label: "Add new Project", kbd: "⌘⇧P",
+      action: () => { navigate("/projects?new=1"); onClose(); } },
+    { icon: <FolderPlus size={14} weight="duotone" />, label: "Create new folder", kbd: "⌘⌥N",
+      action: () => { navigate("/drive?newFolder=1"); onClose(); } },
+    { icon: <UploadSimple size={14} weight="duotone" />, label: "Upload files", kbd: "⌘U",
+      action: () => { fileInputRef.current?.click(); onClose(); } },
+    { icon: <FolderOpen size={14} weight="duotone" />, label: "Upload folder", kbd: null,
+      action: () => { folderInputRef.current?.click(); onClose(); } },
+  ];
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="new-modal"
+      style={{
+        position: "fixed",
+        top: anchorRect.bottom + 6,
+        left: anchorRect.left,
+        zIndex: 1200,
+      }}
+    >
+      {items.map(it => (
+        <button key={it.label} className="new-modal-item" onClick={it.action}>
+          <span className="new-modal-icon">{it.icon}</span>
+          <span className="new-modal-label">{it.label}</span>
+          {it.kbd && <kbd className="new-modal-kbd">{it.kbd}</kbd>}
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
+// ── Command Palette ────────────────────────────────────────────────────────────
+function CommandPalette({ open, onClose, navigate, recentProjects, fileInputRef }) {
+  const [query, setQuery] = useState("");
+  const [idx, setIdx]     = useState(0);
+  const inputRef = useRef();
+
+  useEffect(() => {
+    if (open) { setQuery(""); setIdx(0); setTimeout(() => inputRef.current?.focus(), 30); }
+  }, [open]);
+
+  const QUICK_ACTIONS = [
+    { icon: <UploadSimple size={14} weight="duotone" />, label: "Upload media", kbd: "⌘U",
+      action: () => { fileInputRef.current?.click(); onClose(); } },
+    { icon: <FilmSlate size={14} weight="duotone" />, label: "New project", kbd: "⌘⇧P",
+      action: () => { navigate("/projects?new=1"); onClose(); } },
+    { icon: <FolderPlus size={14} weight="duotone" />, label: "New folder", kbd: "⌘⌥N",
+      action: () => { navigate("/drive?newFolder=1"); onClose(); } },
+    { icon: <LinkIcon size={14} weight="duotone" />, label: "Create review link", kbd: "⌘⇧L",
+      action: () => { navigate("/projects"); onClose(); } },
+    { icon: <UserPlus size={14} weight="duotone" />, label: "Invite teammates", kbd: "⌘I",
+      action: () => { navigate("/projects"); onClose(); } },
+    { icon: <List size={14} weight="duotone" />, label: "Open Manage (shot list)", kbd: "⌘M",
+      action: () => { navigate("/projects"); onClose(); } },
+  ];
+
+  const NAVIGATE = [
+    { icon: <House size={14} weight="duotone" />, label: "Go to Home", kbd: "G H",
+      action: () => { navigate("/"); onClose(); } },
+    { icon: <HardDrive size={14} weight="duotone" />, label: "Go to Drive", kbd: "G D",
+      action: () => { navigate("/drive"); onClose(); } },
+    { icon: <Briefcase size={14} weight="duotone" />, label: "Go to Projects", kbd: "G P",
+      action: () => { navigate("/projects"); onClose(); } },
+    { icon: <Gear size={14} weight="duotone" />, label: "Go to Settings", kbd: "G S",
+      action: () => { navigate("/profile"); onClose(); } },
+  ];
+
+  const RECENTS = recentProjects.slice(0, 3).map(p => ({
+    icon: <FilmSlate size={14} weight="duotone" />,
+    label: p.name,
+    sub: "Project",
+    action: () => { navigate(`/projects/${p.id}/files`); onClose(); },
+  }));
+
+  // Build flat list for keyboard nav
+  const q = query.trim().toLowerCase();
+  function matches(label) { return !q || label.toLowerCase().includes(q); }
+
+  const sections = [];
+  if (!q && RECENTS.length > 0) sections.push({ title: "RECENTS", items: RECENTS });
+  const qActions = QUICK_ACTIONS.filter(i => matches(i.label));
+  if (qActions.length) sections.push({ title: "QUICK ACTIONS", items: qActions });
+  const navItems = NAVIGATE.filter(i => matches(i.label));
+  if (navItems.length) sections.push({ title: "NAVIGATE", items: navItems });
+
+  const flat = sections.flatMap(s => s.items);
+
+  function handleKey(e) {
+    if (e.key === "Escape") { onClose(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setIdx(i => Math.min(i + 1, flat.length - 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); setIdx(i => Math.max(i - 1, 0)); }
+    if (e.key === "Enter") { e.preventDefault(); flat[idx]?.action(); }
+  }
+
+  useEffect(() => { setIdx(0); }, [query]);
+
+  if (!open) return null;
+
+  let flatIdx = 0;
+
+  return createPortal(
+    <>
+      <div className="cmd-overlay" onClick={onClose} />
+      <div className="cmd-panel">
+        {/* Search input */}
+        <div className="cmd-search-row">
+          <MagnifyingGlass size={15} className="cmd-search-icon" />
+          <input
+            ref={inputRef}
+            className="cmd-input"
+            placeholder="Search files, projects, shots, comments…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKey}
+            autoComplete="off"
+          />
+          {query && (
+            <button className="cmd-clear" onClick={() => setQuery("")}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* Results */}
+        <div className="cmd-results">
+          {sections.length === 0 && (
+            <p className="cmd-empty">No results for "{query}"</p>
+          )}
+          {sections.map(section => (
+            <div key={section.title} className="cmd-section">
+              <div className="cmd-section-title">{section.title}</div>
+              {section.items.map(item => {
+                const fi = flatIdx++;
+                const isActive = fi === idx;
+                return (
+                  <button
+                    key={item.label}
+                    className={`cmd-item ${isActive ? "active" : ""}`}
+                    onClick={item.action}
+                    onMouseEnter={() => setIdx(fi)}
+                  >
+                    <span className="cmd-item-icon">{item.icon}</span>
+                    <span className="cmd-item-label">
+                      {item.label}
+                      {item.sub && <span className="cmd-item-sub">{item.sub}</span>}
+                    </span>
+                    {item.kbd && <kbd className="cmd-item-kbd">{item.kbd}</kbd>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="cmd-footer">
+          <span><span className="cmd-key">↑↓</span> Navigate</span>
+          <span><span className="cmd-key">↵</span> Select</span>
+          <span><span className="cmd-key">ESC</span> Close</span>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
+
+// ── DashboardLayout ────────────────────────────────────────────────────────────
 export default function DashboardLayout({ children, title, crumbs }) {
   const { user, logout, loading, profile } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
   const [dropOpen,        setDropOpen]        = useState(false);
   const [sideOpen,        setSideOpen]        = useState(false);
-  const [collapsed,       setCollapsed]       = useState(() => localStorage.getItem('db-sidebar-collapsed') === '1');
+  const [collapsed,       setCollapsed]       = useState(() => localStorage.getItem("db-sidebar-collapsed") === "1");
   const [settOpen,        setSettOpen]        = useState(false);
   const [settPos,         setSettPos]         = useState(null);
-  const [projectCount,    setProjectCount]    = useState(null);
+  const [projects,        setProjects]        = useState([]);
   const [username,        setUsername]        = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => sessionStorage.getItem("onboarding-banner-dismissed") === "1"
   );
+  const [newModalOpen, setNewModalOpen] = useState(false);
+  const [newModalRect, setNewModalRect] = useState(null);
+  const [cmdOpen,      setCmdOpen]      = useState(false);
+
   const menuRef    = useRef(null);
   const settRef    = useRef(null);
   const triggerRef = useRef(null);
+  const newBtnRef  = useRef(null);
+  const fileInputRef   = useRef(null);
+  const folderInputRef = useRef(null);
 
   useEffect(() => { setUsername(profile?.username || null); }, [profile?.username]);
-  useEffect(() => { localStorage.setItem('db-sidebar-collapsed', collapsed ? '1' : '0'); }, [collapsed]);
+  useEffect(() => { localStorage.setItem("db-sidebar-collapsed", collapsed ? "1" : "0"); }, [collapsed]);
 
   useEffect(() => {
     if (!user) return;
-    projectsApi.list().then(d => setProjectCount((d.projects || []).length)).catch(() => {});
+    projectsApi.list().then(d => setProjects(d.projects || [])).catch(() => {});
   }, [user]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    function onKey(e) {
+      // ⌘K → command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdOpen(o => !o);
+        return;
+      }
+      // ESC → close modals
+      if (e.key === "Escape") {
+        setCmdOpen(false);
+        setNewModalOpen(false);
+        setDropOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     function outside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) setDropOpen(false);
       if (settRef.current && !settRef.current.contains(e.target)) {
-        const menuEl = document.getElementById('db-settings-portal');
+        const menuEl = document.getElementById("db-settings-portal");
         if (!menuEl || !menuEl.contains(e.target)) setSettOpen(false);
       }
     }
@@ -55,9 +266,19 @@ export default function DashboardLayout({ children, title, crumbs }) {
     setSettOpen(o => !o);
   }
 
+  function handleNewBtn() {
+    if (newBtnRef.current) {
+      setNewModalRect(newBtnRef.current.getBoundingClientRect());
+    }
+    setNewModalOpen(o => !o);
+  }
+
+  function openSearch() {
+    setCmdOpen(true);
+  }
+
   async function handleLogout() {
-    setDropOpen(false);
-    setSettOpen(false);
+    setDropOpen(false); setSettOpen(false);
     await logout();
     navigate("/");
   }
@@ -65,8 +286,8 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const displayName = user?.user_metadata?.full_name || user?.email || "";
   const avatarUrl   = user?.user_metadata?.avatar_url;
   const initial     = displayName.charAt(0).toUpperCase();
-
   const breadcrumbs = crumbs || (title ? [title] : []);
+  const projectCount = projects.length;
 
   const usedMb  = profile?.storage_used_mb  || 0;
   const limitMb = profile?.storage_limit_mb || 512000;
@@ -85,8 +306,15 @@ export default function DashboardLayout({ children, title, crumbs }) {
           <div className="db-logo">
             <div className="db-brand-mark">E</div>
             <span className="db-brand-name">Eastape<span style={{ opacity: 0.5 }}> Studio</span></span>
-            <button className="db-collapse-btn" onClick={() => setCollapsed(c => !c)} title="Collapse sidebar">
-              <Sidebar size={13} />
+            <button
+              className="db-collapse-btn"
+              onClick={() => setCollapsed(c => !c)}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed
+                ? <CaretRight size={12} weight="bold" />
+                : <CaretLeft size={12} weight="bold" />
+              }
             </button>
             <button className="db-sidebar-close" onClick={() => setSideOpen(false)}>
               <X size={16} />
@@ -94,7 +322,11 @@ export default function DashboardLayout({ children, title, crumbs }) {
           </div>
 
           {/* New button */}
-          <button className="db-new-btn" onClick={() => { setSideOpen(false); navigate("/drive"); }}>
+          <button
+            ref={newBtnRef}
+            className="db-new-btn"
+            onClick={handleNewBtn}
+          >
             <Plus size={13} weight="bold" />
             <span>New</span>
             <kbd className="db-new-kbd">⌘N</kbd>
@@ -115,12 +347,12 @@ export default function DashboardLayout({ children, title, crumbs }) {
             <NavLink to="/projects" className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
               <Briefcase size={15} weight="duotone" style={{ flexShrink: 0 }} />
               <span>Projects</span>
-              {projectCount !== null && projectCount > 0 && (
+              {projectCount > 0 && (
                 <span className="db-nav-badge">{projectCount}</span>
               )}
             </NavLink>
 
-            <button className="db-nav-item" onClick={() => {}}>
+            <button className="db-nav-item" onClick={openSearch}>
               <MagnifyingGlass size={15} weight="duotone" style={{ flexShrink: 0 }} />
               <span>Search</span>
             </button>
@@ -171,7 +403,8 @@ export default function DashboardLayout({ children, title, crumbs }) {
                 <span style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{displayName}</span>
                 {username
                   ? <span style={{ fontSize: 10.5, color: "var(--text-4)", lineHeight: 1 }}>@{username}</span>
-                  : <span style={{ fontSize: 10.5, color: "var(--accent)", lineHeight: 1, opacity: 0.8 }} onClick={e => { e.stopPropagation(); navigate("/profile"); }}>Set username →</span>
+                  : <span style={{ fontSize: 10.5, color: "var(--accent)", lineHeight: 1, opacity: 0.8 }}
+                      onClick={e => { e.stopPropagation(); navigate("/profile"); }}>Set username →</span>
                 }
               </div>
               <Gear size={13} weight="duotone" style={{ marginLeft: "auto", opacity: 0.4, flexShrink: 0 }} />
@@ -200,7 +433,7 @@ export default function DashboardLayout({ children, title, crumbs }) {
 
           <div className="db-topbar-spacer" />
 
-          <button className="db-topbar-search" onClick={() => {}} type="button">
+          <button className="db-topbar-search" onClick={openSearch} type="button">
             <MagnifyingGlass size={13} style={{ color: "var(--text-4)", flexShrink: 0 }} />
             <span>Search files, projects…</span>
             <kbd>⌘K</kbd>
@@ -241,8 +474,7 @@ export default function DashboardLayout({ children, title, crumbs }) {
           && !bannerDismissed && location.pathname !== "/onboarding" && (
           <div style={{
             background: "var(--accent-tint)", borderBottom: "1px solid var(--accent-soft)",
-            padding: "0 24px", height: 44, display: "flex", alignItems: "center", gap: 12,
-            fontSize: 13,
+            padding: "0 24px", height: 44, display: "flex", alignItems: "center", gap: 12, fontSize: 13,
           }}>
             <span style={{ flex: 1, color: "var(--text-2)" }}>Complete your account setup</span>
             <div style={{ display: "flex", gap: 4 }}>
@@ -259,9 +491,7 @@ export default function DashboardLayout({ children, title, crumbs }) {
             <button
               onClick={() => { sessionStorage.setItem("onboarding-banner-dismissed", "1"); setBannerDismissed(true); }}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", fontSize: 18, lineHeight: 1, padding: "0 4px" }}
-            >
-              ✕
-            </button>
+            >✕</button>
           </div>
         )}
 
@@ -270,7 +500,11 @@ export default function DashboardLayout({ children, title, crumbs }) {
         </main>
       </div>
 
-      {/* Settings menu — rendered via portal so it escapes sidebar overflow clipping */}
+      {/* Hidden file inputs for upload */}
+      <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} />
+      <input ref={folderInputRef} type="file" webkitdirectory="" style={{ display: "none" }} />
+
+      {/* Settings menu portal */}
       {settOpen && settPos && createPortal(
         <div
           id="db-settings-portal"
@@ -301,6 +535,25 @@ export default function DashboardLayout({ children, title, crumbs }) {
         </div>,
         document.body
       )}
+
+      {/* New modal portal */}
+      <NewModal
+        open={newModalOpen}
+        anchorRect={newModalRect}
+        onClose={() => setNewModalOpen(false)}
+        navigate={navigate}
+        fileInputRef={fileInputRef}
+        folderInputRef={folderInputRef}
+      />
+
+      {/* Command palette */}
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        navigate={navigate}
+        recentProjects={projects}
+        fileInputRef={fileInputRef}
+      />
     </div>
   );
 }
