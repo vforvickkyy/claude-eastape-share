@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ListBullets, SlidersHorizontal, SpinnerGap, Warning, Plus,
+  FilmSlate, Funnel, DownloadSimple,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 import { useProject } from '../../context/ProjectContext'
@@ -197,8 +198,10 @@ export default function ManageTab() {
             className={`manage-sidebar-item ${!selectedSceneId ? 'active' : ''}`}
             onClick={() => setSelectedSceneId(null)}
           >
-            <ListBullets size={13} weight="duotone" style={{ flexShrink: 0 }} />
-            <span className="manage-sidebar-label">All Shots</span>
+            <ListBullets size={13} weight="duotone" className="manage-sidebar-icon" />
+            <div className="manage-sidebar-text">
+              <span className="manage-sidebar-label">All Shots</span>
+            </div>
             <span className="manage-sidebar-count">{shots.length}</span>
           </button>
 
@@ -211,8 +214,13 @@ export default function ManageTab() {
                 className={`manage-sidebar-item ${selectedSceneId === scene.id ? 'active' : ''}`}
                 onClick={() => setSelectedSceneId(scene.id)}
               >
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                <span className="manage-sidebar-label">{scene.name}</span>
+                <FilmSlate size={13} weight="duotone" className="manage-sidebar-icon" style={{ color }} />
+                <div className="manage-sidebar-text">
+                  <span className="manage-sidebar-label">{scene.name}</span>
+                  <span className="manage-sidebar-sub">
+                    {scene.location ? scene.location.toUpperCase() : '—'}
+                  </span>
+                </div>
                 <span className="manage-sidebar-count">{count}</span>
               </button>
             )
@@ -250,22 +258,28 @@ export default function ManageTab() {
       {/* ── Main Content ─────────────────────────────────── */}
       <div className="manage-content">
         <div className="manage-toolbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>
-              {activeSceneName}
-            </span>
-            <span style={{
-              fontSize: 11, color: 'var(--t4)',
-              background: 'rgba(255,255,255,0.06)',
-              borderRadius: 99, padding: '2px 8px',
-            }}>
-              {filteredShots.length} shot{filteredShots.length !== 1 ? 's' : ''}
-            </span>
+          <div className="manage-stats">
+            <span className="manage-stat-total">{filteredShots.length} SHOTS</span>
+            {statuses.slice(0, 4).map(s => {
+              const cnt = filteredShots.filter(sh => sh.status_id === s.id).length
+              if (cnt === 0) return null
+              return (
+                <span key={s.id} className="manage-stat-chip" style={{ '--sc': s.color || 'var(--accent)' }}>
+                  {cnt} {(s.name || '').toUpperCase()}
+                </span>
+              )
+            })}
           </div>
           <div className="manage-toolbar-right">
+            <button className="btn-ghost" disabled title="Filter (coming soon)">
+              <Funnel size={13} weight="duotone" /> Filter
+            </button>
+            <button className="btn-ghost" disabled title="Export CSV (coming soon)">
+              <DownloadSimple size={13} weight="duotone" /> Export
+            </button>
             {canEdit && (
               <button className="btn-ghost" onClick={() => setShowColMgr(true)}>
-                <SlidersHorizontal size={14} /> Columns
+                <SlidersHorizontal size={13} /> Columns
               </button>
             )}
           </div>
