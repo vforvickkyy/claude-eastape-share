@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, createRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, CheckCircle } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { authApi } from "./lib/api";
 
@@ -13,7 +14,6 @@ export default function OTPVerificationPage() {
   const fullName    = location.state?.fullName || "";
   const infoMessage = location.state?.message  || "";
 
-  // Redirect guards
   useEffect(() => {
     if (!email) navigate("/signup", { replace: true });
   }, []);
@@ -30,15 +30,10 @@ export default function OTPVerificationPage() {
   const [resendCount,    setResendCount]    = useState(0);
   const [isResending,    setIsResending]    = useState(false);
 
-  // 6 individual input refs
   const inputRefs = useRef([...Array(6)].map(() => createRef()));
 
-  // Auto-focus first box on mount
-  useEffect(() => {
-    inputRefs.current[0]?.current?.focus();
-  }, []);
+  useEffect(() => { inputRefs.current[0]?.current?.focus(); }, []);
 
-  // Resend cooldown ticker
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const t = setInterval(() => setResendCooldown(c => Math.max(0, c - 1)), 1000);
@@ -62,11 +57,10 @@ export default function OTPVerificationPage() {
       setTimeout(() => navigate("/onboarding", { replace: true }), 1000);
     } catch (err) {
       const msg = err.message || "Invalid code. Please try again.";
-      setError(msg.includes("expired") ? "Code expired. Request a new one." : msg);
+      setError(msg.includes("expired") ? "Code expired. Request a new one." : "Incorrect code. Try again.");
       setOtp(["", "", "", "", "", ""]);
       setTimeout(() => inputRefs.current[0]?.current?.focus(), 50);
       triggerShake();
-      // If expired, reset cooldown so resend is immediately available
       if (msg.includes("expired")) setResendCooldown(0);
     } finally {
       setIsLoading(false);
@@ -80,12 +74,8 @@ export default function OTPVerificationPage() {
     const next = [...otp];
     next[index] = val;
     setOtp(next);
-    if (val && index < 5) {
-      inputRefs.current[index + 1]?.current?.focus();
-    }
-    if (next.every(d => d !== "")) {
-      submitOTP(next);
-    }
+    if (val && index < 5) inputRefs.current[index + 1]?.current?.focus();
+    if (next.every(d => d !== "")) submitOTP(next);
   }
 
   function handleKeyDown(index, e) {
@@ -135,67 +125,59 @@ export default function OTPVerificationPage() {
     }
   }
 
-  // Box style per state
-  function boxStyle(index) {
-    const filled    = otp[index] !== "";
-    const base = {
-      width: 46, height: 56, borderRadius: 12,
-      fontSize: 24, fontWeight: 700, color: "white",
-      textAlign: "center", border: "1px solid",
-      outline: "none", background: "rgba(255,255,255,0.05)",
-      transition: "border 150ms, box-shadow 150ms, background 150ms",
-      cursor: "text", fontFamily: "monospace",
-    };
-    if (isVerified)  return { ...base, borderColor: "#10b981", background: "rgba(16,185,129,0.1)", boxShadow: "0 0 0 3px rgba(16,185,129,0.15)" };
-    if (error)       return { ...base, borderColor: "#ef4444", background: "rgba(239,68,68,0.06)", boxShadow: "0 0 0 3px rgba(239,68,68,0.12)" };
-    if (filled)      return { ...base, borderColor: "rgba(124,58,237,0.5)", background: "rgba(124,58,237,0.1)" };
-    return { ...base, borderColor: "rgba(255,255,255,0.1)" };
+  function boxClass(index) {
+    const filled = otp[index] !== "";
+    if (isVerified) return "otp-box otp-box-verified";
+    if (error) return "otp-box otp-box-error";
+    if (filled) return "otp-box otp-box-filled";
+    return "otp-box";
   }
 
   if (!email) return null;
 
   return (
-    <div className="auth-page">
-      <div className="auth-page-orb auth-page-orb-1" />
-      <div className="auth-page-orb auth-page-orb-2" />
-
-      <Link to="/" className="auth-page-logo">
-        <img src="/logo.png" alt="Eastape" className="auth-logo-img" />
-      </Link>
+    <div className="auth-page-v3">
+      {/* Back link */}
+      <div className="auth-v3-topbar">
+        <Link to="/login" className="auth-v3-back">
+          <ArrowLeft size={13} weight="bold" /> Back to log in
+        </Link>
+      </div>
 
       <motion.div
-        className="auth-card-v2"
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="auth-card-v3"
+        initial={{ opacity: 0, y: 28, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       >
-        {/* Header */}
-        <div className="auth-card-heading" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>✉️</div>
-          <h1 className="auth-card-title">Check your email</h1>
-          <p className="auth-card-sub">We sent a 6-digit verification code to:</p>
-          <p style={{ color: "#a78bfa", fontWeight: 600, fontSize: 14, marginTop: 6 }}>{email}</p>
+        <div className="auth-v3-heading">
+          <h1 className="auth-v3-title">Enter your code</h1>
+          <p className="auth-v3-sub">
+            Sent to <strong style={{ color: "var(--t1)" }}>{email}</strong>
+            {resendCooldown > 0 && !isVerified && (
+              <span className="otp-timer"> · {resendCooldown}s</span>
+            )}
+          </p>
         </div>
 
-        {/* Info banner — shown when redirected from login with an unverified account */}
-        {infoMessage && (
-          <div style={{
-            background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)",
-            borderRadius: 10, padding: "10px 14px", marginTop: 16,
-            textAlign: "center", color: "#93c5fd", fontSize: 13,
-          }}>
-            {infoMessage}
+        {/* Code sent status pill */}
+        {!error && !isVerified && (
+          <div className="otp-status-pill">
+            <span className="otp-status-dot" />
+            Code sent · check inbox
           </div>
         )}
 
+        {/* Info banner */}
+        {infoMessage && (
+          <div className="auth-v3-info">{infoMessage}</div>
+        )}
+
         {/* OTP boxes */}
-        <div
-          style={{ marginTop: 28 }}
-          onPaste={handlePaste}
-        >
+        <div onPaste={handlePaste}>
           <motion.div
-            style={{ display: "flex", gap: 8, justifyContent: "center" }}
-            animate={shake ? { x: [-4, 4, -4, 4, -2, 2, 0] } : { x: 0 }}
+            className="otp-boxes-row"
+            animate={shake ? { x: [-5, 5, -5, 5, -3, 3, 0] } : { x: 0 }}
             transition={{ duration: 0.4 }}
           >
             {otp.map((digit, i) => (
@@ -207,7 +189,7 @@ export default function OTPVerificationPage() {
                 maxLength={1}
                 autoComplete={i === 0 ? "one-time-code" : "off"}
                 value={digit}
-                style={boxStyle(i)}
+                className={boxClass(i)}
                 disabled={isLoading || isVerified}
                 onChange={e => handleChange(i, e)}
                 onKeyDown={e => handleKeyDown(i, e)}
@@ -217,38 +199,24 @@ export default function OTPVerificationPage() {
           </motion.div>
 
           {/* Status below boxes */}
-          <div style={{ minHeight: 24, marginTop: 12, textAlign: "center" }}>
+          <div className="otp-status-msg">
             <AnimatePresence mode="wait">
               {isLoading && (
-                <motion.p
-                  key="verifying"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  style={{ color: "var(--t3)", fontSize: 13 }}
-                >
-                  <span className="spinner" style={{ display: "inline-block", marginRight: 6 }} />
+                <motion.p key="v" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  style={{ color: "var(--t3)", fontSize: 12 }}>
+                  <span className="spinner" style={{ display: "inline-block", width: 12, height: 12, marginRight: 6 }} />
                   Verifying…
                 </motion.p>
               )}
               {isVerified && !isLoading && (
-                <motion.p
-                  key="verified"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  style={{ color: "#10b981", fontSize: 13, fontWeight: 600 }}
-                >
-                  Email verified! ✅ Redirecting to setup…
+                <motion.p key="ok" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                  style={{ color: "#10b981", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5, justifyContent: "center" }}>
+                  <CheckCircle size={14} weight="fill" /> Email verified! Redirecting…
                 </motion.p>
               )}
               {error && !isLoading && !isVerified && (
-                <motion.p
-                  key="error"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  style={{ color: "#ef4444", fontSize: 13 }}
-                >
+                <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  style={{ color: "#ef4444", fontSize: 12 }}>
                   {error}
                 </motion.p>
               )}
@@ -256,53 +224,43 @@ export default function OTPVerificationPage() {
           </div>
         </div>
 
-        {/* Resend section */}
-        <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 20, textAlign: "center" }}>
-          <p style={{ color: "var(--t3)", fontSize: 13, marginBottom: 8 }}>Didn't receive it?</p>
+        {/* Verify button */}
+        <motion.button
+          className="auth-v3-submit"
+          disabled={isLoading || isVerified || otp.some(d => !d)}
+          onClick={() => submitOTP(otp)}
+          whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+        >
+          {isLoading
+            ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Verifying…</>
+            : isVerified
+              ? <><CheckCircle size={14} weight="fill" /> Verified!</>
+              : "✓ Verify & continue"
+          }
+        </motion.button>
 
+        {/* Resend row */}
+        <div className="otp-resend-row">
           {resendCount >= 3 ? (
-            <p style={{ color: "var(--t3)", fontSize: 13 }}>
-              Too many attempts.{" "}
-              <a href="mailto:support@eastape.com" style={{ color: "var(--purple-l)", textDecoration: "none" }}>
-                Contact support
-              </a>
-            </p>
+            <span>Too many attempts · <a href="mailto:support@eastape.com">Contact support</a></span>
           ) : isResending ? (
-            <p style={{ color: "var(--t3)", fontSize: 13 }}>
-              <span className="spinner" style={{ display: "inline-block", marginRight: 6 }} />
-              Sending…
-            </p>
+            <span><span className="spinner" style={{ display: "inline-block", width: 11, height: 11, marginRight: 5 }} />Sending…</span>
           ) : resendCooldown > 0 ? (
-            <p style={{ color: "var(--t3)", fontSize: 13 }}>Resend in {resendCooldown}s</p>
+            <span className="otp-resend-wait">Resend in {resendCooldown}s</span>
           ) : (
-            <button
-              type="button"
-              onClick={handleResend}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: "var(--purple-l)", fontSize: 13, fontWeight: 600,
-                padding: "4px 8px", borderRadius: 6,
-              }}
-            >
-              Resend Code
+            <button type="button" className="otp-resend-btn" onClick={handleResend}>
+              Resend code
             </button>
           )}
+          <span className="otp-resend-sep">·</span>
+          <Link to="/signup">Use a different email</Link>
         </div>
-
-        {/* Wrong email */}
-        <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "var(--t3)" }}>
-          Wrong email?{" "}
-          <Link to="/signup" style={{ color: "var(--purple-l)", textDecoration: "none", fontWeight: 600 }}>
-            Go back
-          </Link>
-        </p>
       </motion.div>
 
-      <footer className="auth-page-footer">
-        <span>© {new Date().getFullYear()} Eastape Films.</span>
-        <Link to="/privacy">Privacy</Link>
-        <span>·</span>
+      <footer className="auth-v3-footer">
         <Link to="/terms">Terms</Link>
+        <span>·</span>
+        <Link to="/privacy">Privacy</Link>
       </footer>
     </div>
   );

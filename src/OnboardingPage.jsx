@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, CaretDown, FilmSlate, CloudArrowUp, UserPlus, SquaresFour } from "@phosphor-icons/react";
+import { Check, CaretDown } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { userApi } from "./lib/api";
 
-/* ── Combobox: type to filter or enter custom role ── */
+/* ── Combobox ── */
 function RoleCombobox({ value, onChange, options, placeholder }) {
   const [query, setQuery]   = useState(value || "");
   const [open, setOpen]     = useState(false);
@@ -13,16 +13,12 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
   const ref     = useRef(null);
   const inputRef = useRef(null);
 
-  // Keep input in sync if parent clears value
   useEffect(() => { if (!value) setQuery(""); }, [value]);
-
   useEffect(() => {
     function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
-
-  // Measure input position for fixed dropdown
   useEffect(() => {
     if (open && inputRef.current) {
       const r = inputRef.current.getBoundingClientRect();
@@ -30,30 +26,18 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
     }
   }, [open]);
 
-  const filtered = query.trim()
-    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
-    : options;
-
+  const filtered = query.trim() ? options.filter(o => o.toLowerCase().includes(query.toLowerCase())) : options;
   const showCustom = query.trim() && !options.some(o => o.toLowerCase() === query.toLowerCase());
 
-  function select(opt) {
-    setQuery(opt);
-    onChange(opt);
-    setOpen(false);
-  }
-
-  function handleInput(e) {
-    setQuery(e.target.value);
-    onChange(e.target.value);
-    setOpen(true);
-  }
+  function select(opt) { setQuery(opt); onChange(opt); setOpen(false); }
+  function handleInput(e) { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <div style={{ position: "relative" }}>
         <input
           ref={inputRef}
-          className="form-input"
+          className="auth-v3-input"
           style={{ width: "100%", boxSizing: "border-box", paddingRight: 36 }}
           placeholder={placeholder}
           value={query}
@@ -62,15 +46,14 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
           autoComplete="off"
         />
         <CaretDown
-          size={14}
-          onClick={() => { setOpen(o => !o); inputRef.current?.focus(); }}
+          size={13} onClick={() => { setOpen(o => !o); inputRef.current?.focus(); }}
           style={{
-            position: "absolute", right: 12, top: "50%", transform: open ? "translateY(-50%) rotate(180deg)" : "translateY(-50%)",
-            opacity: 0.4, cursor: "pointer", transition: "transform 0.15s", flexShrink: 0,
+            position: "absolute", right: 12, top: "50%",
+            transform: open ? "translateY(-50%) rotate(180deg)" : "translateY(-50%)",
+            opacity: 0.4, cursor: "pointer", transition: "transform 0.15s",
           }}
         />
       </div>
-
       <AnimatePresence>
         {open && rect && (filtered.length > 0 || showCustom) && (
           <motion.div
@@ -78,43 +61,34 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
             transition={{ duration: 0.12 }}
             style={{
               position: "fixed", top: rect.top, left: rect.left, width: rect.width, zIndex: 9999,
-              background: "#13131f", border: "1px solid rgba(255,255,255,0.1)",
+              background: "var(--panel)", border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
             }}
           >
             {filtered.map((opt, i) => (
-              <button
-                key={opt} type="button"
-                onMouseDown={e => { e.preventDefault(); select(opt); }}
+              <button key={opt} type="button" onMouseDown={e => { e.preventDefault(); select(opt); }}
                 style={{
-                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 14,
-                  background: value === opt ? "rgba(124,58,237,0.2)" : "transparent",
-                  color: value === opt ? "#c4b5fd" : "var(--t1)",
+                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 13.5,
+                  background: value === opt ? "rgba(var(--accent-rgb,200,150,50),0.15)" : "transparent",
+                  color: value === opt ? "var(--accent)" : "var(--t1)",
                   borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                  border: "none", cursor: "pointer", display: "block",
-                  fontWeight: value === opt ? 600 : 400,
+                  border: "none", cursor: "pointer", fontWeight: value === opt ? 600 : 400,
                 }}
-                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
                 onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = "transparent"; }}
-              >
-                {opt}
-              </button>
+              >{opt}</button>
             ))}
             {showCustom && (
-              <button
-                type="button"
-                onMouseDown={e => { e.preventDefault(); select(query.trim()); }}
+              <button type="button" onMouseDown={e => { e.preventDefault(); select(query.trim()); }}
                 style={{
-                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 13,
+                  width: "100%", textAlign: "left", padding: "10px 14px", fontSize: 12.5,
                   background: "transparent", color: "var(--t3)",
                   borderTop: filtered.length > 0 ? "1px solid rgba(255,255,255,0.08)" : "none",
-                  border: "none", cursor: "pointer", display: "block", fontStyle: "italic",
+                  border: "none", cursor: "pointer", fontStyle: "italic",
                 }}
                 onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
                 onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-              >
-                Use "{query.trim()}"
-              </button>
+              >Use "{query.trim()}"</button>
             )}
           </motion.div>
         )}
@@ -123,29 +97,34 @@ function RoleCombobox({ value, onChange, options, placeholder }) {
   );
 }
 
-/* ── Suggestion generator ── */
 function generateSuggestions(fullName) {
   if (!fullName) return [];
   const clean = fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
   const parts = fullName.toLowerCase().split(" ").map(p => p.replace(/[^a-z0-9]/g, "")).filter(Boolean);
   const candidates = [
-    parts.join(""),
-    parts.join("_"),
-    parts[0],
-    parts[0] + (parts[1]?.[0] || ""),
-    clean + "_films",
-    clean + "_studio",
+    parts.join(""), parts.join("_"), parts[0],
+    parts[0] + (parts[1]?.[0] || ""), clean + "_films", clean + "_studio",
   ].filter(s => s && s.length >= 3 && s.length <= 20);
   return [...new Set(candidates)];
 }
 
 const USERNAME_RE = /^[a-z0-9_-]{3,20}$/;
-
 const ROLES = [
   "Director", "Producer", "Cinematographer", "Editor", "VFX Artist",
   "Colorist", "Motion Designer", "Sound Designer", "Photographer",
   "Project Manager", "Other",
 ];
+
+const PROJECT_TYPES = [
+  { id: "commercial",   label: "Commercial",    emoji: "📺", recommended: false },
+  { id: "documentary",  label: "Documentary",   emoji: "🎥", recommended: true  },
+  { id: "music_video",  label: "Music Video",   emoji: "🎵", recommended: false },
+  { id: "short_film",   label: "Short Film",    emoji: "🎬", recommended: false },
+  { id: "social",       label: "Social Cutdown",emoji: "📱", recommended: false },
+  { id: "blank",        label: "Blank",         emoji: "✦",  recommended: false },
+];
+
+const STEP_NAMES = ["Workspace", "About you", "First project", "Done"];
 
 const slideVariants = {
   enter: dir => ({ x: dir > 0 ? 40 : -40, opacity: 0 }),
@@ -153,70 +132,27 @@ const slideVariants = {
   exit:  dir => ({ x: dir > 0 ? -40 : 40, opacity: 0, transition: { duration: 0.18 } }),
 };
 
-/* ── Step Indicator ── */
-function StepIndicator({ current }) {
-  const steps = ["Username", "About You", "Get Started"];
+/* ── Step Progress ── */
+function StepProgress({ current, total }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, marginBottom: 36 }}>
-      {steps.map((label, i) => {
+    <div className="ob-progress">
+      {Array.from({ length: total }, (_, i) => {
         const n = i + 1;
         const done = n < current;
         const active = n === current;
         return (
           <React.Fragment key={n}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-              <motion.div
-                animate={{
-                  background: done || active ? "#7c3aed" : "transparent",
-                  borderColor: done || active ? "#7c3aed" : "rgba(255,255,255,0.2)",
-                }}
-                transition={{ duration: 0.25 }}
-                style={{
-                  width: 30, height: 30, borderRadius: "50%",
-                  border: "2px solid", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, fontWeight: 700, color: "#fff",
-                }}
-              >
-                {done ? <Check size={13} weight="bold" /> : n}
-              </motion.div>
-              <span style={{ fontSize: 11, color: active ? "var(--t2)" : "var(--t3)", whiteSpace: "nowrap" }}>{label}</span>
+            <div className={`ob-step ${done ? "done" : active ? "active" : ""}`}>
+              <div className="ob-step-circle">
+                {done ? <Check size={11} weight="bold" /> : n}
+              </div>
+              <span className="ob-step-label">{STEP_NAMES[i]}</span>
             </div>
-            {i < steps.length - 1 && (
-              <motion.div
-                animate={{ background: done ? "#7c3aed" : "rgba(255,255,255,0.1)" }}
-                transition={{ duration: 0.25 }}
-                style={{ width: 56, height: 2, margin: "0 4px", marginBottom: 22, flexShrink: 0 }}
-              />
-            )}
+            {i < total - 1 && <div className={`ob-step-line ${done ? "done" : ""}`} />}
           </React.Fragment>
         );
       })}
     </div>
-  );
-}
-
-/* ── Action Card ── */
-function ActionCard({ icon, title, description, onClick, accent }) {
-  return (
-    <motion.button
-      onClick={onClick}
-      whileHover={{ scale: 1.02, borderColor: "rgba(255,255,255,0.18)" }}
-      whileTap={{ scale: 0.98 }}
-      style={{
-        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14, padding: "20px 18px", cursor: "pointer", textAlign: "left",
-        display: "flex", flexDirection: "column", gap: 10, width: "100%",
-      }}
-    >
-      <div style={{
-        width: 40, height: 40, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-        background: accent || "rgba(124,58,237,0.15)",
-      }}>
-        {icon}
-      </div>
-      <span style={{ fontSize: 14, fontWeight: 700, color: "var(--t1)" }}>{title}</span>
-      <span style={{ fontSize: 12, color: "var(--t3)", lineHeight: 1.4 }}>{description}</span>
-    </motion.button>
   );
 }
 
@@ -240,52 +176,41 @@ export default function OnboardingPage() {
   const [role, setRole]       = useState("");
   const [company, setCompany] = useState("");
 
+  // Step 3
+  const [projectType, setProjectType] = useState(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ── Auth guard ──
   useEffect(() => {
     if (authLoading) return;
     if (!user) { navigate("/login", { replace: true }); return; }
   }, [user, authLoading]);
 
-  // ── Redirect if already completed ──
   useEffect(() => {
     if (profile?.onboarding_completed) navigate("/", { replace: true });
   }, [profile]);
 
-  // ── Pre-fill company from profile ──
   useEffect(() => {
     if (profile?.company) setCompany(profile.company);
-    if (profile?.username) {
-      setUsername(profile.username);
-      setUStatus("available");
-    }
+    if (profile?.username) { setUsername(profile.username); setUStatus("available"); }
   }, [profile]);
 
-  // ── Generate + check username suggestions ──
   useEffect(() => {
     if (!user) return;
     const name = profile?.name || user?.user_metadata?.full_name || "";
     if (!name) return;
     const candidates = generateSuggestions(name);
     if (!candidates.length) return;
-
     Promise.all(
       candidates.map(u => userApi.checkUsername(u).then(r => r.available ? u : null).catch(() => null))
-    ).then(results => {
-      setSuggestions(results.filter(Boolean).slice(0, 4));
-    });
+    ).then(results => setSuggestions(results.filter(Boolean).slice(0, 4)));
   }, [profile, user]);
 
-  // ── Username debounce check ──
   useEffect(() => {
     clearTimeout(debounceRef.current);
     setStep1Error("");
     if (!username) { setUStatus(null); setUnameMsg(""); return; }
-    if (!USERNAME_RE.test(username)) {
-      setUStatus("invalid"); setUnameMsg("3–20 chars: letters, numbers, _ or - only."); return;
-    }
-    // Don't re-check if it's the same as what's already saved
+    if (!USERNAME_RE.test(username)) { setUStatus("invalid"); setUnameMsg("3–20 chars: letters, numbers, _ or - only."); return; }
     if (username === profile?.username) { setUStatus("available"); setUnameMsg(""); return; }
     setUStatus("checking"); setUnameMsg("");
     debounceRef.current = setTimeout(() => {
@@ -299,10 +224,8 @@ export default function OnboardingPage() {
 
   function goTo(step) { setDir(step > currentStep ? 1 : -1); setCurrentStep(step); }
 
-  /* ── Step 1: save username ── */
   async function handleStep1Continue() {
-    setIsSubmitting(true);
-    setStep1Error("");
+    setIsSubmitting(true); setStep1Error("");
     try {
       if (username && username !== profile?.username) {
         await userApi.updateProfile({ username });
@@ -321,7 +244,6 @@ export default function OnboardingPage() {
     goTo(2);
   }
 
-  /* ── Step 2: save role + company ── */
   async function handleStep2Continue() {
     setIsSubmitting(true);
     try {
@@ -332,19 +254,27 @@ export default function OnboardingPage() {
     finally { setIsSubmitting(false); }
   }
 
-  /* ── Step 3: mark complete + navigate ── */
-  async function markDone(path) {
+  async function handleStep3Continue() {
+    setIsSubmitting(true);
     try {
-      await userApi.updateProfile({ onboarding_completed: true, onboarding_step: 3 });
-      updateProfileLocally({ onboarding_completed: true, onboarding_step: 3 });
+      await userApi.updateProfile({ onboarding_completed: true, onboarding_step: 4 });
+      updateProfileLocally({ onboarding_completed: true, onboarding_step: 4 });
     } catch {}
+    const path = projectType && projectType !== "blank"
+      ? `/projects?new=1&type=${projectType}`
+      : "/projects?new=1";
     navigate(path);
   }
 
-  if (authLoading) return null;
+  async function handleSkipAll() {
+    try {
+      await userApi.updateProfile({ onboarding_completed: true });
+      updateProfileLocally({ onboarding_completed: true });
+    } catch {}
+    navigate("/");
+  }
 
-  const displayName = profile?.name || user?.user_metadata?.full_name || "";
-  const uname = profile?.username || username;
+  if (authLoading) return null;
 
   const statusColor = {
     available: "#22c55e", taken: "#ef4444", invalid: "#f59e0b",
@@ -354,183 +284,152 @@ export default function OnboardingPage() {
   const canContinueStep1 = !username || usernameStatus === "available" || username === profile?.username;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 24px" }}>
-      {/* Logo */}
-      <Link to="/" style={{ marginBottom: 40 }}>
-        <img src="/logo.png" alt="Eastape" style={{ height: 36 }} onError={e => { e.target.style.display = "none"; }} />
-      </Link>
+    <div className="ob-page">
+      {/* Top bar */}
+      <div className="ob-topbar">
+        <Link to="/" className="auth-v3-logo" style={{ textDecoration: "none" }}>
+          <img src="/logo.png" alt="Eastape" style={{ height: 28 }} onError={e => { e.target.style.display = "none"; }} />
+        </Link>
+        <button className="ob-skip-btn" onClick={handleSkipAll}>Skip for now</button>
+      </div>
 
-      {/* Card */}
-      <div style={{ width: "100%", maxWidth: 520 }}>
-        <StepIndicator current={currentStep} />
+      <div className="ob-content">
+        {/* Progress */}
+        <StepProgress current={currentStep} total={4} />
 
-        <div style={{ position: "relative", overflow: "hidden" }}>
-          <AnimatePresence mode="wait" custom={dir}>
-            {/* ─────────── STEP 1 ─────────── */}
-            {currentStep === 1 && (
-              <motion.div key="step1" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit">
-                <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Choose your @username</h2>
-                <p style={{ fontSize: 14, color: "var(--t3)", marginBottom: 24 }}>How teammates will find and mention you</p>
+        {/* Step label */}
+        <p className="ob-step-label-text">
+          STEP {currentStep} OF 4 · {STEP_NAMES[currentStep - 1].toUpperCase()}
+        </p>
 
-                {/* Username input */}
-                <div style={{ position: "relative", marginBottom: 6 }}>
-                  <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#7c3aed", fontSize: 14, fontWeight: 700, zIndex: 1 }}>@</span>
-                  <input
-                    className="form-input"
-                    style={{ paddingLeft: 30, paddingRight: 80, width: "100%", boxSizing: "border-box" }}
-                    placeholder="yourname"
-                    value={username}
-                    maxLength={20}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-                  />
-                  <span style={{ position: "absolute", right: 44, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--t3)" }}>{username.length}/20</span>
-                  {usernameStatus && usernameStatus !== "checking" && (
-                    <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: statusColor }}>
-                      {usernameStatus === "available" ? "✓" : "✗"}
-                    </span>
-                  )}
-                  {usernameStatus === "checking" && (
-                    <span className="spinner" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 14, height: 14 }} />
-                  )}
-                </div>
+        {/* Animated step content */}
+        <div className="ob-card">
+          <div style={{ position: "relative", overflow: "hidden" }}>
+            <AnimatePresence mode="wait" custom={dir}>
 
-                {/* Status message */}
-                {(unameMsg || step1Error) && (
-                  <p style={{ fontSize: 12, color: step1Error ? "#ef4444" : statusColor, marginBottom: 8 }}>
-                    {step1Error || unameMsg}
-                  </p>
-                )}
+              {/* ─── STEP 1: Username ─── */}
+              {currentStep === 1 && (
+                <motion.div key="step1" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit">
+                  <h2 className="ob-heading">Choose your @username</h2>
+                  <p className="ob-sub">How teammates will find and mention you</p>
 
-                {/* Character hint */}
-                <p style={{ fontSize: 11, color: "var(--t3)", marginBottom: 16 }}>
-                  Lowercase letters, numbers, _ and - only.
-                </p>
-
-                {/* Suggestions */}
-                {suggestions.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <span style={{ fontSize: 11, color: "var(--t3)", marginRight: 8 }}>Suggestions:</span>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                      {suggestions.map(s => (
-                        <button
-                          key={s}
-                          onClick={() => { setUsername(s); setUStatus("available"); setUnameMsg("Available!"); }}
-                          style={{
-                            background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)",
-                            borderRadius: 999, padding: "4px 12px", fontSize: 12, color: "#a78bfa",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Footer */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                  <button
-                    className="btn-ghost"
-                    style={{ fontSize: 13, color: "var(--t3)" }}
-                    onClick={handleStep1Skip}
-                    disabled={isSubmitting}
-                  >
-                    Skip
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={handleStep1Continue}
-                    disabled={isSubmitting || !canContinueStep1 || usernameStatus === "checking"}
-                  >
-                    {isSubmitting ? <><span className="spinner" /> Saving…</> : "Continue →"}
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {/* ─────────── STEP 2 ─────────── */}
-            {currentStep === 2 && (
-              <motion.div key="step2" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit">
-                <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Tell us about yourself</h2>
-                <p style={{ fontSize: 14, color: "var(--t3)", marginBottom: 24 }}>Helps your team know who you are</p>
-
-                {/* Role */}
-                <div className="form-group" style={{ marginBottom: 16 }}>
-                  <label className="form-label" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Your Role</label>
-                  <RoleCombobox
-                    value={role}
-                    onChange={setRole}
-                    options={ROLES}
-                    placeholder="Search or type your role..."
-                  />
-                </div>
-
-                {/* Company */}
-                <div className="form-group" style={{ marginBottom: 28 }}>
-                  <label className="form-label" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Company / Organisation</label>
-                  <div className="form-input-wrap">
+                  <div style={{ position: "relative", marginBottom: 6, marginTop: 20 }}>
+                    <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--accent)", fontSize: 14, fontWeight: 700, zIndex: 1 }}>@</span>
                     <input
-                      className="form-input"
-                      placeholder="Your company name (optional)"
-                      value={company}
-                      onChange={e => setCompany(e.target.value)}
-                      maxLength={120}
+                      className="auth-v3-input"
+                      style={{ paddingLeft: 28, paddingRight: 80, width: "100%", boxSizing: "border-box" }}
+                      placeholder="yourname"
+                      value={username} maxLength={20} autoComplete="off" autoCapitalize="none" spellCheck={false}
+                      onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
                     />
+                    <span style={{ position: "absolute", right: 42, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--t4)" }}>{username.length}/20</span>
+                    {usernameStatus && usernameStatus !== "checking" && (
+                      <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: statusColor }}>
+                        {usernameStatus === "available" ? "✓" : "✗"}
+                      </span>
+                    )}
+                    {usernameStatus === "checking" && (
+                      <span className="spinner" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 13, height: 13 }} />
+                    )}
                   </div>
-                </div>
 
-                {/* Footer */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <button className="btn-ghost" onClick={() => goTo(1)} style={{ fontSize: 13 }}>← Back</button>
-                  <button className="btn-primary" onClick={handleStep2Continue} disabled={isSubmitting}>
-                    {isSubmitting ? <><span className="spinner" /> Saving…</> : "Continue →"}
-                  </button>
-                </div>
-              </motion.div>
-            )}
+                  {(unameMsg || step1Error) && (
+                    <p style={{ fontSize: 11.5, color: step1Error ? "#ef4444" : statusColor, marginBottom: 6 }}>
+                      {step1Error || unameMsg}
+                    </p>
+                  )}
+                  <p style={{ fontSize: 11, color: "var(--t4)", marginBottom: 16 }}>Lowercase letters, numbers, _ and - only.</p>
 
-            {/* ─────────── STEP 3 ─────────── */}
-            {currentStep === 3 && (
-              <motion.div key="step3" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit">
-                <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>You're all set! 🎉</h2>
-                <p style={{ fontSize: 14, color: "var(--t2)", marginBottom: 4 }}>
-                  {uname ? `Welcome to Eastape, @${uname}!` : `Welcome to Eastape${displayName ? `, ${displayName.split(" ")[0]}` : ""}!`}
-                </p>
-                <p style={{ fontSize: 14, color: "var(--t3)", marginBottom: 28 }}>What would you like to do first?</p>
+                  {suggestions.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <span style={{ fontSize: 11, color: "var(--t4)", marginRight: 8 }}>Suggestions:</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                        {suggestions.map(s => (
+                          <button key={s}
+                            onClick={() => { setUsername(s); setUStatus("available"); setUnameMsg("Available!"); }}
+                            style={{
+                              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                              borderRadius: 999, padding: "4px 11px", fontSize: 12, color: "var(--t2)", cursor: "pointer",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; e.currentTarget.style.color = "var(--text)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "var(--t2)"; }}
+                          >{s}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <ActionCard
-                    icon={<FilmSlate size={22} weight="duotone" color="#a78bfa" />}
-                    accent="rgba(124,58,237,0.18)"
-                    title="Create a Project" description="Start organizing your work"
-                    onClick={() => markDone("/projects?new=1")}
-                  />
-                  <ActionCard
-                    icon={<CloudArrowUp size={22} weight="duotone" color="#60a5fa" />}
-                    accent="rgba(59,130,246,0.18)"
-                    title="Upload Files" description="Add your footage to Drive"
-                    onClick={() => markDone("/drive")}
-                  />
-                  <ActionCard
-                    icon={<UserPlus size={22} weight="duotone" color="#34d399" />}
-                    accent="rgba(16,185,129,0.18)"
-                    title="Invite Team" description="Collaborate with others"
-                    onClick={() => markDone("/projects")}
-                  />
-                  <ActionCard
-                    icon={<SquaresFour size={22} weight="duotone" color="#fb923c" />}
-                    accent="rgba(249,115,22,0.18)"
-                    title="Explore Dashboard" description="See everything in one place"
-                    onClick={() => markDone("/")}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <div className="ob-nav">
+                    <button className="ob-btn-ghost" onClick={handleStep1Skip} disabled={isSubmitting}>Skip</button>
+                    <button className="ob-btn-primary" onClick={handleStep1Continue}
+                      disabled={isSubmitting || !canContinueStep1 || usernameStatus === "checking"}>
+                      {isSubmitting ? <><span className="spinner" style={{ width: 13, height: 13 }} /> Saving…</> : "Continue →"}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ─── STEP 2: About you ─── */}
+              {currentStep === 2 && (
+                <motion.div key="step2" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit">
+                  <h2 className="ob-heading">Tell us about yourself</h2>
+                  <p className="ob-sub">Helps your team know who you are</p>
+
+                  <div style={{ marginTop: 20, marginBottom: 14 }}>
+                    <label className="auth-v3-label" style={{ display: "block", marginBottom: 5 }}>Your Role</label>
+                    <RoleCombobox value={role} onChange={setRole} options={ROLES} placeholder="Search or type your role…" />
+                  </div>
+
+                  <div style={{ marginBottom: 24 }}>
+                    <label className="auth-v3-label" style={{ display: "block", marginBottom: 5 }}>Company / Organisation</label>
+                    <input className="auth-v3-input" placeholder="Your company name (optional)"
+                      value={company} onChange={e => setCompany(e.target.value)} maxLength={120}
+                      style={{ width: "100%", boxSizing: "border-box" }} />
+                  </div>
+
+                  <div className="ob-nav">
+                    <button className="ob-btn-ghost" onClick={() => goTo(1)}>← Back</button>
+                    <button className="ob-btn-primary" onClick={handleStep2Continue} disabled={isSubmitting}>
+                      {isSubmitting ? <><span className="spinner" style={{ width: 13, height: 13 }} /> Saving…</> : "Continue →"}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ─── STEP 3: Project type ─── */}
+              {currentStep === 3 && (
+                <motion.div key="step3" custom={dir} variants={slideVariants} initial="enter" animate="center" exit="exit">
+                  <h2 className="ob-heading">What will you work on first?</h2>
+                  <p className="ob-sub">Pick a project type to get started — you can change it later</p>
+
+                  <div className="ob-type-grid" style={{ marginTop: 20 }}>
+                    {PROJECT_TYPES.map(pt => (
+                      <button
+                        key={pt.id}
+                        className={`ob-type-card ${projectType === pt.id ? "selected" : ""}`}
+                        onClick={() => setProjectType(pt.id)}
+                      >
+                        <span className="ob-type-emoji">{pt.emoji}</span>
+                        <span className="ob-type-label">{pt.label}</span>
+                        {pt.recommended && <span className="ob-type-rec">Recommended</span>}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="ob-nav" style={{ marginTop: 24 }}>
+                    <button className="ob-btn-ghost" onClick={() => goTo(2)}>← Back</button>
+                    <button className="ob-btn-primary" onClick={handleStep3Continue} disabled={isSubmitting}>
+                      {isSubmitting
+                        ? <><span className="spinner" style={{ width: 13, height: 13 }} /> Setting up…</>
+                        : projectType ? "Create project →" : "Skip for now →"
+                      }
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>
