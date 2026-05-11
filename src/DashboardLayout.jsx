@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   SquaresFour, HardDrive, Trash, CaretDown, SignOut, List, X,
@@ -16,13 +17,15 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const [sideOpen,        setSideOpen]        = useState(false);
   const [collapsed,       setCollapsed]       = useState(() => localStorage.getItem('db-sidebar-collapsed') === '1');
   const [settOpen,        setSettOpen]        = useState(false);
+  const [settPos,         setSettPos]         = useState(null);
   const [projectCount,    setProjectCount]    = useState(null);
   const [username,        setUsername]        = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => sessionStorage.getItem("onboarding-banner-dismissed") === "1"
   );
-  const menuRef = useRef(null);
-  const settRef = useRef(null);
+  const menuRef    = useRef(null);
+  const settRef    = useRef(null);
+  const triggerRef = useRef(null);
 
   useEffect(() => { setUsername(profile?.username || null); }, [profile?.username]);
   useEffect(() => { localStorage.setItem('db-sidebar-collapsed', collapsed ? '1' : '0'); }, [collapsed]);
@@ -35,11 +38,22 @@ export default function DashboardLayout({ children, title, crumbs }) {
   useEffect(() => {
     function outside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) setDropOpen(false);
-      if (settRef.current && !settRef.current.contains(e.target)) setSettOpen(false);
+      if (settRef.current && !settRef.current.contains(e.target)) {
+        const menuEl = document.getElementById('db-settings-portal');
+        if (!menuEl || !menuEl.contains(e.target)) setSettOpen(false);
+      }
     }
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
   }, []);
+
+  function openSettMenu() {
+    if (!settOpen && triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect();
+      setSettPos({ bottom: window.innerHeight - r.top + 8, left: r.left, width: Math.max(200, r.width) });
+    }
+    setSettOpen(o => !o);
+  }
 
   async function handleLogout() {
     setDropOpen(false);
@@ -147,32 +161,7 @@ export default function DashboardLayout({ children, title, crumbs }) {
 
           {/* Footer user row */}
           <div className="db-sidebar-footer" ref={settRef}>
-            {settOpen && (
-              <div className="db-settings-menu">
-                <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/plans"); }}>
-                  <CurrencyInr size={13} weight="duotone" /> Manage Plan
-                </button>
-                <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/profile"); }}>
-                  <UserCircle size={13} weight="duotone" /> Profile Settings
-                </button>
-                <div className="db-settings-divider" />
-                <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/privacy"); }}>
-                  <Scales size={13} weight="duotone" /> Privacy Policy
-                </button>
-                <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/terms"); }}>
-                  <Scales size={13} weight="duotone" /> Terms of Service
-                </button>
-                <div className="db-settings-divider" />
-                <button className="db-settings-item" onClick={() => { setSettOpen(false); window.open("mailto:support@eastape.com", "_blank"); }}>
-                  <Question size={13} weight="duotone" /> Help
-                </button>
-                <div className="db-settings-divider" />
-                <button className="db-settings-item db-settings-logout" onClick={handleLogout}>
-                  <SignOut size={13} weight="duotone" /> Log out
-                </button>
-              </div>
-            )}
-            <button className="db-settings-trigger" onClick={() => setSettOpen(o => !o)} title="Settings">
+            <button className="db-settings-trigger" ref={triggerRef} onClick={openSettMenu} title="Settings">
               <div className="db-settings-avatar">
                 {avatarUrl
                   ? <img src={avatarUrl} alt={initial} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
@@ -280,6 +269,38 @@ export default function DashboardLayout({ children, title, crumbs }) {
           {children}
         </main>
       </div>
+
+      {/* Settings menu — rendered via portal so it escapes sidebar overflow clipping */}
+      {settOpen && settPos && createPortal(
+        <div
+          id="db-settings-portal"
+          className="db-settings-menu"
+          style={{ position: "fixed", bottom: settPos.bottom, left: settPos.left, width: settPos.width, zIndex: 1000 }}
+        >
+          <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/plans"); }}>
+            <CurrencyInr size={13} weight="duotone" /> Manage Plan
+          </button>
+          <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/profile"); }}>
+            <UserCircle size={13} weight="duotone" /> Profile Settings
+          </button>
+          <div className="db-settings-divider" />
+          <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/privacy"); }}>
+            <Scales size={13} weight="duotone" /> Privacy Policy
+          </button>
+          <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/terms"); }}>
+            <Scales size={13} weight="duotone" /> Terms of Service
+          </button>
+          <div className="db-settings-divider" />
+          <button className="db-settings-item" onClick={() => { setSettOpen(false); window.open("mailto:support@eastape.com", "_blank"); }}>
+            <Question size={13} weight="duotone" /> Help
+          </button>
+          <div className="db-settings-divider" />
+          <button className="db-settings-item db-settings-logout" onClick={handleLogout}>
+            <SignOut size={13} weight="duotone" /> Log out
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

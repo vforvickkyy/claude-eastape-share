@@ -49,7 +49,7 @@ function StatusPill({ shot, statuses, onUpdate }) {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 300,
-          background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10,
+          background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 10,
           minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', padding: 4,
         }}>
           <button
@@ -95,7 +95,7 @@ function ActionsMenu({ shot, linkedId, onOpen, onLink, onEdit, onDelete, onClose
     >{label}</button>
   )
   return (
-    <div ref={ref} style={{ position: 'absolute', right: 0, top: 'calc(100% + 2px)', zIndex: 400, background: '#1a1a2e', border: '1px solid #2e2e4a', borderRadius: 10, padding: 4, minWidth: 160, boxShadow: '0 12px 40px rgba(0,0,0,0.7)' }}>
+    <div ref={ref} style={{ position: 'absolute', right: 0, top: 'calc(100% + 2px)', zIndex: 400, background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 10, padding: 4, minWidth: 160, boxShadow: '0 12px 40px rgba(0,0,0,0.7)' }}>
       {linkedId && item('▶  Open Video', onOpen)}
       {item('🔗  Link File', onLink)}
       {item('✏️  Edit Details', onEdit)}
@@ -421,9 +421,10 @@ export default function ShotListView({
   }
 
   // ── Shot row renderer ──────────────────────────────────────────────
-  function renderShotRow(shot, rowIdx) {
-    const thumbUrl = mediaThumbs[shot.thumbnail_media_id] || null
-    const linkedId = shot.linked_media_id || shot.thumbnail_media_id
+  function renderShotRow(shot, rowIdx, sceneColor) {
+    const thumbUrl  = mediaThumbs[shot.thumbnail_media_id] || null
+    const linkedId  = shot.linked_media_id || shot.thumbnail_media_id
+    const thumbColor = sceneColor || SCENE_COLORS[0]
     const isEditing = editingName === shot.id
 
     return (
@@ -451,8 +452,8 @@ export default function ShotListView({
             <div style={{ width: thumbImgW, height: thumbImgH, borderRadius: 7, overflow: 'hidden', cursor: linkedId ? 'pointer' : 'default' }}>
               {thumbUrl
                 ? <img src={thumbUrl} alt="" style={{ width: thumbImgW, height: thumbImgH, objectFit: 'cover', display: 'block' }} onError={e => { e.target.style.display = 'none' }} />
-                : <div style={{ width: thumbImgW, height: thumbImgH, background: '#1a1a24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FilmSlate size={Math.round(thumbImgH * 0.35)} weight="duotone" style={{ color: '#404050' }} />
+                : <div style={{ width: thumbImgW, height: thumbImgH, background: `linear-gradient(135deg, color-mix(in oklch, ${thumbColor} 50%, #0a0a0c), color-mix(in oklch, ${thumbColor} 15%, #0a0a0c))`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FilmSlate size={Math.round(thumbImgH * 0.35)} weight="duotone" style={{ color: thumbColor, opacity: 0.4 }} />
                   </div>
               }
             </div>
@@ -542,7 +543,7 @@ export default function ShotListView({
 
           {/* Sticky header */}
           <thead>
-            <tr style={{ background: '#0d0d15', borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'sticky', top: 0, zIndex: 10 }}>
+            <tr style={{ background: 'var(--bg-1)', borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, zIndex: 10 }}>
 
               {showThumb && (
                 <th style={{ width: W.thumb, minWidth: W.thumb, maxWidth: W.thumb, position: 'relative', padding: 0 }}>
@@ -607,7 +608,7 @@ export default function ShotListView({
                     </td>
                   </tr>
                 ) : (
-                  sortShots(localShots).map((shot, idx) => renderShotRow(shot, idx))
+                  sortShots(localShots).map((shot, idx) => renderShotRow(shot, idx, SCENE_COLORS[scenes.findIndex(s => s.id === shot.scene_id) % SCENE_COLORS.length] || SCENE_COLORS[0]))
                 )}
                 {canEdit && (
                   <AddShotRow colCount={colCount} sceneId={filterSceneId} onShotCreate={onShotCreate} />
@@ -625,33 +626,32 @@ export default function ShotListView({
                     {/* Scene group header row */}
                     <tr
                       onClick={() => toggleCollapse(groupId)}
-                      style={{ height: 40, cursor: 'pointer', background: 'rgba(255,255,255,0.025)', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                      style={{ height: 38, cursor: 'pointer', background: 'rgba(255,255,255,0.018)', borderTop: `1px solid ${color}22`, borderBottom: `1px solid ${color}22` }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.035)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.018)'}
                     >
                       <td colSpan={colCount} style={{ padding: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 40 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ color: 'var(--t4)', display: 'flex', flexShrink: 0 }}>
-                              {isCollapsed ? <CaretRight size={14} weight="bold" /> : <CaretDown size={14} weight="bold" />}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', height: 38 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <span style={{ color, display: 'flex', flexShrink: 0, opacity: 0.7 }}>
+                              {isCollapsed ? <CaretRight size={12} weight="bold" /> : <CaretDown size={12} weight="bold" />}
                             </span>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#e8e8ff', userSelect: 'none' }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#e8e8ff', userSelect: 'none', letterSpacing: 0.01 }}>
                               {scene ? scene.name : 'Ungrouped'}
                             </span>
-                            <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--t4)' }}>
-                              {groupShots.length} shot{groupShots.length !== 1 ? 's' : ''}
+                            <span style={{ background: `${color}18`, border: `1px solid ${color}33`, borderRadius: 999, padding: '1px 7px', fontSize: 10.5, color, fontWeight: 600 }}>
+                              {groupShots.length}
                             </span>
                           </div>
                           {scene && canEdit && (
                             <div onClick={e => e.stopPropagation()}>
                               <button
                                 onClick={() => onShotCreate({ title: 'New Shot', scene_id: scene.id, position: groupShots.length })}
-                                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 12, cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                                style={{ background: 'none', border: 'none', color: 'var(--t4)', fontSize: 12, cursor: 'pointer', padding: '3px 8px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 4 }}
+                                onMouseEnter={e => { e.currentTarget.style.color = color; e.currentTarget.style.background = `${color}14` }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--t4)'; e.currentTarget.style.background = 'none' }}
                               >
-                                + Add Shot
+                                <Plus size={11} weight="bold" /> Add shot
                               </button>
                             </div>
                           )}
@@ -660,7 +660,23 @@ export default function ShotListView({
                     </tr>
 
                     {/* Shot rows */}
-                    {!isCollapsed && sorted.map((shot, rowIdx) => renderShotRow(shot, rowIdx))}
+                    {!isCollapsed && sorted.map((shot, rowIdx) => renderShotRow(shot, rowIdx, color))}
+
+                    {/* Add shot footer row */}
+                    {!isCollapsed && canEdit && scene && (
+                      <tr style={{ borderBottom: `1px solid ${color}18` }}>
+                        <td colSpan={colCount} style={{ padding: '4px 14px' }}>
+                          <button
+                            onClick={() => onShotCreate({ title: 'New Shot', scene_id: scene.id, position: groupShots.length })}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--t4)', fontSize: 12, cursor: 'pointer', padding: '3px 0' }}
+                            onMouseEnter={e => e.currentTarget.style.color = color}
+                            onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+                          >
+                            <Plus size={11} weight="bold" /> Add shot to {scene.name}
+                          </button>
+                        </td>
+                      </tr>
+                    )}
                   </React.Fragment>
                 )
               })
