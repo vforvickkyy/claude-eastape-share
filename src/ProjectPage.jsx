@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { useNavigate, useParams, useLocation, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import {
   FolderOpen, Users, ShareNetwork, Gear, ArrowLeft, Kanban,
-  Clock, UserPlus, FilmSlate,
+  VideoCamera, Clock, UserPlus, FilmSlate,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
