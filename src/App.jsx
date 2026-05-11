@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import DotBackground from "./components/ui/DotBackground.jsx";
 import { AuthProvider } from "./context/AuthContext";
 import { PlanProvider } from "./context/PlanContext";
 import { ProjectProvider } from "./context/ProjectContext";
@@ -67,6 +68,7 @@ export default function App() {
       <PlanProvider>
       <UploadProvider>
         <ToastProvider>
+        <DotBackground />
         <UploadProgressPanel />
         <Routes>
           {/* ── Root = Master Dashboard ── */}
