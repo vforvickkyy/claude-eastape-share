@@ -55,10 +55,10 @@ export default function DashboardPage() {
   const activeProjs = recentProjs.filter(p => p.status === "active" || !p.status);
 
   const QUICK_ACTIONS = [
-    { icon: <CloudArrowUp size={20} weight="duotone" />, label: "Upload media",  onClick: () => navigate("/drive") },
-    { icon: <FolderPlus   size={20} weight="duotone" />, label: "New project",   onClick: () => navigate("/projects?new=1") },
-    { icon: <Folder       size={20} weight="duotone" />, label: "New folder",    onClick: () => navigate("/drive") },
-    { icon: <Eye          size={20} weight="duotone" />, label: "Review",        onClick: () => navigate("/review") },
+    { icon: <CloudArrowUp size={16} weight="duotone" />, label: "Upload media",  onClick: () => navigate("/drive") },
+    { icon: <FolderPlus   size={16} weight="duotone" />, label: "New project",   onClick: () => navigate("/projects?new=1") },
+    { icon: <Folder       size={16} weight="duotone" />, label: "New folder",    onClick: () => navigate("/drive") },
+    { icon: <Eye          size={16} weight="duotone" />, label: "Review",        onClick: () => navigate("/review") },
   ];
 
   return (
