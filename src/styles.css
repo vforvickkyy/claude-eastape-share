@@ -1225,7 +1225,8 @@ body.scrollable,
   transition: color 0.15s, background 0.15s;
   opacity: 1;
 }
-.db-sidebar.collapsed .db-collapse-btn { opacity: 0; pointer-events: none; }
+.db-sidebar.collapsed .db-collapse-btn { opacity: 1; pointer-events: auto; margin-left: 0; }
+.db-sidebar.collapsed .db-collapse-btn svg { transform: rotate(180deg); transition: transform 0.22s; }
 .db-collapse-btn:hover { color: var(--text-2); background: var(--bg-3); }
 .db-sidebar-close { display: none; background: none; border: none; color: var(--text-2); cursor: pointer; }
 
@@ -1234,13 +1235,17 @@ body.scrollable,
 .db-sidebar.collapsed .db-nav-section-header span,
 .db-sidebar.collapsed .db-nav-caret,
 .db-sidebar.collapsed .db-sidebar-footer-info,
-.db-sidebar.collapsed .db-settings-name {
+.db-sidebar.collapsed .db-settings-name,
+.db-sidebar.collapsed .db-nav-sub,
+.db-sidebar.collapsed .db-storage {
   display: none;
 }
 .db-sidebar.collapsed .db-nav-item,
 .db-sidebar.collapsed .db-nav-section-header {
   justify-content: center; padding: 9px 0;
 }
+.db-sidebar.collapsed .db-logo { justify-content: space-between; padding: 0 10px; }
+.db-sidebar.collapsed .db-brand-name { display: none; }
 
 .db-new-btn {
   display: flex;
@@ -2808,7 +2813,113 @@ body.scrollable,
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MEDIA — Asset detail page
+   VIEWER PAGE — Full-screen media viewer (no main sidebar)
+═══════════════════════════════════════════════════════════════ */
+
+.viewer-page {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  z-index: 200;
+  font-family: var(--font);
+}
+
+/* Topbar */
+.viewer-topbar {
+  height: 50px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.viewer-back-btn {
+  width: 30px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--line); cursor: pointer;
+  color: var(--text-3); flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.viewer-back-btn:hover { background: var(--bg-3); color: var(--text); }
+.viewer-breadcrumb {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-3); min-width: 0; flex: 1;
+  overflow: hidden;
+}
+.viewer-bc-item {
+  color: var(--text-3); cursor: pointer; white-space: nowrap;
+  transition: color 0.12s;
+}
+.viewer-bc-item:hover { color: var(--text); }
+.viewer-bc-sep { color: var(--text-4); }
+.viewer-bc-current {
+  color: var(--text); font-weight: 500; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.viewer-bc-current:hover { color: var(--accent); }
+.viewer-name-input {
+  background: var(--bg-3); border: 1px solid var(--accent-soft);
+  border-radius: 6px; color: var(--text); font-size: 13px;
+  padding: 3px 8px; outline: none; width: 280px;
+}
+.viewer-topbar-right {
+  display: flex; align-items: center; gap: 8px;
+  margin-left: auto; flex-shrink: 0;
+}
+.viewer-action-btn {
+  width: 30px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-3); transition: background 0.12s, color 0.12s;
+}
+.viewer-action-btn:hover { background: var(--bg-3); color: var(--text); }
+.viewer-action-btn.danger:hover { color: #f87171; background: rgba(248,113,113,0.1); }
+
+/* Body */
+.viewer-body {
+  flex: 1; display: flex; overflow: hidden;
+}
+.viewer-player-area {
+  flex: 1; overflow: hidden; display: flex; flex-direction: column;
+  background: #050507;
+}
+.viewer-player-area .asset-player-wrap {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 16px;
+}
+.viewer-player-area .asset-player {
+  flex: 1; border-radius: 10px;
+}
+.viewer-player-area .asset-notes-wrap { margin-top: 10px; flex-shrink: 0; }
+
+/* Right panel */
+.viewer-right-panel {
+  width: 340px; flex-shrink: 0;
+  border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel);
+}
+.viewer-panel-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--line);
+  flex-shrink: 0; padding: 0 16px;
+}
+.viewer-panel-tab {
+  position: relative; padding: 12px 14px 11px;
+  background: none; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-3); transition: color 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.viewer-panel-tab:hover { color: var(--text); }
+.viewer-panel-tab.active { color: var(--text); }
+.viewer-panel-tab.active::after {
+  content: ''; position: absolute; bottom: 0; left: 14px; right: 14px;
+  height: 2px; background: var(--accent); border-radius: 2px 2px 0 0;
+}
+.viewer-panel-content {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MEDIA — Asset detail page (legacy, still used for skeleton/bones)
 ═══════════════════════════════════════════════════════════════ */
 
 .asset-topbar {
@@ -3676,7 +3787,7 @@ body { overflow-x: hidden; }
 .projects-empty p { font-size: 14px; }
 
 /* Grid */
-.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 
 /* Card */
 .project-card {
@@ -3687,6 +3798,15 @@ body { overflow-x: hidden; }
 }
 .project-card:hover { transform: translateY(-3px); box-shadow: 0 12px 36px rgba(0,0,0,0.3); border-color: var(--border-hover); }
 
+/* 2×2 mosaic thumbnail */
+.project-card-mosaic {
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  height: 160px; border-radius: 12px 12px 0 0; overflow: hidden;
+  position: relative; gap: 1px; background: var(--line);
+}
+.project-card-tile { width: 100%; height: 100%; }
+
+/* Legacy: keep top/initials classes so old references don't break */
 .project-card-top {
   position: relative; height: 90px; border-radius: 14px 14px 0 0;
   overflow: hidden;
@@ -3738,9 +3858,11 @@ body { overflow-x: hidden; }
 .project-card-menu button.danger { color: var(--danger); }
 .project-card-menu button.danger:hover { background: rgba(239,68,68,0.1); }
 
-.project-card-body { padding: 14px; }
+.project-card-body { padding: 14px 14px 12px; }
 .project-card-name { font-size: 14px; font-weight: 600; color: var(--t1); line-height: 1.3; }
-.project-card-client { font-size: 12px; color: var(--t3); margin-top: 3px; }
+.project-card-client { font-size: 10.5px; color: var(--t4); margin-top: 3px; font-weight: 500; letter-spacing: 0.06em; }
+.project-card-meta { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.project-card-updated { font-size: 11.5px; color: var(--t3); }
 .project-card-footer-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; position: relative; }
 
 /* Status pill — clickable */

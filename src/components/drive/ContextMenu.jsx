@@ -35,17 +35,17 @@ export default function ContextMenu({ x, y, items, onClose }) {
       onContextMenu={e => e.preventDefault()}
       style={{
         position: 'fixed', left, top, zIndex: 9000,
-        background: '#1a1a24',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--bg-2)',
+        border: '1px solid var(--line-2)',
         borderRadius: 10, padding: '6px',
         minWidth: menuW,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
         animation: 'ctxIn 0.1s ease',
       }}
     >
       {items.map((item, i) =>
         item.divider ? (
-          <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '4px 0' }} />
+          <div key={i} style={{ height: 1, background: 'var(--line)', margin: '4px 0' }} />
         ) : (
           <button
             key={i}
@@ -58,7 +58,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
               color: item.danger ? '#f87171' : 'rgba(255,255,255,0.85)',
               gap: 8,
             }}
-            onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.06)'}
+            onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(248,113,113,0.1)' : 'var(--bg-3)'}
             onMouseLeave={e => e.currentTarget.style.background = 'none'}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>

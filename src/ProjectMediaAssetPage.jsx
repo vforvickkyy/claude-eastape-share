@@ -8,7 +8,7 @@ import {
   FilePdf, CaretLeft, CaretRight,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
-import DashboardLayout from './DashboardLayout'
+import { useProject } from './context/ProjectContext'
 import CommentsPanel from './components/media/CommentsPanel'
 import VersionsPanel from './components/media/VersionsPanel'
 import ShareModal from './components/media/ShareModal'
@@ -27,6 +27,7 @@ const STATUS_OPTIONS = [
 
 export default function ProjectMediaAssetPage() {
   const { user, loading: authLoading } = useAuth()
+  const { project } = useProject()
   const navigate  = useNavigate()
   const location  = useLocation()
   const { id: projectId, mediaId } = useParams()
@@ -211,114 +212,109 @@ export default function ProjectMediaAssetPage() {
   const isAudio = asset?.type === 'audio' || asset?.mime_type?.startsWith('audio/')
 
   if (loading) return (
-    <DashboardLayout title="Media Asset">
-      <div className="asset-skeleton">
-        <div className="asset-skeleton-topbar">
-          <div className="skel skel-btn" />
-          <div className="skel skel-title" />
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <div className="skel skel-btn" />
-            <div className="skel skel-btn" />
-            <div className="skel skel-btn" />
-          </div>
+    <div className="viewer-page">
+      <div className="viewer-topbar">
+        <div className="skel skel-btn" style={{ width: 80 }} />
+        <div className="skel skel-title" style={{ width: 260 }} />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <div className="skel skel-btn" style={{ width: 80 }} />
+          <div className="skel skel-btn" style={{ width: 80 }} />
         </div>
-        <div className="asset-skeleton-body">
-          <div className="skel skel-player" />
-          <div className="asset-skeleton-sidebar">
+      </div>
+      <div className="viewer-body">
+        <div className="skel" style={{ flex: 1, margin: 24, borderRadius: 12 }} />
+        <div className="viewer-right-panel" style={{ borderLeft: '1px solid var(--line)' }}>
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className="skel skel-tab-row" />
-            <div className="skel skel-line" style={{ width: '90%' }} />
-            <div className="skel skel-line" style={{ width: '70%' }} />
-            <div className="skel skel-line" style={{ width: '80%' }} />
-            <div className="skel skel-line" style={{ width: '60%' }} />
-            <div className="skel skel-comment" />
-            <div className="skel skel-comment" />
+            {[90, 70, 80, 60, 90, 70].map((w, i) => (
+              <div key={i} className="skel skel-line" style={{ width: `${w}%` }} />
+            ))}
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </div>
   )
 
   if (!asset) return (
-    <DashboardLayout title="Media Asset">
-      <div className="empty-state"><p>Asset not found</p></div>
-    </DashboardLayout>
+    <div className="viewer-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'var(--text-3)' }}>Asset not found</p>
+    </div>
   )
 
   return (
-    <DashboardLayout title={asset.name}>
-      {/* Top bar */}
-      <div className="asset-topbar">
-        <button className="btn-ghost" onClick={() => navigate(backPath)}>
-          <ArrowLeft size={14} /> {location.state?.from === 'manage' ? '← Back to Manage' : 'Back'}
+    <div className="viewer-page">
+      {/* ── Viewer Topbar ── */}
+      <div className="viewer-topbar">
+        <button className="viewer-back-btn" onClick={() => navigate(backPath)} title="Back">
+          <ArrowLeft size={15} />
         </button>
 
-        {editName ? (
-          <div className="asset-name-edit">
-            <input
-              className="asset-name-input"
-              value={nameVal}
-              onChange={e => setNameVal(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditName(false) }}
-              autoFocus
-            />
-            <button className="icon-btn" onClick={saveName}><Check size={14} /></button>
-            <button className="icon-btn" onClick={() => setEditName(false)}><X size={14} /></button>
-          </div>
-        ) : (
-          <button className="asset-name-btn" onClick={() => setEditName(true)}>
-            {asset.name} <PencilSimple size={13} className="asset-name-edit-icon" />
-          </button>
-        )}
+        {/* Breadcrumb */}
+        <div className="viewer-breadcrumb">
+          {project?.name && (
+            <>
+              <span className="viewer-bc-item" onClick={() => navigate(`/projects/${projectId}`)}>{project.name}</span>
+              <span className="viewer-bc-sep">/</span>
+            </>
+          )}
+          {editName ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                className="viewer-name-input"
+                value={nameVal}
+                onChange={e => setNameVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditName(false) }}
+                autoFocus
+              />
+              <button className="icon-btn" onClick={saveName}><Check size={13} /></button>
+              <button className="icon-btn" onClick={() => setEditName(false)}><X size={13} /></button>
+            </span>
+          ) : (
+            <span className="viewer-bc-current" onClick={() => setEditName(true)} title="Click to rename">
+              {asset.name}
+            </span>
+          )}
+        </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="viewer-topbar-right">
+          {/* Prev / Next */}
+          {siblings.length > 1 && (() => {
+            const idx = siblings.findIndex(s => s.id === mediaId)
+            const prev = idx > 0 ? siblings[idx - 1] : null
+            const next = idx < siblings.length - 1 ? siblings[idx + 1] : null
+            return (
+              <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <button className="icon-btn" disabled={!prev} onClick={() => navigate(`/projects/${projectId}/media/${prev.id}`)}>
+                  <CaretLeft size={13} />
+                </button>
+                <span style={{ fontSize: 11, color: 'var(--text-4)', minWidth: 36, textAlign: 'center' }}>{idx + 1}/{siblings.length}</span>
+                <button className="icon-btn" disabled={!next} onClick={() => navigate(`/projects/${projectId}/media/${next.id}`)}>
+                  <CaretRight size={13} />
+                </button>
+              </div>
+            )
+          })()}
+
           <span className={`media-status-badge ${statusMeta.class}`} style={{ position: 'static' }}>{statusMeta.label}</span>
-          <button className="btn-ghost" onClick={handleDownload}>
-            <DownloadSimple size={14} /> Download
+          <button className="viewer-action-btn" onClick={handleDownload} title="Download">
+            <DownloadSimple size={15} />
           </button>
-          <button className="btn-ghost" onClick={copyShareLink}>
-            {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
-            {copied ? 'Copied!' : 'Copy link'}
+          <button className="viewer-action-btn" onClick={copyShareLink} title={copied ? 'Copied!' : 'Copy share link'}>
+            {copied ? <CheckCircle size={15} /> : <Copy size={15} />}
           </button>
-          <button className="btn-ghost" onClick={() => setShowShare(true)}>Share</button>
-          <button className="btn-ghost" onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar">
-            <SidebarSimple size={14} />
+          <button className="viewer-action-btn" onClick={() => setSidebarOpen(o => !o)} title="Toggle panel">
+            <SidebarSimple size={15} />
           </button>
-          <button className="btn-ghost danger" onClick={handleDelete}>
-            <Trash size={14} />
+          <button className="viewer-action-btn danger" onClick={handleDelete} title="Delete">
+            <Trash size={15} />
           </button>
         </div>
       </div>
 
-      {/* Prev / Next */}
-      {siblings.length > 1 && (() => {
-        const idx = siblings.findIndex(s => s.id === mediaId)
-        const prev = idx > 0 ? siblings[idx - 1] : null
-        const next = idx < siblings.length - 1 ? siblings[idx + 1] : null
-        return (
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8 }}>
-            <button
-              className="btn-ghost"
-              style={{ fontSize: 12, opacity: prev ? 1 : 0.3 }}
-              disabled={!prev}
-              onClick={() => navigate(`/projects/${projectId}/media/${prev.id}`)}
-            >
-              <CaretLeft size={13} /> Prev
-            </button>
-            <span style={{ fontSize: 12, color: 'var(--t3)' }}>{idx + 1} / {siblings.length}</span>
-            <button
-              className="btn-ghost"
-              style={{ fontSize: 12, opacity: next ? 1 : 0.3 }}
-              disabled={!next}
-              onClick={() => navigate(`/projects/${projectId}/media/${next.id}`)}
-            >
-              Next <CaretRight size={13} />
-            </button>
-          </div>
-        )
-      })()}
-
-      {/* Main layout */}
-      <div className={`asset-layout ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+      {/* ── Body ── */}
+      <div className={`viewer-body ${sidebarOpen ? '' : 'panel-hidden'}`}>
+        {/* Player area */}
+        <div className="viewer-player-area">
         {/* Player */}
         <div className="asset-player-wrap">
           {asset.wasabi_status === 'ready' ? (
@@ -344,8 +340,8 @@ export default function ProjectMediaAssetPage() {
                     <div className="asset-player asset-player-processing">
                       <div style={{
                         width: 48, height: 48, borderRadius: '50%',
-                        border: '3px solid rgba(124,58,237,0.2)',
-                        borderTop: '3px solid #7c3aed',
+                        border: '3px solid var(--accent-tint)',
+                        borderTop: '3px solid var(--accent)',
                         animation: 'cf-spin 1s linear infinite',
                       }} />
                       <p style={{ color: 'white', fontSize: 15, fontWeight: 600, margin: '16px 0 4px' }}>Preparing video stream…</p>
@@ -414,46 +410,51 @@ export default function ProjectMediaAssetPage() {
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className={`asset-sidebar ${sidebarOpen ? '' : 'hidden'}`}>
-          <div className="asset-tabs">
-            {[
-              { id: 'comments', icon: <ChatCircle size={15} />,            label: 'Comments' },
-              { id: 'versions', icon: <ClockCounterClockwise size={15} />, label: 'Versions' },
-              { id: 'info',     icon: <Info size={15} />,                  label: 'Info'     },
-            ].map(t => (
-              <button
-                key={t.id}
-                className={`asset-tab ${tab === t.id ? 'active' : ''}`}
-                onClick={() => setTab(t.id)}
-              >
-                {t.icon} {t.label}
-              </button>
-            ))}
+        </div>{/* end viewer-player-area */}
+
+        {/* Right panel */}
+        {sidebarOpen && (
+          <div className="viewer-right-panel">
+            <div className="viewer-panel-tabs">
+              {[
+                { id: 'comments', label: 'Comments' },
+                { id: 'versions', label: 'Versions' },
+                { id: 'info',     label: 'Info'     },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  className={`viewer-panel-tab ${tab === t.id ? 'active' : ''}`}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                  {t.id === 'comments' && tab === 'comments' && <span className="viewer-panel-tab-badge" />}
+                </button>
+              ))}
+            </div>
+            <div className="viewer-panel-content">
+              {tab === 'comments' && (
+                <CommentsPanel assetId={mediaId} currentTime={currentTime} onSeek={seekTo} />
+              )}
+              {tab === 'versions' && (
+                <VersionsPanel
+                  asset={asset}
+                  currentTime={currentTime}
+                  onVersionUploaded={newAsset => { setAsset(newAsset); setPreviewVersion(null); setSeekTarget(0) }}
+                  onPreviewVersion={handlePreviewVersion}
+                />
+              )}
+              {tab === 'info' && (
+                <InfoPanel asset={asset} onStatusChange={changeStatus} />
+              )}
+            </div>
           </div>
-          <div className="asset-tab-content">
-            {tab === 'comments' && (
-              <CommentsPanel assetId={mediaId} currentTime={currentTime} onSeek={seekTo} />
-            )}
-            {tab === 'versions' && (
-              <VersionsPanel
-                asset={asset}
-                currentTime={currentTime}
-                onVersionUploaded={newAsset => { setAsset(newAsset); setPreviewVersion(null); setSeekTarget(0) }}
-                onPreviewVersion={handlePreviewVersion}
-              />
-            )}
-            {tab === 'info' && (
-              <InfoPanel asset={asset} onStatusChange={changeStatus} />
-            )}
-          </div>
-        </div>
-      </div>
+        )}
+      </div>{/* end viewer-body */}
 
       <AnimatePresence>
         {showShare && <ShareModal asset={asset} onClose={() => setShowShare(false)} />}
       </AnimatePresence>
-    </DashboardLayout>
+    </div>
   )
 }
 

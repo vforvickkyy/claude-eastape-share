@@ -12,6 +12,16 @@ import { projectsApi } from "./lib/api";
 import NewProjectModal from "./components/NewProjectModal";
 
 
+function fmtRel(iso) {
+  if (!iso) return null
+  const d = (Date.now() - new Date(iso)) / 1000
+  if (d < 60)     return 'just now'
+  if (d < 3600)   return `${Math.round(d/60)}m ago`
+  if (d < 86400)  return `${Math.round(d/3600)}h ago`
+  if (d < 604800) return `${Math.round(d/86400)}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 const STATUS_OPTS = [
   { value: "active",    label: "Active",    cls: "swatch-active"    },
   { value: "completed", label: "Completed", cls: "swatch-completed" },
@@ -129,76 +139,52 @@ export default function ProjectsPage() {
                   transition={{ delay: i * 0.04 }}
                   onClick={() => navigate(`/projects/${p.id}`)}
                 >
-                  {/* Color header */}
-                  <div className="project-card-top" style={{ background: p.color || "#6366f1" }}>
-                    <div className="project-card-top-overlay" />
-                    <div className="project-card-top-content">
-                      <div className="project-card-initials">
-                        {p.name.slice(0, 2).toUpperCase()}
-                      </div>
+                  {/* 2×2 mosaic thumbnail */}
+                  <div className="project-card-mosaic">
+                    {[0,1,2,3].map(tile => (
+                      <div
+                        key={tile}
+                        className="project-card-tile"
+                        style={{
+                          background: `linear-gradient(${120 + tile * 50}deg,
+                            color-mix(in oklch, ${p.color || 'var(--accent)'} ${55 - tile * 8}%, #0a0a0c),
+                            color-mix(in oklch, ${p.color || 'var(--accent)'} ${25 - tile * 4}%, #0a0a0c))`,
+                        }}
+                      />
+                    ))}
+                    {/* 3-dot menu */}
+                    <div className="project-card-menu-wrap" onClick={e => e.stopPropagation()}>
+                      <button
+                        className="project-card-menu-btn"
+                        onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); setStatusMenu(null); }}
+                      >
+                        <DotsThree size={16} weight="bold" />
+                      </button>
+                      {menuOpen === p.id && (
+                        <div className="project-card-menu" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => { setMenuOpen(null); navigate(`/projects/${p.id}/settings`); }}>
+                            <PencilSimple size={13} /> Edit Settings
+                          </button>
+                          <button className="danger" onClick={() => handleDelete(p.id)}>
+                            <Trash size={13} /> Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  {/* 3-dot menu — outside of overflow:hidden top */}
-                  <div className="project-card-menu-wrap" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="project-card-menu-btn"
-                      onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); setStatusMenu(null); }}
-                    >
-                      <DotsThree size={18} weight="bold" />
-                    </button>
-                    {menuOpen === p.id && (
-                      <div className="project-card-menu" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => { setMenuOpen(null); navigate(`/projects/${p.id}/settings`); }}>
-                          <PencilSimple size={13} /> Edit Settings
-                        </button>
-                        <button className="danger" onClick={() => handleDelete(p.id)}>
-                          <Trash size={13} /> Delete
-                        </button>
-                      </div>
-                    )}
                   </div>
 
                   {/* Body */}
                   <div className="project-card-body">
                     <div className="project-card-name">{p.name}</div>
-                    {p.client_name && <div className="project-card-client">{p.client_name}</div>}
-
-                    <div className="project-card-footer-row">
-                      {/* Inline status badge — click to change */}
-                      <div className="project-status-wrap" onClick={e => e.stopPropagation()}>
-                        <button
-                          className={`project-status-pill ${statusMeta.cls}`}
-                          onClick={e => { e.stopPropagation(); setStatusMenu(statusMenu === p.id ? null : p.id); setMenuOpen(null); }}
-                        >
-                          {statusMeta.label}
-                          <CaretDown size={9} style={{ marginLeft: 3 }} />
-                        </button>
-                        {statusMenu === p.id && (
-                          <div className="project-status-dropdown">
-                            {STATUS_OPTS.map(opt => (
-                              <button
-                                key={opt.value}
-                                className={`psd-opt ${p.status === opt.value ? "active" : ""}`}
-                                onClick={() => handleStatusChange(p.id, opt.value)}
-                              >
-                                <span className={`psd-dot ${opt.cls}`} />
-                                {opt.label}
-                                {p.status === opt.value && <Check size={11} style={{ marginLeft: "auto" }} />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Due date */}
-                      {p.due_date && (
-                        <span className={`project-due-date ${overdue ? "overdue" : ""}`}>
-                          <Clock size={11} />
-                          {overdue ? "Overdue · " : ""}
-                          {new Date(p.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                        </span>
-                      )}
+                    {p.client_name && <div className="project-card-client">{p.client_name.toUpperCase()}</div>}
+                    <div className="project-card-meta">
+                      <span className="project-card-updated">
+                        {p.updated_at
+                          ? `updated ${fmtRel(p.updated_at)}`
+                          : p.due_date
+                            ? <span className={overdue ? "overdue" : ""}><Clock size={10} /> {overdue ? "Overdue · " : ""}{new Date(p.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                            : null}
+                      </span>
                     </div>
                   </div>
                 </motion.div>
