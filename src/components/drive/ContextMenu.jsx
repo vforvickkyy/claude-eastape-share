@@ -37,41 +37,47 @@ export default function ContextMenu({ x, y, items, onClose }) {
         position: 'fixed', left, top, zIndex: 9000,
         background: 'var(--bg-2)',
         border: '1px solid var(--line-2)',
-        borderRadius: 10, padding: '6px',
+        borderRadius: 11, padding: '5px',
         minWidth: menuW,
-        boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-        animation: 'ctxIn 0.1s ease',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
+        animation: 'ctxIn 0.12s cubic-bezier(0.22,1,0.36,1)',
       }}
     >
       {items.map((item, i) =>
         item.divider ? (
-          <div key={i} style={{ height: 1, background: 'var(--line)', margin: '4px 0' }} />
+          <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '3px 0' }} />
         ) : (
           <button
             key={i}
             onClick={e => { e.stopPropagation(); item.onClick() }}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              width: '100%', padding: '0 10px', height: 34,
+              width: '100%', padding: '0 10px', height: 33,
               background: 'none', border: 'none', cursor: 'pointer',
-              borderRadius: 6, fontSize: 13,
-              color: item.danger ? '#f87171' : 'rgba(255,255,255,0.85)',
+              borderRadius: 7, fontSize: 13,
+              color: item.danger ? '#f87171' : 'rgba(255,255,255,0.82)',
               gap: 8,
             }}
-            onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(248,113,113,0.1)' : 'var(--bg-3)'}
+            onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.07)'}
             onMouseLeave={e => e.currentTarget.style.background = 'none'}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 9, color: item.danger ? '#f87171' : 'rgba(255,255,255,0.5)', minWidth: 0 }}>
               {item.icon}
-              {item.label}
+              <span style={{ color: item.danger ? '#f87171' : 'rgba(255,255,255,0.85)', fontSize: 13 }}>{item.label}</span>
             </span>
             {item.hint && (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{item.hint}</span>
+              <span style={{
+                fontSize: 10.5, color: 'rgba(255,255,255,0.25)',
+                fontFamily: 'var(--mono, monospace)',
+                background: 'rgba(255,255,255,0.06)',
+                padding: '1px 5px', borderRadius: 4,
+                flexShrink: 0,
+              }}>{item.hint}</span>
             )}
           </button>
         )
       )}
-      <style>{`@keyframes ctxIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:none}}`}</style>
+      <style>{`@keyframes ctxIn{from{opacity:0;transform:scale(0.96) translateY(-4px)}to{opacity:1;transform:none}}`}</style>
     </div>
   )
 

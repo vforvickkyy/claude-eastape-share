@@ -5,13 +5,13 @@
  *   onClose: () => void
  */
 import React, { useState, useEffect } from 'react'
-import { X, Link, Check, Eye, DownloadSimple, Lock, ClockCountdown, Copy } from '@phosphor-icons/react'
+import { X, Link, Check, Eye, DownloadSimple, Lock, ClockCountdown, Copy, ShieldCheck } from '@phosphor-icons/react'
 import { shareLinksApi } from '../../lib/api'
 import { showToast } from '../ui/Toast'
 
 const ACCESS_OPTS = [
-  { value: 'view',     label: 'Can view' },
-  { value: 'download', label: 'Can view + download' },
+  { value: 'view',     label: 'Can view',            icon: Eye },
+  { value: 'download', label: 'Can view + download',  icon: DownloadSimple },
 ]
 
 const EXPIRY_OPTS = [
@@ -131,44 +131,42 @@ export default function ShareModal({ item, onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal"
+        className="modal share-modal-v2"
         onClick={e => e.stopPropagation()}
-        style={{ width: 500, maxWidth: '96vw', display: 'flex', flexDirection: 'column', gap: 0 }}
+        style={{ width: 460, maxWidth: '96vw' }}
       >
         {/* Header */}
         <div className="modal-header">
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 380 }}>
-            Share "{item.name}"
-          </h3>
-          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <Link size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Share "{item.name}"
+            </h3>
+          </div>
+          <button className="icon-btn" onClick={onClose}><X size={15} /></button>
         </div>
 
         {loading ? (
-          <div style={{ padding: 32, display: 'flex', justifyContent: 'center' }}>
-            <span className="spinner" style={{ width: 24, height: 24 }} />
+          <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
+            <span className="spinner" style={{ width: 22, height: 22 }} />
           </div>
         ) : (
-          <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ padding: '4px 0 0' }}>
 
-            {/* Access level */}
-            <div>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Access</p>
+            {/* ── ACCESS ── */}
+            <div className="sm-section">
+              <p className="sm-section-label">Access</p>
               <div style={{ display: 'flex', gap: 6 }}>
                 {ACCESS_OPTS.map(opt => {
                   const isActive = opt.value === 'download' ? allowDownload : !allowDownload
+                  const Icon = opt.icon
                   return (
                     <button
                       key={opt.value}
                       onClick={() => setAllowDownload(opt.value === 'download')}
-                      style={{
-                        flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
-                        border: `1px solid ${isActive ? 'rgba(124,58,237,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                        background: isActive ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.03)',
-                        color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.6)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      }}
+                      className={`sm-access-btn${isActive ? ' active' : ''}`}
                     >
-                      {opt.value === 'view' ? <Eye size={14} /> : <DownloadSimple size={14} />}
+                      <Icon size={13} />
                       {opt.label}
                     </button>
                   )
@@ -176,65 +174,56 @@ export default function ShareModal({ item, onClose }) {
               </div>
             </div>
 
-            {/* Expiry */}
-            <div>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <ClockCountdown size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+            <div className="sm-divider" />
+
+            {/* ── EXPIRY ── */}
+            <div className="sm-section">
+              <p className="sm-section-label">
+                <ClockCountdown size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />
                 Expiry
               </p>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {EXPIRY_OPTS.map(opt => {
-                  const isActive = expiry === opt.value
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setExpiry(opt.value)}
-                      style={{
-                        padding: '5px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                        border: `1px solid ${isActive ? 'rgba(124,58,237,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                        background: isActive ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.03)',
-                        color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.5)',
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  )
-                })}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {EXPIRY_OPTS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setExpiry(opt.value)}
+                    className={`sm-pill${expiry === opt.value ? ' active' : ''}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Password protection */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-                  <Lock size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+            <div className="sm-divider" />
+
+            {/* ── PASSWORD PROTECTION ── */}
+            <div className="sm-section">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <p className="sm-section-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={12} style={{ verticalAlign: 'middle' }} />
                   Password protection
                 </p>
                 <button
                   onClick={() => { setPwMode(p => !p); setPassword('') }}
-                  style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
-                    border: `1px solid ${pwMode ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                    background: pwMode ? 'rgba(124,58,237,0.15)' : 'transparent',
-                    color: pwMode ? '#a78bfa' : 'rgba(255,255,255,0.4)',
-                  }}
+                  className={`sm-toggle${pwMode ? ' on' : ''}`}
                 >
                   {pwMode ? 'On' : 'Off'}
                 </button>
               </div>
               {pwMode && (
-                <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', marginTop: 10 }}>
                   <input
                     className="input-field"
                     type={showPw ? 'text' : 'password'}
-                    placeholder={link?.password ? 'Leave blank to keep existing password' : 'Set a password…'}
+                    placeholder={link?.password ? 'Leave blank to keep existing' : 'Enter password…'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    style={{ width: '100%', paddingRight: 60, fontSize: 13 }}
+                    style={{ width: '100%', paddingRight: 56, fontSize: 13 }}
                   />
                   <button
                     onClick={() => setShowPw(p => !p)}
-                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-4)' }}
                   >
                     {showPw ? 'Hide' : 'Show'}
                   </button>
@@ -242,43 +231,40 @@ export default function ShareModal({ item, onClose }) {
               )}
             </div>
 
-            {/* Share link field */}
-            {shareUrl ? (
-              <div>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <Link size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                  Share link
-                </p>
+            <div className="sm-divider" />
+
+            {/* ── SHARE LINK ── */}
+            <div className="sm-section">
+              <p className="sm-section-label">Share link</p>
+              {shareUrl ? (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input
                     readOnly
                     value={shareUrl}
-                    style={{
-                      flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 7, padding: '8px 10px', fontSize: 12, color: 'rgba(255,255,255,0.6)',
-                      outline: 'none', fontFamily: 'monospace',
-                    }}
+                    className="sm-url-input"
                     onClick={e => e.target.select()}
                   />
                   <button
                     className={copied ? 'btn-primary' : 'btn-ghost'}
-                    style={{ flexShrink: 0, gap: 5, fontSize: 12 }}
+                    style={{ flexShrink: 0, gap: 5, fontSize: 12, height: 36 }}
                     onClick={copyLink}
                   >
                     {copied ? <Check size={13} /> : <Copy size={13} />}
                     {copied ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-              </div>
-            ) : null}
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--text-4)', padding: '2px 0' }}>No link generated yet</p>
+              )}
+            </div>
 
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', paddingTop: 4 }}>
+            {/* ── FOOTER ── */}
+            <div className="sm-footer">
               <div>
                 {link && (
                   <button
                     className="btn-ghost"
-                    style={{ fontSize: 12, color: '#f87171', borderColor: 'rgba(248,113,113,0.3)' }}
+                    style={{ fontSize: 12, color: '#f87171', borderColor: 'rgba(248,113,113,0.25)' }}
                     onClick={revokeLink}
                   >
                     Remove link
@@ -286,14 +272,14 @@ export default function ShareModal({ item, onClose }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-ghost" onClick={onClose}>Done</button>
+                <button className="btn-ghost" style={{ fontSize: 12 }} onClick={onClose}>Done</button>
                 <button
                   className="btn-primary"
                   disabled={saving}
                   onClick={generateOrUpdate}
-                  style={{ gap: 5 }}
+                  style={{ gap: 5, fontSize: 12 }}
                 >
-                  {saving ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <Link size={13} />}
+                  {saving ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Link size={13} />}
                   {link ? 'Update settings' : 'Generate link'}
                 </button>
               </div>

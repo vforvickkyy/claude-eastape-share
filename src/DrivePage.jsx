@@ -13,7 +13,7 @@ import {
   MagnifyingGlass, Plus, UploadSimple, FolderSimplePlus, DotsThree,
   DownloadSimple, PencilSimple, Trash, ArrowClockwise, ArrowSquareOut,
   Check, X, CloudArrowUp, Clock, Funnel, Link, SortAscending,
-  Warning, ShareNetwork, CopySimple, List,
+  Warning, ShareNetwork, CopySimple, List, FolderOpen,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import { useUpload } from './context/UploadContext'
@@ -111,11 +111,11 @@ const SORT_OPTS = [
 ]
 const FILTER_OPTS = [
   { value: 'all',      label: 'All' },
-  { value: 'video',    label: '🎬 Video' },
-  { value: 'image',    label: '🖼 Image' },
-  { value: 'audio',    label: '🎵 Audio' },
-  { value: 'document', label: '📄 Document' },
-  { value: 'other',    label: '📦 Other' },
+  { value: 'video',    label: 'Video' },
+  { value: 'image',    label: 'Image' },
+  { value: 'audio',    label: 'Audio' },
+  { value: 'document', label: 'Document' },
+  { value: 'other',    label: 'Other' },
 ]
 
 // ── Skeleton loading cards ─────────────────────────────────────────────────────
@@ -737,28 +737,30 @@ export default function DrivePage() {
       { icon: <Trash size={14} />, label: 'Delete permanently', danger: true, onClick: () => { setCtxMenu(null); permanentDeleteFile(file) } },
     ]
     return [
-      { icon: <ArrowSquareOut size={14} />, label: 'Preview',    hint: 'Space',  onClick: () => { setCtxMenu(null); const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) } },
-      { icon: <DownloadSimple size={14} />, label: 'Download',   onClick: () => { setCtxMenu(null); downloadFile(file) } },
+      { icon: <FolderOpen size={14} />,     label: 'Open',         onClick: () => { setCtxMenu(null); const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) } },
+      { icon: <ArrowSquareOut size={14} />, label: 'Preview',      hint: 'Space', onClick: () => { setCtxMenu(null); const idx = previewableFiles.findIndex(f => f.id === file.id); setPreviewFiles(previewableFiles); setPreviewIndex(idx < 0 ? 0 : idx) } },
+      { icon: <ShareNetwork size={14} />,   label: 'Share',        hint: '⌘S',   onClick: () => { setCtxMenu(null); setShareTarget({ id: file.id, name: file.name, type: 'file' }) } },
+      { icon: <DownloadSimple size={14} />, label: 'Download',     hint: '⌘D',   onClick: () => { setCtxMenu(null); downloadFile(file) } },
       { divider: true },
-      { icon: <PencilSimple size={14} />,  label: 'Rename',      hint: 'F2',  onClick: () => { setCtxMenu(null); startRename(file, 'file') } },
-      { icon: <FolderSimple size={14} />,  label: 'Move to',                  onClick: () => { setCtxMenu(null); setMoveItems([{ ...file, type: 'file' }]) } },
+      { icon: <PencilSimple size={14} />,   label: 'Rename',       hint: 'F2',   onClick: () => { setCtxMenu(null); startRename(file, 'file') } },
+      { icon: <FolderSimple size={14} />,   label: 'Move to',      hint: '⌘M',   onClick: () => { setCtxMenu(null); setMoveItems([{ ...file, type: 'file' }]) } },
+      { icon: <CopySimple size={14} />,     label: 'Duplicate',                  onClick: () => { setCtxMenu(null); copyLink(file) } },
       { divider: true },
-      { icon: <ShareNetwork size={14} />,  label: 'Share file',              onClick: () => { setCtxMenu(null); setShareTarget({ id: file.id, name: file.name, type: 'file' }) } },
-      { icon: <CopySimple size={14} />,    label: 'Copy link',               onClick: () => { setCtxMenu(null); copyLink(file) } },
-      { divider: true },
-      { icon: <Trash size={14} />,         label: 'Move to Trash', hint: 'Del', danger: true, onClick: () => { setCtxMenu(null); trashFile(file) } },
+      { icon: <Trash size={14} />,          label: 'Delete',       hint: '⌫',    danger: true, onClick: () => { setCtxMenu(null); trashFile(file) } },
     ]
   }
   function folderCtxItems(folder) {
     return [
+      { icon: <FolderOpen size={14} />,       label: 'Open',           onClick: () => { setCtxMenu(null); navigate(`/drive/folder/${folder.id}`) } },
+      { icon: <ShareNetwork size={14} />,     label: 'Share',          hint: '⌘S', onClick: () => { setCtxMenu(null); setShareTarget({ id: folder.id, name: folder.name, type: 'folder' }) } },
+      { divider: true },
       { icon: <PencilSimple size={14} />,     label: 'Rename',         hint: 'F2', onClick: () => { setCtxMenu(null); startRename(folder, 'folder') } },
-      { icon: <FolderSimple size={14} />,     label: 'Move to',                    onClick: () => { setCtxMenu(null); setMoveItems([{ ...folder, type: 'folder' }]) } },
+      { icon: <FolderSimple size={14} />,     label: 'Move to',        hint: '⌘M', onClick: () => { setCtxMenu(null); setMoveItems([{ ...folder, type: 'folder' }]) } },
       { icon: <FolderSimplePlus size={14} />, label: 'New subfolder',              onClick: () => { setCtxMenu(null); setShowNewFolderIn(folder.id) } },
       { divider: true },
-      { icon: <ShareNetwork size={14} />,     label: 'Share folder',               onClick: () => { setCtxMenu(null); setShareTarget({ id: folder.id, name: folder.name, type: 'folder' }) } },
-      { icon: <CopySimple size={14} />,       label: 'Copy folder link',           onClick: () => { setCtxMenu(null); copyFolderLink(folder) } },
+      { icon: <CopySimple size={14} />,       label: 'Copy link',                  onClick: () => { setCtxMenu(null); copyFolderLink(folder) } },
       { divider: true },
-      { icon: <Trash size={14} />,            label: 'Move to Trash', danger: true, onClick: () => { setCtxMenu(null); trashFolder(folder) } },
+      { icon: <Trash size={14} />,            label: 'Delete', hint: '⌫',          danger: true, onClick: () => { setCtxMenu(null); trashFolder(folder) } },
     ]
   }
   // Area context menu (right-click on empty drive space)
@@ -1416,7 +1418,7 @@ function UploadingFileCard({ item }) {
   return (
     <div className="drive-file-card" style={{ cursor: 'default', pointerEvents: 'none' }}>
       {/* Thumbnail area */}
-      <div style={{ position: 'relative', height: 130, background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: 150, background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '8px 8px 0 0' }}>
         <FileTypeIcon fileName={item.name} size={40} style={{ opacity: 0.4 }} />
         {/* Progress bar */}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'var(--line)' }}>
@@ -1498,7 +1500,7 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
     <div className="drive-area">
       {/* Folders */}
       {(folders.length > 0 || showNewFolderIn === (currentFolderId || null)) && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 20 }}>
           <p className="drive-section-label">Folders</p>
           <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
             {showNewFolderIn === (currentFolderId || null) && (
@@ -1531,23 +1533,27 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                   onTouchMove={folderLP.cancel}
                   onContextMenu={e => handleFolderCtx(e, folder)}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-                    <FolderSimple size={26} weight="duotone" color={isDragOver ? '#a78bfa' : '#fbbf24'} style={{ flexShrink: 0 }} />
+                  {/* Folder icon top area */}
+                  <div className="drive-folder-icon-area">
+                    <FolderSimple size={36} weight="duotone" color={isDragOver ? 'var(--accent)' : '#f59e0b'} />
+                  </div>
+                  {/* Name + menu row */}
+                  <div className="drive-folder-info">
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {isRenaming ? (
                         <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
                       ) : (
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+                        <span className="drive-folder-name">{folder.name}</span>
                       )}
                     </div>
+                    <button
+                      className="card-menu-btn"
+                      style={{ flexShrink: 0 }}
+                      onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFolder(folder, r.left, r.bottom + 4) }}
+                    >
+                      <DotsThree size={15} weight="bold" />
+                    </button>
                   </div>
-                  <button
-                    className="card-menu-btn"
-                    style={{ flexShrink: 0 }}
-                    onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFolder(folder, r.left, r.bottom + 4) }}
-                  >
-                    <DotsThree size={16} weight="bold" />
-                  </button>
                 </div>
               )
             })}
@@ -1559,7 +1565,7 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
       {(files.length > 0 || uploadingItems.length > 0) && (
         <div>
           {folders.length > 0 && <p className="drive-section-label">Files</p>}
-          <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+          <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
             {uploadingItems.map(u => <UploadingFileCard key={u.id} item={u} />)}
             {files.map(file => {
               const selKey = `file-${file.id}`
@@ -1585,9 +1591,17 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                   onContextMenu={e => handleFileCtx(e, file)}
                 >
                   {/* Thumbnail */}
-                  <div style={{ position: 'relative', overflow: 'hidden' }}>
-                    <FileThumbnail file={file} size={130} />
-                    {/* Hover overlay */}
+                  <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '8px 8px 0 0' }}>
+                    <FileThumbnail file={file} size={150} />
+                    {/* Size badge — top right */}
+                    {file.file_size > 0 && (
+                      <div className="drive-card-size-badge">{fmtBytes(file.file_size)}</div>
+                    )}
+                    {/* Type icon badge — bottom left */}
+                    <div className="drive-card-type-badge">
+                      <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={14} />
+                    </div>
+                    {/* Hover overlay (checkbox) */}
                     <div className="drive-card-overlay">
                       <div
                         className={`drive-checkbox ${isSel ? 'checked' : ''}`}
@@ -1597,23 +1611,23 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                         {isSel && <Check size={11} color="#000" weight="bold" />}
                       </div>
                     </div>
+                    {/* 3-dot menu on hover */}
+                    <button
+                      className="card-menu-btn drive-card-menu-thumb"
+                      onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFile(file, r.left, r.bottom + 4) }}
+                    >
+                      <DotsThree size={15} weight="bold" />
+                    </button>
                   </div>
                   {/* Info */}
-                  <div style={{ padding: '8px 10px' }}>
+                  <div style={{ padding: '9px 10px 10px' }}>
                     {isRenaming ? (
                       <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{file.name}</span>
+                      <span className="drive-card-name">{file.name}</span>
                     )}
-                    <span style={{ fontSize: 11, color: 'var(--text-4)', display: 'block', marginTop: 2 }}>{fmtBytes(file.file_size)} · {fmtRel(file.created_at)}</span>
+                    <span className="drive-card-meta">{fmtRel(file.created_at)}</span>
                   </div>
-                  <button
-                    className="card-menu-btn"
-                    style={{ position: 'absolute', top: 8, right: 8 }}
-                    onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onCtxFile(file, r.left, r.bottom + 4) }}
-                  >
-                    <DotsThree size={15} weight="bold" />
-                  </button>
                 </div>
               )
             })}
