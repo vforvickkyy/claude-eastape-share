@@ -1237,7 +1237,8 @@ body.scrollable,
 .db-sidebar.collapsed .db-sidebar-footer-info,
 .db-sidebar.collapsed .db-settings-name,
 .db-sidebar.collapsed .db-nav-sub,
-.db-sidebar.collapsed .db-storage {
+.db-sidebar.collapsed .db-storage,
+.db-sidebar.collapsed .db-nav-badge {
   display: none;
 }
 .db-sidebar.collapsed .db-nav-item,
@@ -1264,7 +1265,14 @@ body.scrollable,
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .db-new-btn:hover { background: var(--bg-3); color: var(--text); border-color: var(--line-strong); }
+.db-new-kbd {
+  margin-left: auto; font-size: 10px; font-family: var(--mono);
+  color: var(--text-4); background: var(--bg-3);
+  border: 1px solid var(--line); border-radius: 4px;
+  padding: 1px 5px;
+}
 .db-sidebar.collapsed .db-new-btn span { display: none; }
+.db-sidebar.collapsed .db-new-kbd { display: none; }
 .db-sidebar.collapsed .db-new-btn { justify-content: center; padding: 8px 0; }
 
 .db-nav { display: flex; flex-direction: column; gap: 1px; }
@@ -1287,12 +1295,24 @@ body.scrollable,
   transition: color 0.15s, background 0.15s;
   white-space: nowrap;
   min-width: 0;
+  position: relative;
 }
 .db-nav-item:hover { color: var(--text); background: var(--bg-3); }
 .db-nav-item.active { color: var(--accent); background: var(--accent-tint); }
+.db-nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 20%; height: 60%;
+  width: 2px; background: var(--accent); border-radius: 0 2px 2px 0;
+}
 .db-nav-item-meta {
   margin-left: auto; font-size: 10.5px; color: var(--text-4);
   font-family: var(--mono);
+}
+.db-nav-badge {
+  margin-left: auto; font-size: 10px; font-weight: 600; font-family: var(--mono);
+  background: var(--bg-3); color: var(--text-4);
+  padding: 1px 5px; border-radius: 6px;
+  letter-spacing: 0.02em;
 }
 
 /* ── Sidebar storage bar ── */
@@ -1301,12 +1321,13 @@ body.scrollable,
   padding: 10px 10px 12px;
   border-top: 1px solid var(--line);
 }
-.db-storage-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); margin-bottom: 5px; }
-.db-storage-row strong { color: var(--text-2); font-weight: 500; }
+.db-storage-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.db-storage-label { font-size: 11px; font-weight: 500; color: var(--text-3); }
+.db-storage-nums  { font-size: 11px; font-weight: 600; color: var(--text-2); font-family: var(--mono); }
 .db-storage-track {
   height: 2px; background: var(--line-2); border-radius: 2px; overflow: hidden; margin-bottom: 5px;
 }
-.db-storage-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 64%; }
+.db-storage-fill { height: 100%; background: var(--accent); border-radius: 2px; }
 .db-storage-foot { font-size: 10px; color: var(--text-4); font-family: var(--mono); letter-spacing: 0.05em; }
 .db-sidebar.collapsed .db-storage { display: none; }
 
@@ -2367,14 +2388,81 @@ body.scrollable,
    DASHBOARD — Master Dashboard Page
 ═══════════════════════════════════════════════════════════════ */
 
-.dash-greeting { margin-bottom: 20px; }
+.dash-wrap { display: flex; flex-direction: column; gap: 28px; }
+
+.dash-greeting { }
 .dash-greeting-text {
   font-family: var(--font-display);
   font-size: 24px; font-weight: 700;
-  color: var(--t1); letter-spacing: -0.01em;
+  color: var(--text); letter-spacing: -0.01em; line-height: 1.2;
 }
-.dash-greeting-name { background: linear-gradient(120deg, var(--purple-l), var(--blue-l)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.dash-greeting-sub  { font-size: 13px; color: var(--t2); margin-top: 4px; }
+.dash-greeting-name { color: var(--accent); }
+.dash-greeting-sub  { font-size: 12.5px; color: var(--text-4); margin-top: 5px; }
+
+/* ── Quick actions ── */
+.dash-quick-actions {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.dash-qa-card {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 16px;
+  color: var(--text-2); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.dash-qa-card:hover { background: var(--bg-3); border-color: var(--accent-soft); color: var(--text); }
+.dash-qa-card svg { color: var(--accent); flex-shrink: 0; }
+
+/* ── Section header ── */
+.dash-section { display: flex; flex-direction: column; gap: 12px; }
+.dash-section-head { display: flex; align-items: center; gap: 10px; }
+.dash-section-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.dash-section-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+  font-family: var(--mono); color: var(--text-4);
+  background: var(--bg-3); border: 1px solid var(--line);
+  padding: 2px 7px; border-radius: 6px;
+}
+
+/* ── Recent media horizontal scroll ── */
+.dash-recent-scroll {
+  display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;
+}
+.dash-recent-scroll::-webkit-scrollbar { height: 3px; }
+.dash-recent-scroll::-webkit-scrollbar-track { background: transparent; }
+.dash-recent-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 2px; }
+.dash-recent-card {
+  flex-shrink: 0; width: 150px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden;
+  cursor: pointer; transition: border-color 0.15s, transform 0.15s;
+  text-align: left;
+}
+.dash-recent-card:hover { border-color: var(--accent-soft); transform: translateY(-1px); }
+.dash-recent-thumb {
+  width: 100%; height: 90px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-3); background-size: cover; background-position: center;
+}
+.dash-recent-info { padding: 8px 10px 10px; }
+.dash-recent-name {
+  display: block; font-size: 12px; font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-recent-proj { display: block; font-size: 10.5px; color: var(--text-4); margin-top: 2px; }
+.dash-recent-empty { padding: 20px 0; color: var(--text-4); font-size: 13px; }
+
+/* ── Bottom two-column grid ── */
+.dash-bottom-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+@media (max-width: 720px) { .dash-bottom-grid { grid-template-columns: 1fr; } }
+.dash-bottom-col { display: flex; flex-direction: column; gap: 12px; }
+.dash-empty-state {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  padding: 16px 0; color: var(--text-4); font-size: 13px;
+}
 
 /* ── Dashboard widget grid ── */
 .dash-grid {
@@ -5132,14 +5220,18 @@ body { overflow-x: hidden; }
   transition: background 0.12s, color 0.12s;
   user-select: none;
 }
-.drive-nav-item:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.9); }
-.drive-nav-item.active { background: var(--accent-tint); color: var(--text); font-weight: 600; }
+.drive-nav-item:hover { background: var(--bg-3); color: var(--text-2); }
+.drive-nav-item.active { background: var(--accent-tint); color: var(--text); font-weight: 600; position: relative; }
+.drive-nav-item.active::before { content: ''; position: absolute; left: 0; top: 20%; height: 60%; width: 2px; background: var(--accent); border-radius: 0 2px 2px 0; }
 .drive-nav-item.active svg { color: var(--accent); }
 
 /* Sidebar dots button — hidden until hover */
 .sidebar-dots-btn { opacity: 0; transition: opacity 0.12s; }
 .drive-nav-item:hover .sidebar-dots-btn,
 [class*="FolderTreeItem"]:hover .sidebar-dots-btn { opacity: 1; }
+
+/* Spacer to push storage/footer to bottom */
+.db-nav-spacer { flex: 1; min-height: 8px; }
 
 /* Folder card (grid) */
 .drive-folder-card {
@@ -5148,15 +5240,15 @@ body { overflow-x: hidden; }
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
   min-height: 52px;
   overflow: hidden;
 }
-.drive-folder-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+.drive-folder-card:hover { background: var(--bg-3); border-color: var(--line-2); }
 .drive-folder-card.selected { background: var(--accent-tint); border-color: var(--accent-soft); }
 .drive-folder-card .card-menu-btn { opacity: 0; }
 .drive-folder-card:hover .card-menu-btn { opacity: 1; }
@@ -5164,14 +5256,14 @@ body { overflow-x: hidden; }
 /* File card (grid) */
 .drive-file-card {
   position: relative;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 10px;
   cursor: pointer;
   overflow: hidden;
   transition: background 0.12s, border-color 0.12s, transform 0.12s;
 }
-.drive-file-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); transform: translateY(-1px); }
+.drive-file-card:hover { background: var(--bg-3); border-color: var(--line-2); transform: translateY(-1px); }
 .drive-file-card.selected { background: var(--accent-tint); border-color: var(--accent-soft); }
 .drive-file-card .card-menu-btn { opacity: 0; }
 .drive-file-card:hover .card-menu-btn { opacity: 1; }
@@ -5180,7 +5272,7 @@ body { overflow-x: hidden; }
 .drive-card-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.35);
+  background: rgba(0,0,0,0.3);
   opacity: 0;
   transition: opacity 0.15s;
   display: flex;
@@ -5195,21 +5287,21 @@ body { overflow-x: hidden; }
 .drive-list-row {
   cursor: pointer;
   transition: background 0.1s;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--line);
 }
-.drive-list-row:hover { background: rgba(255,255,255,0.04); }
+.drive-list-row:hover { background: var(--bg-3); }
 .drive-list-row.selected { background: var(--accent-tint); }
 .drive-list-row .card-menu-btn { opacity: 0; }
 .drive-list-row:hover .card-menu-btn { opacity: 1; }
 
-/* card-menu-btn override for drive (already exists but missing drive rules) */
+/* card-menu-btn for drive items */
 .drive-folder-card .card-menu-btn,
 .drive-file-card .card-menu-btn,
 .drive-list-row .card-menu-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: rgba(255,255,255,0.5);
+  color: var(--text-4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5220,7 +5312,70 @@ body { overflow-x: hidden; }
 }
 .drive-folder-card .card-menu-btn:hover,
 .drive-file-card .card-menu-btn:hover,
-.drive-list-row .card-menu-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.drive-list-row .card-menu-btn:hover { background: var(--bg-3); color: var(--text); }
+
+/* Drive popup dropdown (sort, new menu) */
+.drive-dropdown {
+  position: absolute; top: 100%; right: 0; margin-top: 4px; z-index: 50;
+  background: var(--bg-2); border: 1px solid var(--line-2);
+  border-radius: 10px; padding: 4px; min-width: 190px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: ctxIn 0.1s ease;
+}
+.drive-dropdown-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 8px 10px; background: none; border: none;
+  cursor: pointer; border-radius: 6px; font-size: 13px;
+  color: var(--text-2); transition: background 0.1s, color 0.1s;
+  text-align: left;
+}
+.drive-dropdown-item:hover { background: var(--bg-3); color: var(--text); }
+.drive-dropdown-item.active { color: var(--accent); }
+.drive-dropdown-divider { height: 1px; background: var(--line); margin: 3px 0; }
+
+/* List table header */
+.drive-th {
+  padding: 8px 10px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-4); border-bottom: 1px solid var(--line);
+  text-align: left; -webkit-user-select: none; user-select: none;
+  white-space: nowrap; cursor: pointer;
+}
+.drive-th:hover { color: var(--text-3); }
+.drive-th.active { color: var(--accent); }
+.drive-td { padding: 0 10px; font-size: 13px; color: var(--text-2); vertical-align: middle; }
+
+/* Drive filter chips */
+.drive-filter-chip {
+  font-size: 12px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; color: var(--text-3); cursor: pointer;
+  white-space: nowrap; transition: all 0.15s;
+}
+.drive-filter-chip:hover { border-color: var(--line-2); color: var(--text-2); }
+.drive-filter-chip.active { border-color: var(--accent-soft); background: var(--accent-tint); color: var(--accent); }
+
+/* Drive checkbox */
+.drive-checkbox {
+  width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0;
+  border: 1.5px solid var(--line-2); background: transparent;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.drive-checkbox.checked { border-color: var(--accent); background: var(--accent); }
+
+/* Drive rename/new-folder inline input */
+.drive-inline-input {
+  background: var(--accent-tint); border: 1px solid var(--accent-soft);
+  border-radius: 4px; outline: none; font-size: 13px; color: var(--text);
+  padding: 2px 6px; width: 100%; font-family: inherit;
+}
+
+/* Drive section header label */
+.drive-section-label {
+  font-size: 10.5px; color: var(--text-4); text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 600; margin-bottom: 8px;
+  padding: 0 2px;
+}
 
 /* ── Drive FAB (mobile only) ── */
 .drive-fab-wrap {
@@ -5567,7 +5722,7 @@ body { overflow-x: hidden; }
   display: flex; flex-direction: column; gap: 5px;
   cursor: pointer; border-radius: var(--r-md);
   padding: 4px; transition: background 0.12s;
-  user-select: none;
+  -webkit-user-select: none; user-select: none;
 }
 .bam-fc:hover { background: rgba(255,255,255,0.04); }
 .bam-fc.selected { background: rgba(139,92,246,0.12); }

@@ -789,7 +789,7 @@ export default function DrivePage() {
 
   // ── Storage bar data ──────────────────────────────────────────────────────────
   const usedPct  = storage ? Math.min(100, (storage.used_bytes / storage.limit_bytes) * 100) : 0
-  const barColor = usedPct >= 90 ? '#ef4444' : usedPct >= 70 ? '#f59e0b' : '#7c3aed'
+  const barColor = usedPct >= 90 ? '#ef4444' : usedPct >= 70 ? '#f59e0b' : 'var(--accent)'
 
   // ── Folder tree ──────────────────────────────────────────────────────────────
   const folderTree = useMemo(() => buildTree(allFolders), [allFolders])
@@ -808,16 +808,16 @@ export default function DrivePage() {
         <aside className={`drive-inner-sidebar${sidebarOpen ? ' open' : ''}`}>
           {/* Storage */}
           {storage && (
-            <div style={{ padding: '14px 14px 12px', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ padding: '12px 12px 10px', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Storage</span>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
+                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'var(--mono)' }}>{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
               </div>
-              <div style={{ height: 4, borderRadius: 2, background: 'var(--line-2)', overflow: 'hidden' }}>
+              <div style={{ height: 3, borderRadius: 2, background: 'var(--line)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${usedPct}%`, borderRadius: 2, background: barColor, transition: 'width 0.6s ease' }} />
               </div>
               {usedPct >= 80 && (
-                <p style={{ fontSize: 11, color: usedPct >= 90 ? '#f87171' : 'var(--accent)', marginTop: 4 }}>
+                <p style={{ fontSize: 10.5, color: usedPct >= 90 ? '#f87171' : 'var(--accent)', marginTop: 4 }}>
                   {fmtBytes((storage.limit_bytes - storage.used_bytes))} remaining
                 </p>
               )}
@@ -870,7 +870,7 @@ export default function DrivePage() {
             {/* Folder tree */}
             <div style={{ marginBottom: 4 }}>
               {folderTree.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-4)', padding: '4px 10px', fontStyle: 'italic' }}>No folders yet</div>
+                <div style={{ fontSize: 12, color: 'var(--text-4)', padding: '6px 10px' }}>No folders yet</div>
               )}
               {folderTree.map(node => (
                 <FolderTreeItem
@@ -908,13 +908,13 @@ export default function DrivePage() {
                     {i > 0 && <CaretRight size={11} style={{ color: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />}
                     {i < breadcrumb.length - 1 ? (
                       <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'rgba(255,255,255,0.5)', padding: '2px 4px', borderRadius: 4, whiteSpace: 'nowrap' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-3)', padding: '2px 4px', borderRadius: 4, whiteSpace: 'nowrap', transition: 'color 0.15s' }}
                         onClick={() => crumb.id ? navigate(`/drive/folder/${crumb.id}`) : navigate('/drive')}
-                        onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}
+                        onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
                       >{crumb.name}</button>
                     ) : (
-                      <span style={{ fontSize: 14, fontWeight: 600, color: '#fff', padding: '2px 4px' }}>{crumb.name}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', padding: '2px 4px' }}>{crumb.name}</span>
                     )}
                   </React.Fragment>
                 ))
@@ -952,27 +952,21 @@ export default function DrivePage() {
                 <SortAscending size={14} /> {sortLabel} <CaretDown size={10} />
               </button>
               {showSortMenu && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 50, background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px', minWidth: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                <div className="drive-dropdown">
                   {SORT_OPTS.map((opt, i) => opt === null ? (
-                    <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '3px 0' }} />
+                    <div key={i} className="drive-dropdown-divider" />
                   ) : (
                     <button
                       key={opt.value}
+                      className={`drive-dropdown-item ${`${sortBy}-${sortDir}` === opt.value ? 'active' : ''}`}
                       onClick={() => {
                         const [sb, sd] = opt.value.split('-')
                         setSortBy(sb); setSortDir(sd); setShowSortMenu(false)
                       }}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        width: '100%', padding: '7px 10px', background: 'none', border: 'none',
-                        cursor: 'pointer', borderRadius: 6, fontSize: 13,
-                        color: `${sortBy}-${sortDir}` === opt.value ? '#a78bfa' : 'rgba(255,255,255,0.75)',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      style={{ justifyContent: 'space-between' }}
                     >
                       {opt.label}
-                      {`${sortBy}-${sortDir}` === opt.value && <Check size={13} color="#a78bfa" />}
+                      {`${sortBy}-${sortDir}` === opt.value && <Check size={13} style={{ color: 'var(--accent)' }} />}
                     </button>
                   ))}
                 </div>
@@ -992,19 +986,16 @@ export default function DrivePage() {
                   <Plus size={14} /> New <CaretDown size={10} />
                 </button>
                 {showNewMenu && (
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 50, background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '4px', minWidth: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                  <div className="drive-dropdown">
                     {[
                       { icon: <FolderSimplePlus size={15} />, label: 'New Folder',    action: () => { setShowNewFolderIn(currentFolderId); setShowNewMenu(false) } },
                       null,
                       { icon: <UploadSimple size={15} />,    label: 'Upload Files',  action: () => { fileInputRef.current?.click(); setShowNewMenu(false) } },
                       { icon: <FolderSimple size={15} />,    label: 'Upload Folder', action: () => { folderInputRef.current?.click(); setShowNewMenu(false) } },
                     ].map((item, i) => item === null ? (
-                      <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '3px 0' }} />
+                      <div key={i} className="drive-dropdown-divider" />
                     ) : (
-                      <button key={i} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 6, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                      >
+                      <button key={i} onClick={item.action} className="drive-dropdown-item">
                         {item.icon} {item.label}
                       </button>
                     ))}
@@ -1033,18 +1024,16 @@ export default function DrivePage() {
                   <Plus size={22} weight="bold" />
                 </button>
                 {showNewMenu && (
-                  <div style={{ position: 'absolute', bottom: '110%', right: 0, zIndex: 200, background: '#1a1a24', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 6, minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+                  <div className="drive-dropdown" style={{ bottom: '110%', top: 'auto', minWidth: 200 }}>
                     {[
                       { icon: <FolderSimplePlus size={16} />, label: 'New Folder',    action: () => { setShowNewFolderIn(currentFolderId); setShowNewMenu(false) } },
                       null,
                       { icon: <UploadSimple size={16} />,    label: 'Upload Files',  action: () => { fileInputRef.current?.click(); setShowNewMenu(false) } },
                       { icon: <FolderSimple size={16} />,    label: 'Upload Folder', action: () => { folderInputRef.current?.click(); setShowNewMenu(false) } },
                     ].map((item, i) => item === null ? (
-                      <div key={i} style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 0' }} />
+                      <div key={i} className="drive-dropdown-divider" />
                     ) : (
-                      <button key={i} onClick={item.action}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'left' }}
-                      >
+                      <button key={i} onClick={item.action} className="drive-dropdown-item" style={{ padding: '10px 14px', fontSize: 14 }}>
                         {item.icon} {item.label}
                       </button>
                     ))}
@@ -1056,22 +1045,15 @@ export default function DrivePage() {
 
           {/* ── Filter bar ── */}
           {currentView === 'myDrive' && !search && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderBottom: '1px solid var(--line)', flexShrink: 0, overflowX: 'auto' }}>
               {FILTER_OPTS.map(opt => {
                 const count = opt.value === 'all' ? files.length : files.filter(f => getFileCategory(f.mime_type, f.name) === opt.value).length
                 if (opt.value !== 'all' && count === 0) return null
-                const isActive = filter === opt.value
                 return (
                   <button
                     key={opt.value}
+                    className={`drive-filter-chip ${filter === opt.value ? 'active' : ''}`}
                     onClick={() => setFilter(f => f === opt.value ? 'all' : opt.value)}
-                    style={{
-                      fontSize: 12, padding: '4px 12px', borderRadius: 999, border: '1px solid',
-                      borderColor: isActive ? 'rgba(124,58,237,0.5)' : 'rgba(255,255,255,0.08)',
-                      background: isActive ? 'rgba(124,58,237,0.15)' : 'transparent',
-                      color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.5)',
-                      cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
-                    }}
                   >
                     {opt.label}{count > 0 && opt.value !== 'all' ? ` ${count}` : ''}
                   </button>
@@ -1082,8 +1064,8 @@ export default function DrivePage() {
 
           {/* ── Trash warning banner ── */}
           {currentView === 'trash' && (
-            <div style={{ margin: '12px 16px 0', padding: '9px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, fontSize: 13, color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <Warning size={15} color="#f59e0b" />
+            <div style={{ margin: '12px 16px 0', padding: '9px 14px', background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: 8, fontSize: 13, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <Warning size={15} style={{ color: '#f59e0b', flexShrink: 0 }} />
               <span style={{ flex: 1 }}>Files in Trash are permanently deleted after 30 days</span>
             </div>
           )}
@@ -1183,11 +1165,11 @@ export default function DrivePage() {
 
         {/* ── Drag upload overlay ── */}
         {isPageDrag && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(8,10,20,0.88)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ width: '55%', height: '55%', border: '3px dashed rgba(124,58,237,0.6)', borderRadius: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-              <CloudArrowUp size={64} weight="duotone" color="#7c3aed" />
-              <p style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>Drop to upload</p>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(8,10,20,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ width: '55%', height: '55%', border: '2px dashed var(--accent-soft)', borderRadius: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+              <CloudArrowUp size={64} weight="duotone" style={{ color: 'var(--accent)' }} />
+              <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Drop to upload</p>
+              <p style={{ fontSize: 14, color: 'var(--text-4)' }}>
                 Uploading to: {currentFolderId ? (allFolders.find(f => f.id === currentFolderId)?.name || 'folder') : 'My Drive'}
               </p>
             </div>
@@ -1321,7 +1303,7 @@ function BulkBar({ selected, onDeselect, onDownload, onMove, onTrash }) {
       position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
       zIndex: 200,
       display: 'flex', alignItems: 'center', gap: 14,
-      background: '#1a1a2e', border: '1px solid rgba(124,58,237,0.35)',
+      background: 'var(--panel)', border: '1px solid var(--accent-soft)',
       borderRadius: 999, padding: '10px 20px',
       boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
       animation: 'bulkIn 0.2s ease',
@@ -1329,8 +1311,8 @@ function BulkBar({ selected, onDeselect, onDownload, onMove, onTrash }) {
       <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', padding: 2, display: 'flex' }} onClick={onDeselect}>
         <X size={14} />
       </button>
-      <span style={{ fontSize: 13, color: '#fff', whiteSpace: 'nowrap' }}>{count} {count === 1 ? 'item' : 'items'} selected</span>
-      <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)' }} />
+      <span style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'nowrap' }}>{count} {count === 1 ? 'item' : 'items'} selected</span>
+      <div style={{ width: 1, height: 20, background: 'var(--line-2)' }} />
       {fileCount > 0 && (
         <button className="bulk-action-btn" onClick={onDownload}><DownloadSimple size={14} /> Download</button>
       )}
@@ -1352,7 +1334,7 @@ function BulkBar({ selected, onDeselect, onDownload, onMove, onTrash }) {
 function NewFolderInput({ inputRef, value, onChange, onSave, onCancel, isCard = false }) {
   if (isCard) {
     return (
-      <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 72 }}>
+      <div style={{ background: 'var(--accent-tint)', border: '1px solid var(--accent-soft)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 72 }}>
         <FolderSimple size={28} weight="duotone" color="#fbbf24" />
         <input
           ref={inputRef}
@@ -1361,7 +1343,7 @@ function NewFolderInput({ inputRef, value, onChange, onSave, onCancel, isCard = 
           placeholder="Folder name"
           onKeyDown={e => { if (e.key === 'Enter') onSave(value); if (e.key === 'Escape') onCancel() }}
           onBlur={() => setTimeout(onCancel, 150)}
-          style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#fff', flex: 1, fontWeight: 600 }}
+          style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', flex: 1, fontWeight: 600 }}
         />
       </div>
     )
@@ -1378,7 +1360,7 @@ function NewFolderInput({ inputRef, value, onChange, onSave, onCancel, isCard = 
             placeholder="Folder name"
             onKeyDown={e => { if (e.key === 'Enter') onSave(value); if (e.key === 'Escape') onCancel() }}
             onBlur={() => setTimeout(onCancel, 150)}
-            style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 4, outline: 'none', fontSize: 13, color: '#fff', padding: '4px 8px', flex: 1 }}
+            className="drive-inline-input"
           />
         </div>
       </td>
@@ -1396,7 +1378,7 @@ function RenameInput({ inputRef, value, onChange, onSave, onCancel }) {
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onSave() } if (e.key === 'Escape') onCancel() }}
       onBlur={onSave}
       onClick={e => e.stopPropagation()}
-      style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid #7c3aed', borderRadius: 4, outline: 'none', fontSize: 13, color: '#fff', padding: '2px 6px', width: '100%', fontFamily: 'inherit' }}
+      className="drive-inline-input" style={{ padding: '2px 6px' }}
     />
   )
 }
@@ -1408,7 +1390,7 @@ function FileThumbnail({ file, size = 140 }) {
   if (file.thumbnailUrl && !imgErr) {
     return <img src={file.thumbnailUrl} alt={file.name} style={{ width: '100%', height: size, objectFit: 'cover', display: 'block' }} loading="lazy" onError={() => setImgErr(true)} />
   }
-  const bg = mime.startsWith('video/') ? 'linear-gradient(135deg,#1a1030,#0a0a14)' : mime.startsWith('audio/') ? 'linear-gradient(135deg,#0a1e14,#0a0a14)' : mime === 'application/pdf' ? 'linear-gradient(135deg,#1e0a0a,#0a0a14)' : 'linear-gradient(135deg,#0d1520,#0a0a14)'
+  const bg = 'var(--bg-3)'
   return (
     <div style={{ height: size, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={40} />
@@ -1434,27 +1416,27 @@ function UploadingFileCard({ item }) {
   return (
     <div className="drive-file-card" style={{ cursor: 'default', pointerEvents: 'none' }}>
       {/* Thumbnail area */}
-      <div style={{ position: 'relative', height: 130, background: 'linear-gradient(135deg,#110c1e,#0a0a14)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <FileTypeIcon fileName={item.name} size={40} style={{ opacity: 0.5 }} />
+      <div style={{ position: 'relative', height: 130, background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <FileTypeIcon fileName={item.name} size={40} style={{ opacity: 0.4 }} />
         {/* Progress bar */}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'rgba(255,255,255,0.08)' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.35)' : '#7c3aed', transition: 'width 0.3s ease', borderRadius: 2 }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'var(--line)' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'var(--accent-soft)' : 'var(--accent)', transition: 'width 0.3s ease', borderRadius: 2 }} />
         </div>
         {/* Percentage badge */}
-        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 11, fontWeight: 700, color: isPending ? 'rgba(255,255,255,0.3)' : '#a78bfa', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 11, fontWeight: 700, color: isPending ? 'var(--text-4)' : 'var(--accent)', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
           {isPending ? 'Queued' : `${pct}%`}
         </div>
         {/* Speed badge */}
         {speed && (
-          <div style={{ position: 'absolute', bottom: 8, left: 8, fontSize: 10, color: 'rgba(255,255,255,0.5)', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ position: 'absolute', bottom: 8, left: 8, fontSize: 10, color: 'var(--text-4)', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
             {speed}
           </div>
         )}
       </div>
       {/* Info */}
       <div style={{ padding: '8px 10px' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{item.name}</span>
-        <span style={{ fontSize: 11, color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', display: 'block', marginTop: 2 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{item.name}</span>
+        <span style={{ fontSize: 11, color: isPending ? 'var(--text-4)' : 'var(--accent)', display: 'block', marginTop: 2 }}>
           {isPending ? 'Queued' : (eta || 'Uploading…')}
         </span>
       </div>
@@ -1479,17 +1461,17 @@ function UploadingFileRow({ item }) {
           <FileTypeIcon fileName={item.name} size={26} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{item.name}</span>
-            <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', maxWidth: 220 }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'rgba(124,58,237,0.35)' : '#7c3aed', transition: 'width 0.3s ease' }} />
+            <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--line)', overflow: 'hidden', maxWidth: 220 }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'var(--accent-soft)' : 'var(--accent)', transition: 'width 0.3s ease' }} />
             </div>
           </div>
         </div>
       </td>
-      <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums', color: isPending ? 'rgba(255,255,255,0.25)' : '#a78bfa', fontSize: 12 }}>
+      <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums', color: isPending ? 'var(--text-4)' : 'var(--accent)', fontSize: 12 }}>
         {isPending ? 'Queued' : `${pct}%`}
       </td>
       <td style={tdStyle}>{fmtBytes(item.size)}</td>
-      <td style={{ ...tdStyle, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>
+      <td style={{ ...tdStyle, fontSize: 11, color: 'var(--text-4)', fontVariantNumeric: 'tabular-nums' }}>
         {isPending ? '—' : [speed, eta].filter(Boolean).join(' · ') || 'Uploading…'}
       </td>
       <td /><td />
@@ -1517,7 +1499,7 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
       {/* Folders */}
       {(folders.length > 0 || showNewFolderIn === (currentFolderId || null)) && (
         <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Folders</p>
+          <p className="drive-section-label">Folders</p>
           <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
             {showNewFolderIn === (currentFolderId || null) && (
               <NewFolderInput inputRef={newFolderInputRef} value={newFolderName} onChange={onNewFolderChange} onSave={v => onNewFolderCreate(v, currentFolderId)} onCancel={onNewFolderCancel} isCard />
@@ -1555,7 +1537,7 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                       {isRenaming ? (
                         <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
                       ) : (
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
                       )}
                     </div>
                   </div>
@@ -1576,7 +1558,7 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
       {/* Files */}
       {(files.length > 0 || uploadingItems.length > 0) && (
         <div>
-          {folders.length > 0 && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Files</p>}
+          {folders.length > 0 && <p className="drive-section-label">Files</p>}
           <div className="drive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
             {uploadingItems.map(u => <UploadingFileCard key={u.id} item={u} />)}
             {files.map(file => {
@@ -1608,10 +1590,11 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                     {/* Hover overlay */}
                     <div className="drive-card-overlay">
                       <div
-                        style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSel ? '#7c3aed' : 'rgba(255,255,255,0.8)'}`, background: isSel ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        className={`drive-checkbox ${isSel ? 'checked' : ''}`}
+                        style={{ width: 20, height: 20, borderRadius: 4 }}
                         onClick={e => { e.stopPropagation(); onToggleSelect(selKey) }}
                       >
-                        {isSel && <Check size={11} color="#fff" weight="bold" />}
+                        {isSel && <Check size={11} color="#000" weight="bold" />}
                       </div>
                     </div>
                   </div>
@@ -1620,9 +1603,9 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                     {isRenaming ? (
                       <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{file.name}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{file.name}</span>
                     )}
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginTop: 2 }}>{fmtBytes(file.file_size)} · {fmtRel(file.created_at)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-4)', display: 'block', marginTop: 2 }}>{fmtBytes(file.file_size)} · {fmtRel(file.created_at)}</span>
                   </div>
                   <button
                     className="card-menu-btn"
@@ -1648,7 +1631,7 @@ function SortTh({ col, label, sortBy, sortDir, setSortBy, setSortDir, style = {}
     <th
       className={className}
       onClick={() => { if (isActive) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(col); setSortDir('asc') } }}
-      style={{ ...style, cursor: 'pointer', padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: isActive ? '#a78bfa' : 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none', whiteSpace: 'nowrap' }}
+      style={{ ...style, cursor: 'pointer', padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: isActive ? 'var(--accent)' : 'var(--text-4)', borderBottom: '1px solid var(--line)', textAlign: 'left', WebkitUserSelect: 'none', userSelect: 'none', whiteSpace: 'nowrap' }}
     >
       {label} {isActive ? (sortDir === 'asc' ? '↑' : '↓') : ''}
     </th>
@@ -1665,8 +1648,8 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
     onCtxFile(file, touch.clientX, touch.clientY)
   })
 
-  const thStyle = { padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', textAlign: 'left', userSelect: 'none' }
-  const tdStyle = { padding: '0 10px', fontSize: 13, color: 'rgba(255,255,255,0.65)', verticalAlign: 'middle' }
+  const thStyle = { padding: '8px 10px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-4)', borderBottom: '1px solid var(--line)', textAlign: 'left', WebkitUserSelect: 'none', userSelect: 'none' }
+  const tdStyle = { padding: '0 10px', fontSize: 13, color: 'var(--text-2)', verticalAlign: 'middle' }
 
   function mimeLabel(mime, name) {
     if (!mime && !name) return '—'
@@ -1735,13 +1718,13 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
             >
               <td style={{ ...tdStyle, paddingLeft: 8, width: 40 }}>
                 <div
-                  style={{ width: 18, height: 18, borderRadius: 3, border: `1.5px solid ${isSel ? '#7c3aed' : 'rgba(255,255,255,0.25)'}`, background: isSel ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  className={`drive-checkbox ${isSel ? 'checked' : ''}`}
                   onClick={e => { e.stopPropagation(); onToggleSelect(selKey) }}
                 >
-                  {isSel && <Check size={10} color="#fff" weight="bold" />}
+                  {isSel && <Check size={10} color="#000" weight="bold" />}
                 </div>
               </td>
-              <td style={{ ...tdStyle, fontWeight: 600, color: '#fff' }}>
+              <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <FolderSimple size={20} weight="duotone" color="#fbbf24" style={{ flexShrink: 0 }} />
                   {isRenaming ? <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} /> : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>}
@@ -1782,13 +1765,13 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
             >
               <td style={{ ...tdStyle, paddingLeft: 8, width: 40 }}>
                 <div
-                  style={{ width: 18, height: 18, borderRadius: 3, border: `1.5px solid ${isSel ? '#7c3aed' : 'rgba(255,255,255,0.25)'}`, background: isSel ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  className={`drive-checkbox ${isSel ? 'checked' : ''}`}
                   onClick={e => { e.stopPropagation(); onToggleSelect(selKey) }}
                 >
-                  {isSel && <Check size={10} color="#fff" weight="bold" />}
+                  {isSel && <Check size={10} color="#000" weight="bold" />}
                 </div>
               </td>
-              <td style={{ ...tdStyle, fontWeight: 600, color: '#fff' }}>
+              <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <ListThumb file={file} />
                   {isRenaming ? <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} /> : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</span>}
@@ -1798,7 +1781,7 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
               <td className="drive-list-col-size" style={{ ...tdStyle, fontSize: 12 }}>{fmtBytes(file.file_size)}</td>
               <td className="drive-list-col-modified" style={{ ...tdStyle, fontSize: 12 }}>{fmtDate(file.updated_at || file.created_at)}</td>
               {currentView === 'recent' && (
-                <td style={{ ...tdStyle, fontSize: 11, color: 'rgba(255,255,255,0.4)' }} title={locationPath(file.folder_id)}>
+                <td style={{ ...tdStyle, fontSize: 11, color: 'var(--text-4)' }} title={locationPath(file.folder_id)}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{locationPath(file.folder_id)}</span>
                 </td>
               )}

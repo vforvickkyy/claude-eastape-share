@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
-  SquaresFour, HardDrive, Clock, Trash, CaretDown, SignOut, List, X,
-  UserCircle, CurrencyInr, FolderOpen, CaretRight, Gear, Question,
-  Scales, CloudArrowUp, Plus, Briefcase, Sidebar, MagnifyingGlass,
+  SquaresFour, HardDrive, Trash, CaretDown, SignOut, List, X,
+  UserCircle, CurrencyInr, Gear, Question,
+  Scales, Plus, Briefcase, Sidebar, MagnifyingGlass, Eye, Users,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { projectsApi } from "./lib/api";
@@ -12,13 +12,12 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const { user, logout, loading, profile } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
-  const [dropOpen,      setDropOpen]      = useState(false);
-  const [sideOpen,      setSideOpen]      = useState(false);
-  const [collapsed,     setCollapsed]     = useState(false);
-  const [projectsOpen,  setProjectsOpen]  = useState(true);
-  const [settOpen,      setSettOpen]      = useState(false);
-  const [recentProjects, setRecentProjects] = useState([]);
-  const [username,       setUsername]      = useState(null);
+  const [dropOpen,        setDropOpen]        = useState(false);
+  const [sideOpen,        setSideOpen]        = useState(false);
+  const [collapsed,       setCollapsed]       = useState(() => localStorage.getItem('db-sidebar-collapsed') === '1');
+  const [settOpen,        setSettOpen]        = useState(false);
+  const [projectCount,    setProjectCount]    = useState(null);
+  const [username,        setUsername]        = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => sessionStorage.getItem("onboarding-banner-dismissed") === "1"
   );
@@ -26,10 +25,11 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const settRef = useRef(null);
 
   useEffect(() => { setUsername(profile?.username || null); }, [profile?.username]);
+  useEffect(() => { localStorage.setItem('db-sidebar-collapsed', collapsed ? '1' : '0'); }, [collapsed]);
 
   useEffect(() => {
     if (!user) return;
-    projectsApi.list({ limit: 5 }).then(d => setRecentProjects(d.projects || [])).catch(() => {});
+    projectsApi.list().then(d => setProjectCount((d.projects || []).length)).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -52,16 +52,21 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const avatarUrl   = user?.user_metadata?.avatar_url;
   const initial     = displayName.charAt(0).toUpperCase();
 
-  const isProjectRoute = location.pathname.startsWith("/projects");
-
-  // Build breadcrumb array for topbar
   const breadcrumbs = crumbs || (title ? [title] : []);
+
+  const usedMb  = profile?.storage_used_mb  || 0;
+  const limitMb = profile?.storage_limit_mb || 512000;
+  const usedGb  = (usedMb  / 1024).toFixed(0) || "0";
+  const limitGb = (limitMb / 1024).toFixed(0) || "500";
+  const pct     = limitMb > 0 ? Math.min(100, Math.round((usedMb / limitMb) * 100)) : 0;
+  const planLabel = profile?.plan ? profile.plan.toUpperCase() : "FREE";
 
   return (
     <div className="db-wrap">
       {/* ── Sidebar ── */}
       <aside className={`db-sidebar ${sideOpen ? "open" : ""} ${collapsed ? "collapsed" : ""}`}>
         <div className="db-sidebar-inner">
+
           {/* Brand */}
           <div className="db-logo">
             <div className="db-brand-mark">E</div>
@@ -75,127 +80,69 @@ export default function DashboardLayout({ children, title, crumbs }) {
           </div>
 
           {/* New button */}
-          <button
-            className="db-new-btn"
-            onClick={() => { setSideOpen(false); navigate("/drive"); }}
-          >
+          <button className="db-new-btn" onClick={() => { setSideOpen(false); navigate("/drive"); }}>
             <Plus size={13} weight="bold" />
             <span>New</span>
+            <kbd className="db-new-kbd">⌘N</kbd>
           </button>
 
           {/* Primary nav */}
           <nav className="db-nav">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
-              onClick={() => setSideOpen(false)}
-            >
+            <NavLink to="/" end className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
               <SquaresFour size={15} weight="duotone" style={{ flexShrink: 0 }} />
               <span>Home</span>
             </NavLink>
 
-            <NavLink
-              to="/drive"
-              className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
-              onClick={() => setSideOpen(false)}
-            >
+            <NavLink to="/drive" className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
               <HardDrive size={15} weight="duotone" style={{ flexShrink: 0 }} />
               <span>Drive</span>
             </NavLink>
 
-            <NavLink
-              to="/recent"
-              className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
-              onClick={() => setSideOpen(false)}
-            >
-              <Clock size={15} weight="duotone" style={{ flexShrink: 0 }} />
-              <span>Recent</span>
+            <NavLink to="/projects" className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
+              <Briefcase size={15} weight="duotone" style={{ flexShrink: 0 }} />
+              <span>Projects</span>
+              {projectCount !== null && projectCount > 0 && (
+                <span className="db-nav-badge">{projectCount}</span>
+              )}
             </NavLink>
+
+            <button className="db-nav-item" onClick={() => {}}>
+              <MagnifyingGlass size={15} weight="duotone" style={{ flexShrink: 0 }} />
+              <span>Search</span>
+            </button>
           </nav>
 
           {/* Workspace section */}
           <div className="db-nav-section-label">Workspace</div>
           <nav className="db-nav">
-            <div className="db-nav-section">
-              <div className="db-nav-section-header-row">
-                <button
-                  className="db-nav-section-header db-nav-item"
-                  style={{ flex: 1, textAlign: "left" }}
-                  onClick={() => setProjectsOpen(o => !o)}
-                >
-                  <Briefcase size={15} weight="duotone" style={{ flexShrink: 0 }} />
-                  <span>Projects</span>
-                  <CaretRight
-                    size={11}
-                    weight="bold"
-                    className={`db-nav-caret ${projectsOpen ? "open" : ""}`}
-                    style={{ marginLeft: "auto", transition: "transform 0.18s", transform: projectsOpen ? "rotate(90deg)" : "rotate(0)" }}
-                  />
-                </button>
-                <button
-                  className="db-nav-section-action"
-                  title="New Project"
-                  onClick={() => { setSideOpen(false); navigate("/projects?new=1"); }}
-                  style={{ padding: "4px 5px", background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", borderRadius: "var(--radius-sm)", flexShrink: 0 }}
-                >
-                  <Plus size={11} weight="bold" />
-                </button>
-              </div>
-              {projectsOpen && (
-                <div className="db-nav-sub">
-                  <NavLink
-                    to="/projects"
-                    end
-                    className={({ isActive }) => `db-nav-item db-nav-item-sub ${location.pathname === "/projects" ? "active" : ""}`}
-                    onClick={() => setSideOpen(false)}
-                    style={{ paddingLeft: 24 }}
-                  >
-                    <FolderOpen size={13} weight="duotone" style={{ flexShrink: 0 }} />
-                    <span>All Projects</span>
-                  </NavLink>
-                  {recentProjects.map(p => (
-                    <NavLink
-                      key={p.id}
-                      to={`/projects/${p.id}`}
-                      className={({ isActive }) => `db-nav-item db-nav-item-sub db-nav-project ${isActive ? "active" : ""}`}
-                      onClick={() => setSideOpen(false)}
-                      title={p.name}
-                      style={{ paddingLeft: 24 }}
-                    >
-                      <span
-                        className="db-nav-project-dot"
-                        style={{ width: 6, height: 6, borderRadius: "50%", background: p.color || "var(--accent)", flexShrink: 0 }}
-                      />
-                      <span className="db-nav-project-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
+            <NavLink to="/review" className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
+              <Eye size={15} weight="duotone" style={{ flexShrink: 0 }} />
+              <span>Review</span>
+            </NavLink>
 
-            <NavLink
-              to="/trash"
-              className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`}
-              onClick={() => setSideOpen(false)}
-            >
+            <NavLink to="/shared" className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
+              <Users size={15} weight="duotone" style={{ flexShrink: 0 }} />
+              <span>Shared</span>
+            </NavLink>
+
+            <NavLink to="/trash" className={({ isActive }) => `db-nav-item ${isActive ? "active" : ""}`} onClick={() => setSideOpen(false)}>
               <Trash size={15} weight="duotone" style={{ flexShrink: 0 }} />
               <span>Trash</span>
             </NavLink>
           </nav>
 
+          <div className="db-nav-spacer" />
+
           {/* Storage bar */}
           <div className="db-storage">
-            <div className="db-storage-row">
-              <span>Storage</span>
-              <strong>{profile?.storage_used_mb ? `${(profile.storage_used_mb / 1024).toFixed(1)} GB` : "—"}</strong>
+            <div className="db-storage-header">
+              <span className="db-storage-label">Storage</span>
+              <span className="db-storage-nums">{usedGb} / {limitGb} GB</span>
             </div>
             <div className="db-storage-track">
-              <div className="db-storage-fill" style={{ width: profile?.storage_used_mb ? `${Math.min((profile.storage_used_mb / (profile.storage_limit_mb || 10240)) * 100, 100).toFixed(0)}%` : "0%" }} />
+              <div className="db-storage-fill" style={{ width: `${pct}%` }} />
             </div>
-            <div className="db-storage-foot">
-              {profile?.plan ? `${profile.plan.toUpperCase()} PLAN` : "FREE PLAN"}
-            </div>
+            <div className="db-storage-foot">{pct}% USED · {planLabel} PLAN</div>
           </div>
 
           {/* Footer user row */}
@@ -203,31 +150,25 @@ export default function DashboardLayout({ children, title, crumbs }) {
             {settOpen && (
               <div className="db-settings-menu">
                 <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/plans"); }}>
-                  <CurrencyInr size={13} weight="duotone" />
-                  Manage Plan
+                  <CurrencyInr size={13} weight="duotone" /> Manage Plan
                 </button>
                 <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/profile"); }}>
-                  <UserCircle size={13} weight="duotone" />
-                  Profile Settings
+                  <UserCircle size={13} weight="duotone" /> Profile Settings
                 </button>
                 <div className="db-settings-divider" />
                 <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/privacy"); }}>
-                  <Scales size={13} weight="duotone" />
-                  Privacy Policy
+                  <Scales size={13} weight="duotone" /> Privacy Policy
                 </button>
                 <button className="db-settings-item" onClick={() => { setSettOpen(false); setSideOpen(false); navigate("/terms"); }}>
-                  <Scales size={13} weight="duotone" />
-                  Terms of Service
+                  <Scales size={13} weight="duotone" /> Terms of Service
                 </button>
                 <div className="db-settings-divider" />
                 <button className="db-settings-item" onClick={() => { setSettOpen(false); window.open("mailto:support@eastape.com", "_blank"); }}>
-                  <Question size={13} weight="duotone" />
-                  Help
+                  <Question size={13} weight="duotone" /> Help
                 </button>
                 <div className="db-settings-divider" />
                 <button className="db-settings-item db-settings-logout" onClick={handleLogout}>
-                  <SignOut size={13} weight="duotone" />
-                  Log out
+                  <SignOut size={13} weight="duotone" /> Log out
                 </button>
               </div>
             )}
@@ -259,7 +200,6 @@ export default function DashboardLayout({ children, title, crumbs }) {
             <List size={18} />
           </button>
 
-          {/* Breadcrumbs */}
           <div className="db-topbar-breadcrumbs">
             {breadcrumbs.map((c, i) => (
               <React.Fragment key={i}>
@@ -271,25 +211,17 @@ export default function DashboardLayout({ children, title, crumbs }) {
 
           <div className="db-topbar-spacer" />
 
-          {/* Search bar */}
           <button className="db-topbar-search" onClick={() => {}} type="button">
             <MagnifyingGlass size={13} style={{ color: "var(--text-4)", flexShrink: 0 }} />
             <span>Search files, projects…</span>
             <kbd>⌘K</kbd>
           </button>
 
-          {/* User menu */}
           {!loading && user && (
             <div className="user-menu" ref={menuRef} style={{ marginLeft: 0 }}>
-              <button
-                className="user-menu-trigger"
-                onClick={() => setDropOpen(o => !o)}
-                type="button"
-              >
+              <button className="user-menu-trigger" onClick={() => setDropOpen(o => !o)} type="button">
                 <div className="user-avatar">
-                  {avatarUrl
-                    ? <img src={avatarUrl} alt={displayName} />
-                    : <span>{initial}</span>}
+                  {avatarUrl ? <img src={avatarUrl} alt={displayName} /> : <span>{initial}</span>}
                 </div>
                 <span className="user-name">{displayName}</span>
                 <CaretDown size={11} weight="bold" className={`caret ${dropOpen ? "open" : ""}`} />
@@ -301,16 +233,13 @@ export default function DashboardLayout({ children, title, crumbs }) {
                     <span className="dropdown-email">{user.email}</span>
                   </div>
                   <button className="dropdown-item" onClick={() => { setDropOpen(false); navigate("/plans"); }} type="button">
-                    <CurrencyInr size={13} weight="bold" />
-                    Manage Plan
+                    <CurrencyInr size={13} weight="bold" /> Manage Plan
                   </button>
                   <button className="dropdown-item" onClick={() => { setDropOpen(false); navigate("/profile"); }} type="button">
-                    <UserCircle size={13} weight="bold" />
-                    Profile Settings
+                    <UserCircle size={13} weight="bold" /> Profile Settings
                   </button>
                   <button className="dropdown-item logout-item" onClick={handleLogout} type="button">
-                    <SignOut size={13} weight="bold" />
-                    Log out
+                    <SignOut size={13} weight="bold" /> Log out
                   </button>
                 </div>
               )}
