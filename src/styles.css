@@ -1570,13 +1570,12 @@ body.scrollable,
   margin-left: auto; flex-shrink: 0;
   width: 24px; height: 24px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-3);
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.04);
+  color: var(--text-2);
+  border: 1.5px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.07);
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.db-sidebar.collapsed .db-collapse-btn { margin-left: 0; }
 .db-collapse-btn:hover {
   color: var(--text); background: var(--accent-tint);
   border-color: var(--accent-soft);
@@ -1598,8 +1597,19 @@ body.scrollable,
 .db-sidebar.collapsed .db-nav-section-header {
   justify-content: center; padding: 9px 0;
 }
-.db-sidebar.collapsed .db-logo { justify-content: space-between; padding: 0 10px; }
+/* Collapsed: stack E mark and toggle arrow vertically, centered */
+.db-sidebar.collapsed .db-logo {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
 .db-sidebar.collapsed .db-brand-name { display: none; }
+.db-sidebar.collapsed .db-collapse-btn {
+  width: 100%; height: 28px;
+  margin-left: 0;
+  border-radius: 7px;
+}
 
 .db-new-btn {
   display: flex;
