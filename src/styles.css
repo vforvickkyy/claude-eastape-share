@@ -1552,20 +1552,25 @@ body.scrollable,
   padding: 0 2px;
   min-width: 0;
 }
-.db-brand-mark {
-  width: 28px; height: 28px;
-  border-radius: 7px;
-  background: var(--accent);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; color: #1a1408;
+.db-brand-favicon {
+  height: 28px; width: auto;
   flex-shrink: 0;
+  object-fit: contain;
 }
-.db-brand-name {
-  font-size: 14px; font-weight: 600; color: var(--text);
-  letter-spacing: -0.01em; white-space: nowrap;
-  opacity: 1; transition: opacity 0.15s;
+.db-brand-logo {
+  height: 22px; width: auto;
+  max-width: 140px;
+  opacity: 1;
+  overflow: hidden;
+  flex-shrink: 0;
+  object-fit: contain;
+  transition: opacity 0.22s var(--ease), max-width 0.22s var(--ease), margin-left 0.22s var(--ease);
 }
-.db-sidebar.collapsed .db-brand-name { opacity: 0; width: 0; overflow: hidden; }
+.db-sidebar.collapsed .db-brand-logo {
+  opacity: 0;
+  max-width: 0;
+  margin-left: -9px; /* cancel the gap so favicon stays centered */
+}
 .db-collapse-btn {
   margin-left: auto; flex-shrink: 0;
   width: 24px; height: 24px; border-radius: 6px;
@@ -1597,14 +1602,13 @@ body.scrollable,
 .db-sidebar.collapsed .db-nav-section-header {
   justify-content: center; padding: 9px 0;
 }
-/* Collapsed: stack E mark and toggle arrow vertically, centered */
+/* Collapsed: favicon centered, full logo hidden, toggle below */
 .db-sidebar.collapsed .db-logo {
   flex-direction: column;
   align-items: center;
   gap: 6px;
   padding: 0;
 }
-.db-sidebar.collapsed .db-brand-name { display: none; }
 .db-sidebar.collapsed .db-collapse-btn {
   width: 100%; height: 28px;
   margin-left: 0;
