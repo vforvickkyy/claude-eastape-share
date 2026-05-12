@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   DownloadSimple, Lock, Warning, MusicNote, File,
   FileVideo, PaperPlaneTilt, ArrowBendDownRight,
-  CaretLeft, CaretRight, X, Clock,
+  CaretLeft, CaretRight, X, Clock, Trash,
 } from "@phosphor-icons/react";
 import { formatSize } from "./lib/userApi";
 import { mediaApi } from "./lib/api.js";
@@ -45,7 +45,8 @@ export default function MediaSharePage() {
   const [pwError,     setPwError]    = useState("");
   const [comments,    setComments]   = useState([]);
   const [newComment,  setNewComment] = useState("");
-  const [guestName,   setGuestName]  = useState("");
+  const [guestName,   setGuestName]  = useState(() => localStorage.getItem('guestCommentName') || "");
+  const [ownIds,      setOwnIds]     = useState(() => { try { return JSON.parse(localStorage.getItem('guestCommentIds') || '[]') } catch { return [] } });
   const [submitting,  setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -121,13 +122,34 @@ export default function MediaSharePage() {
       })
       const d = await res.json()
       if (d.comment) {
-        setComments(cs => [...cs, { ...d.comment, guest_name: guestName.trim() || 'Anonymous' }])
+        const name = guestName.trim() || 'Anonymous'
+        const newC = { ...d.comment, guest_name: name }
+        setComments(cs => [...cs, newC])
         setNewComment("")
+        // Persist name + own IDs to localStorage
+        localStorage.setItem('guestCommentName', name)
+        const nextIds = [...ownIds, d.comment.id]
+        setOwnIds(nextIds)
+        localStorage.setItem('guestCommentIds', JSON.stringify(nextIds))
       } else {
         setSubmitError(d.error || "Failed to post comment.")
       }
     } catch { setSubmitError("Failed to post comment.") }
     setSubmitting(false)
+  }
+
+  async function deleteGuestComment(commentId) {
+    setComments(cs => cs.filter(c => c.id !== commentId && c.parent_comment_id !== commentId))
+    const nextIds = ownIds.filter(id => id !== commentId)
+    setOwnIds(nextIds)
+    localStorage.setItem('guestCommentIds', JSON.stringify(nextIds))
+    // Best-effort delete via edge function
+    try {
+      await fetch(`${BASE}/media-comments?id=${commentId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY },
+      })
+    } catch {}
   }
 
   /* ── Gate states ── */
@@ -326,6 +348,8 @@ export default function MediaSharePage() {
                     replies={repliesOf(c.id)}
                     commentName={commentName}
                     onSeek={seekPlayer}
+                    ownIds={ownIds}
+                    onDelete={deleteGuestComment}
                   />
                 ))
               )}
@@ -344,6 +368,7 @@ export default function MediaSharePage() {
                 placeholder="Your name (optional)"
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
+                onBlur={e => { if (e.target.value.trim()) localStorage.setItem('guestCommentName', e.target.value.trim()) }}
                 disabled={submitting}
               />
               <div className="sp-compose-row">
@@ -367,17 +392,19 @@ export default function MediaSharePage() {
 }
 
 /* ── Comment components ── */
-function SpCommentThread({ comment, replies, commentName, onSeek }) {
+function SpCommentThread({ comment, replies, commentName, onSeek, ownIds, onDelete }) {
   const name = commentName(comment)
   return (
     <div className="sp-comment-thread">
-      <SpCommentItem comment={comment} name={name} color={avatarColor(name)} onSeek={onSeek} />
+      <SpCommentItem comment={comment} name={name} color={avatarColor(name)} onSeek={onSeek}
+        canDelete={ownIds?.includes(comment.id)} onDelete={onDelete} />
       {replies.map(r => {
         const rName = commentName(r)
         return (
           <div key={r.id} className="sp-comment-reply-row">
             <ArrowBendDownRight size={11} className="sp-reply-icon" />
-            <SpCommentItem comment={r} name={rName} color={avatarColor(rName)} onSeek={onSeek} />
+            <SpCommentItem comment={r} name={rName} color={avatarColor(rName)} onSeek={onSeek}
+              canDelete={ownIds?.includes(r.id)} onDelete={onDelete} />
           </div>
         )
       })}
@@ -385,23 +412,33 @@ function SpCommentThread({ comment, replies, commentName, onSeek }) {
   )
 }
 
-function SpCommentItem({ comment, name, color, onSeek }) {
-  const clickable = comment.timestamp_seconds != null
+function SpCommentItem({ comment, name, color, onSeek, canDelete, onDelete }) {
+  const [hovering, setHovering] = useState(false)
   return (
     <div
       className="sp-comment-item"
-      onClick={() => clickable && onSeek(comment.timestamp_seconds)}
-      style={{ cursor: clickable ? 'pointer' : 'default' }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
     >
       <div className="sp-comment-meta">
         <div className="sp-comment-avatar" style={{ background: color }}>{name.charAt(0).toUpperCase()}</div>
         <span className="sp-comment-author">{name}</span>
         {comment.timestamp_seconds != null && (
-          <button className="sp-comment-ts" onClick={e => { e.stopPropagation(); onSeek(comment.timestamp_seconds) }}>
+          <button className="sp-comment-ts" onClick={() => onSeek(comment.timestamp_seconds)}>
             {formatDuration(comment.timestamp_seconds)}
           </button>
         )}
         <span className="sp-comment-age">{timeAgo(comment.created_at)}</span>
+        {canDelete && hovering && (
+          <button
+            className="comment-action comment-delete"
+            style={{ marginLeft: 'auto', color: 'var(--text-4)', display: 'flex', alignItems: 'center' }}
+            onClick={() => onDelete?.(comment.id)}
+            title="Delete"
+          >
+            <Trash size={11} />
+          </button>
+        )}
       </div>
       <p className="sp-comment-body">{comment.body}</p>
     </div>

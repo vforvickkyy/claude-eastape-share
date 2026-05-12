@@ -191,6 +191,39 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     return () => document.removeEventListener('mousedown', onDown)
   }, [showSpeed, showQ])
 
+  // ── Keyboard controls ─────────────────────────────────────────────
+  useEffect(() => {
+    if (status !== 'ready') return
+    function onKey(e) {
+      const tag = e.target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
+      if (!containerRef.current?.closest('body')) return
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault()
+          togglePlay()
+          break
+        case 'm':
+        case 'M':
+          e.preventDefault()
+          toggleMute()
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          frameBack()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          frameForward()
+          break
+        default: break
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [status, muted]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Control handlers ──────────────────────────────────────────────
   function togglePlay() {
     if (!playerRef.current) return
@@ -312,11 +345,12 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
       ref={containerRef}
       style={{ position: 'absolute', inset: 0, background: '#000', overflow: 'hidden' }}
     >
-      {/* Video.js fills entire container */}
+      {/* Video.js fills entire container — click to play/pause */}
       <div
         className="cf-vjs-wrap"
         data-vjs-player
-        style={{ position: 'absolute', inset: 0 }}
+        style={{ position: 'absolute', inset: 0, cursor: 'pointer' }}
+        onClick={togglePlay}
       >
         <video
           ref={videoRef}
