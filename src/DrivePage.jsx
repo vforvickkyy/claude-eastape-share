@@ -22,7 +22,7 @@ import ContextMenu from './components/drive/ContextMenu'
 import FilePreview from './components/drive/FilePreview'
 import MoveFolderModal from './components/drive/MoveFolderModal'
 import ShareModal from './components/drive/ShareModal'
-import FileTypeIcon, { getFileCategory } from './components/drive/FileTypeIcon'
+import FileTypeIcon, { getFileCategory, DriveThumbnail } from './components/drive/FileTypeIcon'
 import DuplicateModal from './components/drive/DuplicateModal'
 import { driveFilesApi, driveFoldersApi, shareLinksApi } from './lib/api'
 import { showToast } from './components/ui/Toast'
@@ -808,24 +808,6 @@ export default function DrivePage() {
           <div className="drive-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
         )}
         <aside className={`drive-inner-sidebar${sidebarOpen ? ' open' : ''}`}>
-          {/* Storage */}
-          {storage && (
-            <div style={{ padding: '12px 12px 10px', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Storage</span>
-                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'var(--mono)' }}>{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
-              </div>
-              <div style={{ height: 3, borderRadius: 2, background: 'var(--line)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${usedPct}%`, borderRadius: 2, background: barColor, transition: 'width 0.6s ease' }} />
-              </div>
-              {usedPct >= 80 && (
-                <p style={{ fontSize: 10.5, color: usedPct >= 90 ? '#f87171' : 'var(--accent)', marginTop: 4 }}>
-                  {fmtBytes((storage.limit_bytes - storage.used_bytes))} remaining
-                </p>
-              )}
-            </div>
-          )}
-
           {/* Nav items */}
           <nav style={{ padding: '8px 8px', flex: 1 }}>
             {/* My Drive */}
@@ -891,23 +873,41 @@ export default function DrivePage() {
             </div>
           </nav>
 
+          {/* Storage — pinned to bottom */}
+          {storage && (
+            <div className="subnav-storage">
+              <div className="ss-head">
+                <span>Storage</span>
+                <span className="mono">{fmtBytes(storage.used_bytes)} / {storage.limit_gb} GB</span>
+              </div>
+              <div className="ss-bar">
+                <div className="ss-fill" style={{ width: `${usedPct}%`, background: barColor }} />
+              </div>
+              {usedPct >= 80 && (
+                <p style={{ fontSize: 10.5, color: usedPct >= 90 ? '#f87171' : 'var(--accent)', marginTop: 4 }}>
+                  {fmtBytes(storage.limit_bytes - storage.used_bytes)} remaining
+                </p>
+              )}
+            </div>
+          )}
+
         </aside>
 
         {/* ══════════ MAIN CONTENT ══════════ */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* ── Toolbar ── */}
-          <div className="drive-toolbar">
+          <div className="drive-toolbar drive-topbar">
             {/* Mobile sidebar toggle */}
             <button className="drive-sidebar-toggle" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
               <List size={16} />
             </button>
             {/* Breadcrumb / title */}
-            <div className="drive-breadcrumb" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <div className="crumbs" style={{ flex: 1, minWidth: 0 }}>
               {currentView === 'myDrive' ? (
                 breadcrumb.map((crumb, i) => (
                   <React.Fragment key={crumb.id || 'root'}>
-                    {i > 0 && <CaretRight size={11} style={{ color: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />}
+                    {i > 0 && <span className="sep">/</span>}
                     {i < breadcrumb.length - 1 ? (
                       <button
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-3)', padding: '2px 4px', borderRadius: 4, whiteSpace: 'nowrap', transition: 'color 0.15s' }}
@@ -916,22 +916,21 @@ export default function DrivePage() {
                         onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
                       >{crumb.name}</button>
                     ) : (
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', padding: '2px 4px' }}>{crumb.name}</span>
+                      <span className="current">{crumb.name}</span>
                     )}
                   </React.Fragment>
                 ))
               ) : (
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>
+                <span className="current">
                   {currentView === 'recent' ? 'Recent' : 'Trash'}
                 </span>
               )}
             </div>
 
             {/* Search */}
-            <div className="drive-search-wrap">
-              <MagnifyingGlass size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+            <div className="inline-search">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }}><circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/></svg>
               <input
-                className="drive-search-input"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search…"
@@ -945,30 +944,29 @@ export default function DrivePage() {
             </div>
 
             {/* Sort dropdown */}
-            <div ref={sortMenuRef} style={{ position: 'relative' }}>
+            <div ref={sortMenuRef} className="dd-wrap">
               <button
                 className="btn-ghost"
-                style={{ fontSize: 12, gap: 4, height: 34 }}
+                style={{ fontSize: 12, gap: 4, height: 32 }}
                 onClick={() => setShowSortMenu(m => !m)}
               >
                 <SortAscending size={14} /> {sortLabel} <CaretDown size={10} />
               </button>
               {showSortMenu && (
-                <div className="drive-dropdown">
+                <div className="dd-menu">
                   {SORT_OPTS.map((opt, i) => opt === null ? (
-                    <div key={i} className="drive-dropdown-divider" />
+                    <div key={i} className="dd-sep" />
                   ) : (
                     <button
                       key={opt.value}
-                      className={`drive-dropdown-item ${`${sortBy}-${sortDir}` === opt.value ? 'active' : ''}`}
+                      className={`dd-item ${`${sortBy}-${sortDir}` === opt.value ? 'active' : ''}`}
                       onClick={() => {
                         const [sb, sd] = opt.value.split('-')
                         setSortBy(sb); setSortDir(sd); setShowSortMenu(false)
                       }}
-                      style={{ justifyContent: 'space-between' }}
                     >
                       {opt.label}
-                      {`${sortBy}-${sortDir}` === opt.value && <Check size={13} style={{ color: 'var(--accent)' }} />}
+                      {`${sortBy}-${sortDir}` === opt.value && <Check size={13} style={{ color: 'var(--accent)', marginLeft: 'auto' }} />}
                     </button>
                   ))}
                 </div>
@@ -976,28 +974,28 @@ export default function DrivePage() {
             </div>
 
             {/* Grid/List toggle */}
-            <div className="view-toggle">
-              <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Grid"><SquaresFour size={16} /></button>
-              <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List"><Rows size={16} /></button>
+            <div className="seg">
+              <button className={viewMode === 'grid' ? 'on' : ''} onClick={() => setViewMode('grid')} title="Grid"><SquaresFour size={15} /></button>
+              <button className={viewMode === 'list' ? 'on' : ''} onClick={() => setViewMode('list')} title="List"><Rows size={15} /></button>
             </div>
 
             {/* New / Upload button — desktop only; mobile uses FAB */}
             {currentView === 'myDrive' && (
-              <div ref={newMenuRef} data-new-menu="1" style={{ position: 'relative' }}>
-                <button className="btn-primary" style={{ height: 34, gap: 5 }} onClick={() => setShowNewMenu(m => !m)}>
+              <div ref={newMenuRef} data-new-menu="1" className="dd-wrap">
+                <button className="btn-primary" style={{ height: 32, gap: 5 }} onClick={() => setShowNewMenu(m => !m)}>
                   <Plus size={14} /> New <CaretDown size={10} />
                 </button>
                 {showNewMenu && (
-                  <div className="drive-dropdown">
+                  <div className="dd-menu right">
                     {[
                       { icon: <FolderSimplePlus size={15} />, label: 'New Folder',    action: () => { setShowNewFolderIn(currentFolderId); setShowNewMenu(false) } },
                       null,
                       { icon: <UploadSimple size={15} />,    label: 'Upload Files',  action: () => { fileInputRef.current?.click(); setShowNewMenu(false) } },
                       { icon: <FolderSimple size={15} />,    label: 'Upload Folder', action: () => { folderInputRef.current?.click(); setShowNewMenu(false) } },
                     ].map((item, i) => item === null ? (
-                      <div key={i} className="drive-dropdown-divider" />
+                      <div key={i} className="dd-sep" />
                     ) : (
-                      <button key={i} onClick={item.action} className="drive-dropdown-item">
+                      <button key={i} onClick={item.action} className="dd-item">
                         {item.icon} {item.label}
                       </button>
                     ))}
@@ -1008,7 +1006,7 @@ export default function DrivePage() {
 
             {/* Trash: empty button */}
             {currentView === 'trash' && files.length > 0 && (
-              <button className="btn-ghost" style={{ fontSize: 12, color: '#f87171', borderColor: 'rgba(248,113,113,0.3)', height: 34 }} onClick={emptyTrash}>
+              <button className="btn-ghost" style={{ fontSize: 12, color: '#f87171', borderColor: 'rgba(248,113,113,0.3)', height: 32 }} onClick={emptyTrash}>
                 <Trash size={13} /> Empty Trash
               </button>
             )}
@@ -1017,7 +1015,7 @@ export default function DrivePage() {
           {/* ── Mobile FAB (New / Upload) ── */}
           {currentView === 'myDrive' && (
             <div className="drive-fab-wrap">
-              <div ref={newMenuRef} style={{ position: 'relative' }}>
+              <div ref={newMenuRef} className="dd-wrap" style={{ position: 'relative' }}>
                 <button
                   className="drive-fab"
                   onClick={() => setShowNewMenu(m => !m)}
@@ -1026,16 +1024,16 @@ export default function DrivePage() {
                   <Plus size={22} weight="bold" />
                 </button>
                 {showNewMenu && (
-                  <div className="drive-dropdown" style={{ bottom: '110%', top: 'auto', minWidth: 200 }}>
+                  <div className="dd-menu right" style={{ bottom: '110%', top: 'auto', minWidth: 200 }}>
                     {[
                       { icon: <FolderSimplePlus size={16} />, label: 'New Folder',    action: () => { setShowNewFolderIn(currentFolderId); setShowNewMenu(false) } },
                       null,
                       { icon: <UploadSimple size={16} />,    label: 'Upload Files',  action: () => { fileInputRef.current?.click(); setShowNewMenu(false) } },
                       { icon: <FolderSimple size={16} />,    label: 'Upload Folder', action: () => { folderInputRef.current?.click(); setShowNewMenu(false) } },
                     ].map((item, i) => item === null ? (
-                      <div key={i} className="drive-dropdown-divider" />
+                      <div key={i} className="dd-sep" />
                     ) : (
-                      <button key={i} onClick={item.action} className="drive-dropdown-item" style={{ padding: '10px 14px', fontSize: 14 }}>
+                      <button key={i} onClick={item.action} className="dd-item" style={{ padding: '10px 14px', fontSize: 14 }}>
                         {item.icon} {item.label}
                       </button>
                     ))}
@@ -1047,20 +1045,22 @@ export default function DrivePage() {
 
           {/* ── Filter bar ── */}
           {currentView === 'myDrive' && !search && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderBottom: '1px solid var(--line)', flexShrink: 0, overflowX: 'auto' }}>
+            <div className="drive-chips">
               {FILTER_OPTS.map(opt => {
                 const count = opt.value === 'all' ? files.length : files.filter(f => getFileCategory(f.mime_type, f.name) === opt.value).length
                 if (opt.value !== 'all' && count === 0) return null
                 return (
                   <button
                     key={opt.value}
-                    className={`drive-filter-chip ${filter === opt.value ? 'active' : ''}`}
+                    className={`chip${filter === opt.value ? ' on' : ''}`}
                     onClick={() => setFilter(f => f === opt.value ? 'all' : opt.value)}
                   >
-                    {opt.label}{count > 0 && opt.value !== 'all' ? ` ${count}` : ''}
+                    {opt.label}
+                    {count > 0 && opt.value !== 'all' && <span className="chip-count mono">{count}</span>}
                   </button>
                 )
               })}
+              <div className="chips-spacer" />
             </div>
           )}
 
@@ -1388,14 +1388,12 @@ function RenameInput({ inputRef, value, onChange, onSave, onCancel }) {
 // ── Thumbnail / Icon ─────────────────────────────────────────────────────────
 function FileThumbnail({ file, size = 140 }) {
   const [imgErr, setImgErr] = useState(false)
-  const mime = file.mime_type || ''
   if (file.thumbnailUrl && !imgErr) {
     return <img src={file.thumbnailUrl} alt={file.name} style={{ width: '100%', height: size, objectFit: 'cover', display: 'block' }} loading="lazy" onError={() => setImgErr(true)} />
   }
-  const bg = 'var(--bg-3)'
   return (
-    <div style={{ height: size, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={40} />
+    <div style={{ height: size, overflow: 'hidden', display: 'block' }}>
+      <DriveThumbnail mimeType={file.mime_type} fileName={file.name} />
     </div>
   )
 }
@@ -1412,30 +1410,28 @@ function ListThumb({ file }) {
 // ── Uploading placeholder card (grid view) ────────────────────────────────────
 function UploadingFileCard({ item }) {
   const isPending = item.status === 'pending'
-  const pct   = isPending ? 0 : item.progress
+  const pct   = isPending ? 0 : (item.progress ?? 0)
   const speed = !isPending ? fmtSpeed(item.speed) : null
-  const eta   = !isPending ? fmtEta(item.eta)   : null
+  const eta   = !isPending ? fmtEta(item.eta) : null
   return (
-    <div className="drive-file-card" style={{ cursor: 'default', pointerEvents: 'none' }}>
-      {/* Thumbnail area */}
-      <div style={{ position: 'relative', height: 150, background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '8px 8px 0 0' }}>
-        <FileTypeIcon fileName={item.name} size={40} style={{ opacity: 0.4 }} />
-        {/* Progress bar */}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'var(--line)' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'var(--accent-soft)' : 'var(--accent)', transition: 'width 0.3s ease', borderRadius: 2 }} />
+    <div className="drive-file-card v2 uploading" style={{ cursor: 'default', pointerEvents: 'none' }}>
+      <div className="upload-thumb">
+        <div className="upload-icon">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 10.5V2M5 5l3-3 3 3M2.5 11v1.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V11" />
+          </svg>
+          <div className="upload-pulse" />
         </div>
-        {/* Percentage badge */}
-        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 11, fontWeight: 700, color: isPending ? 'var(--text-4)' : 'var(--accent)', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
-          {isPending ? 'Queued' : `${pct}%`}
-        </div>
-        {/* Speed badge */}
-        {speed && (
-          <div style={{ position: 'absolute', bottom: 8, left: 8, fontSize: 10, color: 'var(--text-4)', background: 'rgba(0,0,0,0.55)', padding: '1px 5px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
-            {speed}
+        <div className="upload-overlay">
+          <div className="upload-stats">
+            <span className="speed">{speed || (isPending ? 'Queued' : 'Uploading…')}</span>
+            <span className="pct">{isPending ? '—' : `${Math.round(pct)}%`}</span>
           </div>
-        )}
+          <div className="upload-bar">
+            <div className="upload-bar-fill" style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+        </div>
       </div>
-      {/* Info */}
       <div style={{ padding: '8px 10px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{item.name}</span>
         <span style={{ fontSize: 11, color: isPending ? 'var(--text-4)' : 'var(--accent)', display: 'block', marginTop: 2 }}>
@@ -1449,35 +1445,31 @@ function UploadingFileCard({ item }) {
 // ── Uploading placeholder row (list view) ─────────────────────────────────────
 function UploadingFileRow({ item }) {
   const isPending = item.status === 'pending'
-  const pct   = isPending ? 0 : item.progress
+  const pct   = isPending ? 0 : (item.progress ?? 0)
   const speed = !isPending ? fmtSpeed(item.speed) : null
-  const eta   = !isPending ? fmtEta(item.eta)   : null
-  const tdStyle = { padding: '0 10px', fontSize: 13, verticalAlign: 'middle' }
+  const eta   = !isPending ? fmtEta(item.eta) : null
   return (
-    <tr style={{ height: 48, opacity: isPending ? 0.55 : 1 }}>
-      <td style={{ ...tdStyle, width: 40, paddingLeft: 8 }}>
-        <div style={{ width: 16, height: 16 }} />
-      </td>
-      <td style={{ ...tdStyle, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <FileTypeIcon fileName={item.name} size={26} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{item.name}</span>
-            <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--line)', overflow: 'hidden', maxWidth: 220 }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: isPending ? 'var(--accent-soft)' : 'var(--accent)', transition: 'width 0.3s ease' }} />
-            </div>
-          </div>
+    <div className="fl-row-uploading">
+      <div className="fl-thumb-up">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 10.5V2M5 5l3-3 3 3M2.5 11v1.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V11" />
+        </svg>
+      </div>
+      <div className="fl-name-upload">
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', fontWeight: 600 }}>{item.name}</span>
+        <span style={{ fontSize: 10.5, color: 'var(--text-4)', fontFamily: 'var(--mono)', display: 'block' }}>
+          {isPending ? 'Queued' : ([speed, eta].filter(Boolean).join(' · ') || 'Uploading…')}
+        </span>
+        <div className="fl-prog">
+          <div className="fl-prog-fill" style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
-      </td>
-      <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums', color: isPending ? 'var(--text-4)' : 'var(--accent)', fontSize: 12 }}>
-        {isPending ? 'Queued' : `${pct}%`}
-      </td>
-      <td style={tdStyle}>{fmtBytes(item.size)}</td>
-      <td style={{ ...tdStyle, fontSize: 11, color: 'var(--text-4)', fontVariantNumeric: 'tabular-nums' }}>
-        {isPending ? '—' : [speed, eta].filter(Boolean).join(' · ') || 'Uploading…'}
-      </td>
-      <td /><td />
-    </tr>
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--mono)', flexShrink: 0 }}>—</span>
+      <span style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{fmtBytes(item.size)}</span>
+      <span style={{ fontSize: 11, color: isPending ? 'var(--text-4)' : 'var(--accent)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+        {isPending ? '—' : `${Math.round(pct)}%`}
+      </span>
+    </div>
   )
 }
 
@@ -1686,7 +1678,13 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
   }
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <>
+      {uploadingItems.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          {uploadingItems.map(u => <UploadingFileRow key={u.id} item={u} />)}
+        </div>
+      )}
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr>
           <th style={{ ...thStyle, width: 40, paddingLeft: 8 }} />
@@ -1702,7 +1700,6 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
         {showNewFolderIn === (currentFolderId || null) && (
           <NewFolderInput inputRef={newFolderInputRef} value={newFolderName} onChange={onNewFolderChange} onSave={v => onNewFolderCreate(v, currentFolderId)} onCancel={onNewFolderCancel} isCard={false} />
         )}
-        {uploadingItems.map(u => <UploadingFileRow key={u.id} item={u} />)}
         {folders.map(folder => {
           const selKey = `folder-${folder.id}`
           const isSel = selected.has(selKey)
@@ -1807,5 +1804,6 @@ function ListView({ files, folders, uploadingItems = [], selected, onToggleSelec
         })}
       </tbody>
     </table>
+    </>
   )
 }
