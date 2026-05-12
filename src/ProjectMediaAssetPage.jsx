@@ -392,19 +392,6 @@ export default function ProjectMediaAssetPage() {
 
         </div>
 
-        {/* Video controls bar */}
-        {isVideo && effectiveAsset.cloudflare_uid && (
-          <VideoControls
-            playerRef={playerRef}
-            currentTime={currentTime}
-            duration={duration}
-            isPlaying={isPlaying}
-            fps={24}
-            onSeek={seekTo}
-            comments={timelineComments}
-          />
-        )}
-
         {/* Notes */}
         <div className="asset-notes-wrap" style={{ padding: '8px 16px 12px', flexShrink: 0 }}>
           {editNotes ? (

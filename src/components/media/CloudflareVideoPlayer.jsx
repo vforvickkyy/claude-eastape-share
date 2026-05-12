@@ -213,31 +213,16 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     )
   }
 
-  // ── Ready — iframe with controls disabled ────────────────────────
-  function handleOverlayClick() {
-    if (!playerSdkRef.current) return
-    if (playerSdkRef.current.paused) {
-      const p = playerSdkRef.current.play()
-      if (p && p.catch) p.catch(() => {})
-    } else {
-      playerSdkRef.current.pause()
-    }
-  }
-
+  // ── Ready — Cloudflare native player ────────────────────────────
   return (
     <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative' }}>
       <iframe
         ref={iframeRef}
-        src={`https://iframe.cloudflarestream.com/${cloudflareUid}?autoplay=false&controls=false&letterboxColor=transparent&primaryColor=%23f59e0b`}
+        src={`https://iframe.cloudflarestream.com/${cloudflareUid}?autoplay=false&letterboxColor=transparent&primaryColor=%23f59e0b`}
         style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
         allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen
         onLoad={onIframeLoad}
-      />
-      {/* Transparent overlay — captures clicks in parent DOM (user gesture) to toggle play/pause */}
-      <div
-        style={{ position: 'absolute', inset: 0, cursor: 'pointer', zIndex: 1 }}
-        onClick={handleOverlayClick}
       />
     </div>
   )
