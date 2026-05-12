@@ -430,6 +430,7 @@ export default function ProjectMediaAssetPage() {
                       cloudflareStatus={effectiveAsset.cloudflare_status}
                       fallbackUrl={videoSrc}
                       startTime={seekTarget}
+                      comments={timelineComments}
                       onTimeUpdate={setCurrentTime}
                       onPlay={() => setIsPlaying(true)}
                       onPause={() => setIsPlaying(false)}

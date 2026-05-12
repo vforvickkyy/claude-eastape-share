@@ -4614,6 +4614,34 @@ body { overflow-x: hidden; }
 .vc-speed-item:hover { background: rgba(255,255,255,0.07); color: white; }
 .vc-speed-item.active { color: var(--accent); background: var(--accent-tint); }
 
+/* ── Thumbnail hover preview ── */
+.vc-thumb-preview {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 40;
+  background: #0a0a0c;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+}
+.vc-thumb-preview img {
+  width: 160px; height: 90px;
+  object-fit: cover;
+  display: block;
+}
+.vc-thumb-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
+  padding: 4px 0;
+  background: rgba(0,0,0,0.6);
+  letter-spacing: 0.04em;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    PROJECTS PAGE
 ═══════════════════════════════════════════════════════════════ */

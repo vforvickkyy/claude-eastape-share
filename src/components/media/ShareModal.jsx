@@ -1,68 +1,95 @@
-/**
- * ShareModal — generate / manage a share link for a media asset.
- */
-import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Link, Copy, CheckCircle, Trash, X } from "@phosphor-icons/react";
-import { shareLinksApi } from "../../lib/api.js";
+import React, { useEffect, useState } from "react"
+import { motion } from "framer-motion"
+import { X, Copy, CheckCircle, Eye, DownloadSimple, Lock, Trash } from "@phosphor-icons/react"
+import { shareLinksApi } from "../../lib/api.js"
+
+const EXPIRY_OPTIONS = [
+  { label: "No expiry", days: 0 },
+  { label: "1 day",     days: 1 },
+  { label: "7 days",    days: 7 },
+  { label: "30 days",   days: 30 },
+]
+
+function daysToExpiry(iso) {
+  if (!iso) return 0
+  const ms = new Date(iso).getTime() - Date.now()
+  const d  = Math.round(ms / 86400000)
+  if (d <= 1)  return 1
+  if (d <= 7)  return 7
+  if (d <= 30) return 30
+  return 0
+}
 
 export default function ShareModal({ asset, onClose }) {
-  const [links,       setLinks]       = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [generating,  setGenerating]  = useState(false);
-  const [copied,      setCopied]      = useState(null);
+  const [link,     setLink]     = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [copied,   setCopied]   = useState(false)
 
-  // Options for new link
-  const [allowDownload, setAllowDownload] = useState(true);
-  const [allowComments, setAllowComments] = useState(false);
-  const [expiresAt,     setExpiresAt]     = useState("");
-  const [password,      setPassword]      = useState("");
+  const [access,    setAccess]    = useState('view+download')
+  const [expiry,    setExpiry]    = useState(0)
+  const [pwEnabled, setPwEnabled] = useState(false)
+  const [pw,        setPw]        = useState('')
 
   useEffect(() => {
     shareLinksApi.list({ mediaId: asset.id })
-      .then(d => setLinks(d.links || []))
+      .then(d => {
+        const links = d.links || []
+        if (links.length > 0) {
+          const l = links[0]
+          setLink(l)
+          setAccess(l.allow_download !== false ? 'view+download' : 'view')
+          setExpiry(daysToExpiry(l.expires_at))
+          setPwEnabled(!!l.password_hash)
+        }
+      })
       .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [asset.id]);
-
-  async function generate() {
-    setGenerating(true);
-    try {
-      const data = await shareLinksApi.create({
-        project_media_id: asset.id,
-        allow_download:   allowDownload,
-        allow_comments:   allowComments,
-        expires_at:       expiresAt || null,
-        password:         password  || null,
-      });
-      setLinks(ls => [data.link, ...ls]);
-    } catch (err) { console.error(err); }
-    finally { setGenerating(false); }
-  }
-
-  async function revoke(id) {
-    await shareLinksApi.delete(id);
-    setLinks(ls => ls.filter(l => l.id !== id));
-  }
+      .finally(() => setLoading(false))
+  }, [asset.id])
 
   function getUrl(token) {
-    return `${window.location.origin}/media/share/${token}`;
+    return `${window.location.origin}/media/share/${token}`
   }
 
-  async function copy(token) {
-    await navigator.clipboard.writeText(getUrl(token));
-    setCopied(token);
-    setTimeout(() => setCopied(null), 2000);
+  async function upsertLink() {
+    setSaving(true)
+    try {
+      const expiresAt = expiry > 0
+        ? new Date(Date.now() + expiry * 86400000).toISOString()
+        : null
+      const payload = {
+        allow_download: access === 'view+download',
+        allow_comments: true,
+        expires_at: expiresAt,
+        password: (pwEnabled && pw) ? pw : null,
+      }
+      if (link) {
+        const data = await shareLinksApi.update(link.id, payload)
+        setLink(prev => ({ ...prev, ...(data.link || {}) }))
+      } else {
+        const data = await shareLinksApi.create({ project_media_id: asset.id, ...payload })
+        setLink(data.link)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function timeAgo(iso) {
-    const diff = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return "just now";
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
+  async function removeLink() {
+    if (!link) return
+    await shareLinksApi.delete(link.id).catch(console.error)
+    setLink(null)
+    setPwEnabled(false)
+    setPw('')
+  }
+
+  async function copy() {
+    if (!link) return
+    await navigator.clipboard.writeText(getUrl(link.token))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -72,99 +99,194 @@ export default function ShareModal({ asset, onClose }) {
       onClick={onClose}
     >
       <motion.div
-        className="modal-card glass-card"
-        style={{ maxWidth: 440 }}
+        className="share-modal-v2"
+        style={{ width: 420 }}
         initial={{ scale: 0.94, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.94, opacity: 0 }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="modal-header">
-          <Link size={18} weight="duotone" />
-          Share "{asset.name}"
-          <button className="modal-close" onClick={onClose}><X size={16} /></button>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          padding: '14px 18px', borderBottom: '1px solid var(--line)',
+        }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3 }}>Share</div>
+            <div style={{
+              fontSize: 11.5, color: 'var(--text-4)', marginTop: 2,
+              maxWidth: 310, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{asset.name}</div>
+          </div>
+          <button className="icon-btn" onClick={onClose} style={{ marginTop: 1 }}><X size={15} /></button>
         </div>
 
-        {/* New link options */}
-        <div className="share-modal-options">
-          <label className="share-toggle">
-            <span>Allow download</span>
-            <input type="checkbox" checked={allowDownload} onChange={e => setAllowDownload(e.target.checked)} />
-          </label>
-          <label className="share-toggle">
-            <span>Allow comments</span>
-            <input type="checkbox" checked={allowComments} onChange={e => setAllowComments(e.target.checked)} />
-          </label>
-          <div className="form-group" style={{ marginTop: 8 }}>
-            <label className="form-label">Password (optional)</label>
-            <input
-              className="form-input"
-              type="password"
-              placeholder="Leave blank for no password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-            />
-          </div>
-          <div className="form-group" style={{ marginTop: 8 }}>
-            <label className="form-label">Expires (optional)</label>
-            <input
-              className="form-input"
-              type="datetime-local"
-              value={expiresAt}
-              onChange={e => setExpiresAt(e.target.value)}
-            />
-          </div>
-          <button
-            className="btn-primary-sm"
-            style={{ marginTop: 12, width: "100%", justifyContent: "center" }}
-            onClick={generate}
-            disabled={generating}
-          >
-            {generating ? <><span className="spinner" /> Generating…</> : <><Link size={13} /> Generate Link</>}
-          </button>
-        </div>
-
-        {/* Existing links */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: "12px 0" }}><span className="spinner" /></div>
-        ) : links.length > 0 && (
-          <div className="share-links-list">
-            <p style={{ fontSize: 12, color: "var(--t3)", marginBottom: 8 }}>Existing links</p>
-            {links.map(l => (
-              <div key={l.id} className="share-link-entry">
-                <div className="share-link-row">
+          <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
+            <span className="spinner" />
+          </div>
+        ) : (
+          <>
+            {/* ACCESS */}
+            <div className="sm-section">
+              <div className="sm-section-label">Access</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className={`sm-access-btn${access === 'view' ? ' active' : ''}`}
+                  onClick={() => setAccess('view')}
+                >
+                  <Eye size={14} />
+                  Can view
+                </button>
+                <button
+                  className={`sm-access-btn${access === 'view+download' ? ' active' : ''}`}
+                  onClick={() => setAccess('view+download')}
+                >
+                  <DownloadSimple size={14} />
+                  Can view + download
+                </button>
+              </div>
+            </div>
+
+            <div className="sm-divider" />
+
+            {/* EXPIRY */}
+            <div className="sm-section">
+              <div className="sm-section-label">Link expiry</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {EXPIRY_OPTIONS.map(opt => (
+                  <button
+                    key={opt.days}
+                    className={`sm-pill${expiry === opt.days ? ' active' : ''}`}
+                    onClick={() => setExpiry(opt.days)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sm-divider" />
+
+            {/* PASSWORD */}
+            <div className="sm-section">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Lock size={14} style={{ color: 'var(--text-4)' }} />
+                  <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Password protection</span>
+                </div>
+                <button
+                  className={`sm-toggle${pwEnabled ? ' on' : ''}`}
+                  onClick={() => setPwEnabled(p => !p)}
+                >
+                  {pwEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+              {pwEnabled && (
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="Set a password…"
+                  value={pw}
+                  onChange={e => setPw(e.target.value)}
+                  style={{ marginTop: 10 }}
+                />
+              )}
+            </div>
+
+            <div className="sm-divider" />
+
+            {/* SHARE LINK */}
+            <div className="sm-section">
+              <div className="sm-section-label">Share link</div>
+              {link ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
-                    className="share-input"
+                    className="sm-url-input"
                     readOnly
-                    value={getUrl(l.token)}
+                    value={getUrl(link.token)}
                     onFocus={e => e.target.select()}
                   />
                   <button
-                    className={`copy-btn ${copied === l.token ? "copied" : ""}`}
-                    onClick={() => copy(l.token)}
+                    onClick={copy}
+                    style={{
+                      flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '8px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+                      background: copied ? 'var(--accent-tint)' : 'rgba(255,255,255,0.06)',
+                      border: `1px solid ${copied ? 'var(--accent-soft)' : 'var(--line-2)'}`,
+                      color: copied ? 'var(--accent)' : 'var(--text-2)',
+                      cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
+                      fontFamily: 'var(--font)',
+                    }}
                   >
-                    {copied === l.token ? <CheckCircle size={13} /> : <Copy size={13} />}
-                  </button>
-                  <button className="icon-btn danger" onClick={() => revoke(l.id)}>
-                    <Trash size={13} />
+                    {copied ? <CheckCircle size={13} weight="fill" /> : <Copy size={13} />}
+                    {copied ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-                <div className="share-link-analytics">
-                  <span>{l.view_count || 0} view{l.view_count !== 1 ? "s" : ""}</span>
-                  {l.last_accessed_at && (
-                    <span>Last viewed {timeAgo(l.last_accessed_at)}</span>
-                  )}
-                  {l.expires_at && (
-                    <span style={{ color: new Date(l.expires_at) < new Date() ? "#f87171" : "var(--t3)" }}>
-                      {new Date(l.expires_at) < new Date() ? "Expired" : `Expires ${new Date(l.expires_at).toLocaleDateString()}`}
-                    </span>
-                  )}
-                </div>
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--text-4)', margin: 0 }}>
+                  No active link. Click "Create link" to generate one.
+                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sm-footer">
+              {link ? (
+                <button
+                  onClick={removeLink}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+                    background: 'none', border: '1px solid rgba(248,113,113,0.3)',
+                    color: '#f87171', cursor: 'pointer', fontFamily: 'var(--font)',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(248,113,113,0.08)'
+                    e.currentTarget.style.borderColor = '#f87171'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'none'
+                    e.currentTarget.style.borderColor = 'rgba(248,113,113,0.3)'
+                  }}
+                >
+                  <Trash size={12} />
+                  Remove link
+                </button>
+              ) : (
+                <span />
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={onClose}
+                  style={{
+                    padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+                    background: 'none', border: '1px solid var(--line-2)',
+                    color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'var(--font)',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--line-strong)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line-2)'}
+                >
+                  Done
+                </button>
+                <button
+                  className="btn-primary"
+                  style={{ padding: '7px 14px', fontSize: 12, height: 'auto' }}
+                  onClick={upsertLink}
+                  disabled={saving}
+                >
+                  {saving
+                    ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Saving…</>
+                    : link ? 'Update settings' : 'Create link'
+                  }
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         )}
       </motion.div>
     </motion.div>
-  );
+  )
 }
