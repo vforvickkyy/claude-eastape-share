@@ -10,7 +10,14 @@ import { mediaApi } from "../../lib/api";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 
-export default function CommentsPanel({ assetId, currentTime, onSeek }) {
+const AVATAR_COLORS = ['#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#f97316']
+function avatarColor(name) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+export default function CommentsPanel({ assetId, currentTime, onSeek, onCommentsChange }) {
   const { user } = useAuth();
   const [comments,   setComments]  = useState([]);
   const [loading,    setLoading]   = useState(true);
@@ -25,6 +32,8 @@ export default function CommentsPanel({ assetId, currentTime, onSeek }) {
       .then(d => setComments(d.comments || []))
       .catch(console.error);
   }
+
+  useEffect(() => { onCommentsChange?.(comments) }, [comments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!assetId) return;
@@ -165,11 +174,12 @@ function CommentThread({ comment, children, onReply, onResolve, onSeek, currentU
 
 function CommentItem({ comment, onReply, onResolve, onSeek, isOwner }) {
   const name = comment.profiles?.full_name || comment.profiles?.email || "User";
+  const color = avatarColor(name);
 
   return (
     <div className="comment-item">
       <div className="comment-meta">
-        <div className="comment-avatar">{name.charAt(0).toUpperCase()}</div>
+        <div className="comment-avatar" style={{ background: color, color: '#0a0a0c' }}>{name.charAt(0).toUpperCase()}</div>
         <span className="comment-author">{name}</span>
         {comment.timestamp_seconds != null && (
           <button className="comment-ts" onClick={() => onSeek?.(comment.timestamp_seconds)}>

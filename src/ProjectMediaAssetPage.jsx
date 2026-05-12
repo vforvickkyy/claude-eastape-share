@@ -1,11 +1,13 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, DownloadSimple, Trash, Copy, CheckCircle,
-  ChatCircle, ClockCounterClockwise, Info, PencilSimple,
-  Check, X, SidebarSimple, MusicNote, File, FileImage,
-  FilePdf, CaretLeft, CaretRight,
+  Check, X, SidebarSimple, MusicNote, File,
+  CaretLeft, CaretRight,
+  Play, Pause, SkipBack, SkipForward,
+  SpeakerSimpleHigh, SpeakerSimpleLow, SpeakerSimpleX,
+  Repeat, FrameCorners,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import { useProject } from './context/ProjectContext'
@@ -53,6 +55,9 @@ export default function ProjectMediaAssetPage() {
   const [editNotes,      setEditNotes]     = useState(false)
   const [notesVal,       setNotesVal]      = useState('')
   const [siblings,       setSiblings]      = useState([])
+  const [isPlaying,      setIsPlaying]     = useState(false)
+  const [duration,       setDuration]      = useState(0)
+  const [timelineComments, setTimelineComments] = useState([])
 
   const playerRef = useRef(null)
 
@@ -331,6 +336,9 @@ export default function ProjectMediaAssetPage() {
                       fallbackUrl={videoSrc}
                       startTime={seekTarget}
                       onTimeUpdate={setCurrentTime}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onDurationChange={setDuration}
                       onStatusChange={(newStatus) =>
                         !previewVersion && setAsset(prev => ({ ...prev, cloudflare_status: newStatus }))
                       }
@@ -382,32 +390,46 @@ export default function ProjectMediaAssetPage() {
             </div>
           )}
 
-          {/* Notes */}
-          <div className="asset-notes-wrap">
-            {editNotes ? (
-              <div className="asset-notes-edit">
-                <textarea
-                  className="asset-notes-textarea"
-                  value={notesVal}
-                  onChange={e => setNotesVal(e.target.value)}
-                  placeholder="Add notes or context for this asset…"
-                  rows={4}
-                  autoFocus
-                />
-                <div className="asset-notes-actions">
-                  <button className="btn-primary-sm" onClick={saveNotes}>Save</button>
-                  <button className="btn-ghost" onClick={() => { setNotesVal(asset.notes || ''); setEditNotes(false) }}>Cancel</button>
-                </div>
+        </div>
+
+        {/* Video controls bar */}
+        {isVideo && effectiveAsset.cloudflare_uid && (
+          <VideoControls
+            playerRef={playerRef}
+            currentTime={currentTime}
+            duration={duration}
+            isPlaying={isPlaying}
+            fps={24}
+            onSeek={seekTo}
+            comments={timelineComments}
+          />
+        )}
+
+        {/* Notes */}
+        <div className="asset-notes-wrap" style={{ padding: '8px 16px 12px', flexShrink: 0 }}>
+          {editNotes ? (
+            <div className="asset-notes-edit">
+              <textarea
+                className="asset-notes-textarea"
+                value={notesVal}
+                onChange={e => setNotesVal(e.target.value)}
+                placeholder="Add notes or context for this asset…"
+                rows={4}
+                autoFocus
+              />
+              <div className="asset-notes-actions">
+                <button className="btn-primary-sm" onClick={saveNotes}>Save</button>
+                <button className="btn-ghost" onClick={() => { setNotesVal(asset.notes || ''); setEditNotes(false) }}>Cancel</button>
               </div>
-            ) : (
-              <button className="asset-notes-display" onClick={() => setEditNotes(true)}>
-                {asset.notes
-                  ? <p className="asset-notes-text">{asset.notes}</p>
-                  : <span className="asset-notes-placeholder">Add notes… (click to edit)</span>
-                }
-              </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button className="asset-notes-display" onClick={() => setEditNotes(true)}>
+              {asset.notes
+                ? <p className="asset-notes-text">{asset.notes}</p>
+                : <span className="asset-notes-placeholder">Add notes… (click to edit)</span>
+              }
+            </button>
+          )}
         </div>
 
         </div>{/* end viewer-player-area */}
@@ -419,7 +441,7 @@ export default function ProjectMediaAssetPage() {
               {[
                 { id: 'comments', label: 'Comments' },
                 { id: 'versions', label: 'Versions' },
-                { id: 'info',     label: 'Info'     },
+                { id: 'info',     label: 'Details'  },
               ].map(t => (
                 <button
                   key={t.id}
@@ -433,7 +455,12 @@ export default function ProjectMediaAssetPage() {
             </div>
             <div className="viewer-panel-content">
               {tab === 'comments' && (
-                <CommentsPanel assetId={mediaId} currentTime={currentTime} onSeek={seekTo} />
+                <CommentsPanel
+                  assetId={mediaId}
+                  currentTime={currentTime}
+                  onSeek={seekTo}
+                  onCommentsChange={setTimelineComments}
+                />
               )}
               {tab === 'versions' && (
                 <VersionsPanel
@@ -454,6 +481,161 @@ export default function ProjectMediaAssetPage() {
       <AnimatePresence>
         {showShare && <ShareModal asset={asset} onClose={() => setShowShare(false)} />}
       </AnimatePresence>
+    </div>
+  )
+}
+
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
+
+function fmt(s) {
+  if (!s && s !== 0) return '0:00'
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60)
+  return `${m}:${String(sec).padStart(2, '0')}`
+}
+
+function VideoControls({ playerRef, currentTime, duration, isPlaying, fps = 24, onSeek, comments = [] }) {
+  const [volume,    setVolume]    = useState(1)
+  const [muted,     setMuted]     = useState(false)
+  const [loop,      setLoop]      = useState(false)
+  const [speed,     setSpeed]     = useState(1)
+  const [showSpeed, setShowSpeed] = useState(false)
+  const [showVol,   setShowVol]   = useState(false)
+  const speedMenuRef = useRef(null)
+
+  const pct = duration > 0 ? (currentTime / duration) * 100 : 0
+  const VolumeIcon = (muted || volume === 0) ? SpeakerSimpleX
+                   : volume < 0.5           ? SpeakerSimpleLow
+                   :                          SpeakerSimpleHigh
+
+  useEffect(() => {
+    if (!showSpeed) return
+    function onDown(e) {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target)) setShowSpeed(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [showSpeed])
+
+  function togglePlay() {
+    if (isPlaying) playerRef.current?.pause()
+    else playerRef.current?.play()
+  }
+  function toggleMute() {
+    const next = !muted
+    setMuted(next)
+    playerRef.current?.setMuted(next)
+  }
+  function handleVolume(v) {
+    setVolume(v)
+    playerRef.current?.setVolume(v)
+    if (v === 0) { setMuted(true); playerRef.current?.setMuted(true) }
+    else if (muted) { setMuted(false); playerRef.current?.setMuted(false) }
+  }
+  function toggleLoop() {
+    const next = !loop
+    setLoop(next)
+    playerRef.current?.setLoop(next)
+  }
+  function setSpeedVal(r) {
+    setSpeed(r)
+    playerRef.current?.setPlaybackRate(r)
+    setShowSpeed(false)
+  }
+  function frameBack()    { onSeek(Math.max(0, currentTime - 1 / fps)) }
+  function frameForward() { onSeek(Math.min(duration || 0, currentTime + 1 / fps)) }
+
+  return (
+    <div className="vc-bar">
+      {/* Scrub bar */}
+      <div className="vc-progress">
+        <div className="vc-progress-bg">
+          <div className="vc-progress-fill" style={{ width: `${pct}%` }} />
+          {duration > 0 && comments.map(c => c.timestamp_seconds != null && (
+            <div
+              key={c.id}
+              className="vc-marker"
+              style={{ left: `${(c.timestamp_seconds / duration) * 100}%` }}
+              title={c.body?.slice(0, 60)}
+            />
+          ))}
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          step={0.05}
+          value={currentTime}
+          onChange={e => onSeek(parseFloat(e.target.value))}
+          className="vc-scrub-input"
+        />
+      </div>
+
+      {/* Controls row */}
+      <div className="vc-controls">
+        <div className="vc-left">
+          <button className="vc-btn" onClick={frameBack} title="Frame back"><SkipBack size={13} /></button>
+          <button className="vc-btn vc-play-btn" onClick={togglePlay} title={isPlaying ? 'Pause (K)' : 'Play (K)'}>
+            {isPlaying ? <Pause size={15} weight="fill" /> : <Play size={15} weight="fill" />}
+          </button>
+          <button className="vc-btn" onClick={frameForward} title="Frame forward"><SkipForward size={13} /></button>
+          <span className="vc-time">{fmt(currentTime)} / {fmt(duration || 0)}</span>
+        </div>
+
+        <div className="vc-right">
+          <button
+            className={`vc-btn${loop ? ' vc-active' : ''}`}
+            onClick={toggleLoop}
+            title="Loop"
+          >
+            <Repeat size={14} />
+          </button>
+
+          {/* Volume */}
+          <div
+            className="vc-vol-wrap"
+            onMouseEnter={() => setShowVol(true)}
+            onMouseLeave={() => setShowVol(false)}
+          >
+            <button className="vc-btn" onClick={toggleMute}><VolumeIcon size={14} /></button>
+            {showVol && (
+              <div className="vc-vol-popup">
+                <input
+                  type="range"
+                  min={0} max={1} step={0.02}
+                  value={muted ? 0 : volume}
+                  onChange={e => handleVolume(parseFloat(e.target.value))}
+                  className="vc-vol-slider"
+                  style={{ '--vol-pct': `${(muted ? 0 : volume) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Speed */}
+          <div className="vc-speed-wrap" ref={speedMenuRef}>
+            <button className="vc-btn vc-speed-btn" onClick={() => setShowSpeed(p => !p)}>
+              {speed}×
+            </button>
+            {showSpeed && (
+              <div className="vc-speed-menu">
+                {SPEEDS.map(r => (
+                  <button
+                    key={r}
+                    className={`vc-speed-item${speed === r ? ' active' : ''}`}
+                    onClick={() => setSpeedVal(r)}
+                  >
+                    {r}×
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button className="vc-btn" onClick={() => playerRef.current?.requestFullscreen()} title="Fullscreen">
+            <FrameCorners size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
