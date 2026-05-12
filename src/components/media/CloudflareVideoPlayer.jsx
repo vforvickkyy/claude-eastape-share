@@ -57,8 +57,12 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     getDuration: () => playerSdkRef.current?.duration ?? 0,
     isPaused: () => playerSdkRef.current?.paused ?? true,
     play: () => {
-      if (playerSdkRef.current) playerSdkRef.current.play()
-      else cfPost({ event: 'play' })
+      if (playerSdkRef.current) {
+        const p = playerSdkRef.current.play()
+        if (p && p.catch) p.catch(() => {})
+      } else {
+        cfPost({ event: 'play' })
+      }
     },
     pause: () => {
       if (playerSdkRef.current) playerSdkRef.current.pause()
@@ -109,21 +113,17 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
             currentTimeRef.current = t
             onTimeUpdate?.(t)
           })
-          player.addEventListener('play', () => {
-            onPlay?.()
-          })
-          player.addEventListener('pause', () => {
-            onPause?.()
-          })
-          player.addEventListener('ended', () => {
-            onPause?.()
-          })
+          player.addEventListener('play',    () => onPlay?.())
+          player.addEventListener('playing', () => onPlay?.())
+          player.addEventListener('pause',   () => onPause?.())
+          player.addEventListener('ended',   () => onPause?.())
           player.addEventListener('durationchange', () => {
             const dur = player.duration
             if (dur && dur > 0) onDurationChange?.(dur)
           })
-          // Fire initial duration if already known
+          // Sync initial states
           if (player.duration > 0) onDurationChange?.(player.duration)
+          if (!player.paused) onPlay?.()
         } catch (e) {
           console.warn('CF Stream SDK init failed, using postMessage', e)
         }
@@ -214,6 +214,16 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
   }
 
   // ── Ready — iframe with controls disabled ────────────────────────
+  function handleOverlayClick() {
+    if (!playerSdkRef.current) return
+    if (playerSdkRef.current.paused) {
+      const p = playerSdkRef.current.play()
+      if (p && p.catch) p.catch(() => {})
+    } else {
+      playerSdkRef.current.pause()
+    }
+  }
+
   return (
     <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative' }}>
       <iframe
@@ -223,6 +233,11 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
         allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen
         onLoad={onIframeLoad}
+      />
+      {/* Transparent overlay — captures clicks in parent DOM (user gesture) to toggle play/pause */}
+      <div
+        style={{ position: 'absolute', inset: 0, cursor: 'pointer', zIndex: 1 }}
+        onClick={handleOverlayClick}
       />
     </div>
   )

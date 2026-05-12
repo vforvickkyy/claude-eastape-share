@@ -3464,6 +3464,7 @@ body.scrollable,
 }
 .viewer-player-area .asset-player {
   flex: 1; border-radius: 10px;
+  aspect-ratio: unset; min-height: 0;
 }
 .viewer-player-area .asset-notes-wrap { flex-shrink: 0; }
 

@@ -517,8 +517,9 @@ function VideoControls({ playerRef, currentTime, duration, isPlaying, fps = 24, 
   }, [showSpeed])
 
   function togglePlay() {
-    if (isPlaying) playerRef.current?.pause()
-    else playerRef.current?.play()
+    const paused = playerRef.current?.isPaused() ?? !isPlaying
+    if (paused) playerRef.current?.play()
+    else playerRef.current?.pause()
   }
   function toggleMute() {
     const next = !muted
