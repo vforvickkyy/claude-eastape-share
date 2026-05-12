@@ -20,7 +20,7 @@ function fallbackHtml(siteUrl: string, token: string) {
   <meta property="og:title" content="Shared Media" />
   <meta property="og:description" content="View this shared media on Eastape." />
   <meta property="og:type" content="website" />
-  <script>window.location.replace('${siteUrl}/media/view/${token}')</script>
+  <script>window.location.replace('/media/view/${token}')</script>
 </head>
 <body></body>
 </html>`)
@@ -30,11 +30,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 })
 
-  const url    = new URL(req.url)
-  const token  = url.searchParams.get('token') || url.pathname.split('/').pop() || ''
-  const siteUrl = (Deno.env.get('SITE_URL') || 'https://eastapestudio.vercel.app').replace(/\/$/, '')
+  const url     = new URL(req.url)
+  const token   = url.searchParams.get('token') || url.pathname.split('/').pop() || ''
+  // Use origin passed by the Vercel proxy (preserves studio.eastape.com), fallback to env
+  const siteUrl = (url.searchParams.get('origin') || Deno.env.get('SITE_URL') || 'https://studio.eastape.com').replace(/\/$/, '')
 
-  if (!token) return html(`<!DOCTYPE html><html><head><script>window.location.replace('${siteUrl}')</script></head><body></body></html>`)
+  if (!token) return html(`<!DOCTYPE html><html><head><script>window.location.replace('/')</script></head><body></body></html>`)
 
   try {
     const supabase = createClient(
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
     const title    = asset?.name || 'Shared Media'
     const cfUid    = asset?.cloudflare_uid
     const shareUrl = `${siteUrl}/media/share/${token}`
-    const viewUrl  = `${siteUrl}/media/view/${token}`
+    const viewUrl  = `/media/view/${token}` // relative — browser stays on its current domain
 
     const imageUrl = cfUid
       ? `https://videodelivery.net/${cfUid}/thumbnails/thumbnail.jpg?width=1280&height=720&fit=crop`
