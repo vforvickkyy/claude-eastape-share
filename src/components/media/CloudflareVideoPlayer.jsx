@@ -120,8 +120,9 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
 
       const player = videojs(videoRef.current, {
         controls:       false,
-        fluid:          false,
-        fill:           false,
+        controlBar:     false,
+        bigPlayButton:  false,
+        fill:           true,
         preload:        'auto',
         loop:           true,
         muted:          false,
@@ -262,9 +263,8 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
                    : volume < 0.5            ? SpeakerSimpleLow
                    :                           SpeakerSimpleHigh
 
-  const thumbPreviewLeft = progressRef.current
-    ? Math.max(80, Math.min(hoverX ?? 0, progressRef.current.offsetWidth - 80))
-    : hoverX ?? 0
+  const progressWidth = progressRef.current?.offsetWidth || 400
+  const thumbPreviewLeft = Math.max(80, Math.min(hoverX ?? 0, progressWidth - 80))
 
   // ── Processing state ──────────────────────────────────────────────
   if (status === 'processing' || status === 'pending') {
@@ -310,20 +310,23 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '100%', background: '#000', display: 'flex', flexDirection: 'column' }}
+      style={{ position: 'absolute', inset: 0, background: '#000', overflow: 'hidden' }}
     >
-      {/* Video area */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }} data-vjs-player>
+      {/* Video.js fills entire container */}
+      <div
+        className="cf-vjs-wrap"
+        data-vjs-player
+        style={{ position: 'absolute', inset: 0 }}
+      >
         <video
           ref={videoRef}
           className="video-js"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
           playsInline
         />
       </div>
 
-      {/* Controls bar */}
-      <div className="vc-bar">
+      {/* Controls bar — overlay at the bottom */}
+      <div className="vc-bar" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }}>
         {/* Scrub / progress */}
         <div
           ref={progressRef}
@@ -354,9 +357,10 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
           {hoverX != null && cloudflareUid && duration > 0 && (
             <div className="vc-thumb-preview" style={{ left: thumbPreviewLeft }}>
               <img
-                src={`https://videodelivery.net/${cloudflareUid}/thumbnails/thumbnail.jpg?time=${Math.max(0, Math.round(hoverTime))}s&width=160`}
+                src={`https://videodelivery.net/${cloudflareUid}/thumbnails/thumbnail.jpg?time=${Math.max(0.1, hoverTime).toFixed(1)}s&width=160`}
                 alt=""
                 draggable={false}
+                loading="eager"
               />
               <div className="vc-thumb-time">{fmt(hoverTime)}</div>
             </div>

@@ -3465,6 +3465,7 @@ body.scrollable,
 .viewer-player-area .asset-player {
   flex: 1; border-radius: 10px;
   aspect-ratio: unset; min-height: 0;
+  position: relative;
 }
 .viewer-player-area .asset-notes-wrap { flex-shrink: 0; }
 
@@ -4614,18 +4615,24 @@ body { overflow-x: hidden; }
 .vc-speed-item:hover { background: rgba(255,255,255,0.07); color: white; }
 .vc-speed-item.active { color: var(--accent); background: var(--accent-tint); }
 
+/* ── Suppress VJS default UI in custom player ── */
+.cf-vjs-wrap .vjs-control-bar        { display: none !important; }
+.cf-vjs-wrap .vjs-big-play-button    { display: none !important; }
+.cf-vjs-wrap .vjs-loading-spinner    { display: none !important; }
+.cf-vjs-wrap .video-js               { width: 100% !important; height: 100% !important; }
+
 /* ── Thumbnail hover preview ── */
 .vc-thumb-preview {
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 8px);
   transform: translateX(-50%);
   pointer-events: none;
-  z-index: 40;
+  z-index: 50;
   background: #0a0a0c;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.14);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.8);
 }
 .vc-thumb-preview img {
   width: 160px; height: 90px;
@@ -4635,10 +4642,10 @@ body { overflow-x: hidden; }
 .vc-thumb-time {
   font-family: var(--mono);
   font-size: 11px;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255,255,255,0.75);
   text-align: center;
-  padding: 4px 0;
-  background: rgba(0,0,0,0.6);
+  padding: 3px 0 4px;
+  background: rgba(0,0,0,0.7);
   letter-spacing: 0.04em;
 }
 
