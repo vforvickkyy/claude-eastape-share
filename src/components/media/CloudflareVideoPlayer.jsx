@@ -107,6 +107,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
           playerSdkRef.current = player
 
           if (startTime > 0) player.currentTime = startTime
+          player.loop = true
 
           player.addEventListener('timeupdate', () => {
             const t = player.currentTime
@@ -218,7 +219,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative' }}>
       <iframe
         ref={iframeRef}
-        src={`https://iframe.cloudflarestream.com/${cloudflareUid}?autoplay=false&letterboxColor=transparent&primaryColor=%23f59e0b`}
+        src={`https://iframe.cloudflarestream.com/${cloudflareUid}?autoplay=false&loop=true&letterboxColor=transparent&primaryColor=%23f59e0b`}
         style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
         allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen

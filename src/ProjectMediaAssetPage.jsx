@@ -7,7 +7,7 @@ import {
   CaretLeft, CaretRight,
   Play, Pause, SkipBack, SkipForward,
   SpeakerSimpleHigh, SpeakerSimpleLow, SpeakerSimpleX,
-  Repeat, FrameCorners,
+  Repeat, FrameCorners, LinkSimple, ToggleLeft, ToggleRight,
 } from '@phosphor-icons/react'
 import { useAuth } from './context/AuthContext'
 import { useProject } from './context/ProjectContext'
@@ -50,7 +50,10 @@ export default function ProjectMediaAssetPage() {
   const [editName,       setEditName]      = useState(false)
   const [nameVal,        setNameVal]       = useState('')
   const [copied,         setCopied]        = useState(false)
-  const [showShare,      setShowShare]     = useState(false)
+  const [showShare,          setShowShare]          = useState(false)
+  const [showShareSettings,  setShowShareSettings]  = useState(false)
+  const [shareSettings,      setShareSettings]      = useState({ allow_download: true, allow_comments: true })
+  const shareSettingsRef = useRef(null)
   const [sidebarOpen,    setSidebarOpen]   = useState(true)
   const [editNotes,      setEditNotes]     = useState(false)
   const [notesVal,       setNotesVal]      = useState('')
@@ -78,6 +81,10 @@ export default function ProjectMediaAssetPage() {
       setAsset(a)
       setNameVal(a?.name || '')
       setNotesVal(a?.notes || '')
+      setShareSettings({
+        allow_download: a?.allow_download !== false,
+        allow_comments: a?.allow_comments !== false,
+      })
       if (a?.wasabi_status === 'ready') {
         await fetchPlaybackUrl(a)
       }
@@ -171,9 +178,30 @@ export default function ProjectMediaAssetPage() {
     }
   }
 
+  useEffect(() => {
+    if (!showShareSettings) return
+    const handler = (e) => {
+      if (shareSettingsRef.current && !shareSettingsRef.current.contains(e.target)) {
+        setShowShareSettings(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showShareSettings])
+
+  async function toggleShareSetting(key) {
+    const next = { ...shareSettings, [key]: !shareSettings[key] }
+    setShareSettings(next)
+    await projectMediaApi.update(mediaId, next).catch(() => {})
+  }
+
   async function copyShareLink() {
     try {
-      const data = await shareLinksApi.create({ project_media_id: mediaId, allow_download: true, allow_comments: true })
+      const data = await shareLinksApi.create({
+        project_media_id: mediaId,
+        allow_download: shareSettings.allow_download,
+        allow_comments: shareSettings.allow_comments,
+      })
       const token = data.link?.token || data.share_link?.token
       const url = `${window.location.origin}/media/share/${token}`
       await navigator.clipboard.writeText(url)
@@ -304,9 +332,76 @@ export default function ProjectMediaAssetPage() {
           <button className="viewer-action-btn" onClick={handleDownload} title="Download">
             <DownloadSimple size={15} />
           </button>
-          <button className="viewer-action-btn" onClick={copyShareLink} title={copied ? 'Copied!' : 'Copy share link'}>
-            {copied ? <CheckCircle size={15} /> : <Copy size={15} />}
-          </button>
+
+          {/* Share settings + copy link */}
+          <div ref={shareSettingsRef} style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', gap: 0, border: '1px solid var(--line-2)', borderRadius: 7, overflow: 'hidden' }}>
+              <button
+                className="viewer-action-btn"
+                style={{ borderRadius: 0, border: 'none' }}
+                onClick={copyShareLink}
+                title={copied ? 'Copied!' : 'Copy share link'}
+              >
+                {copied ? <CheckCircle size={15} /> : <Copy size={15} />}
+              </button>
+              <div style={{ width: 1, background: 'var(--line-2)', flexShrink: 0 }} />
+              <button
+                className={`viewer-action-btn${showShareSettings ? ' active' : ''}`}
+                style={{ borderRadius: 0, border: 'none', padding: '0 8px' }}
+                onClick={() => setShowShareSettings(v => !v)}
+                title="Share settings"
+              >
+                <LinkSimple size={14} />
+              </button>
+            </div>
+            {showShareSettings && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 300,
+                background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 10,
+                padding: '12px 0', minWidth: 220,
+                boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+              }}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-4)', padding: '0 14px 8px' }}>Share settings</p>
+                {[
+                  { key: 'allow_download', label: 'Allow download',  sub: 'Viewers can download this file' },
+                  { key: 'allow_comments', label: 'Allow comments',  sub: 'Viewers can leave comments' },
+                ].map(({ key, label, sub }) => (
+                  <button
+                    key={key}
+                    onClick={() => toggleShareSetting(key)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    {shareSettings[key]
+                      ? <ToggleRight size={22} weight="fill" style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                      : <ToggleLeft  size={22}               style={{ color: 'var(--text-4)', flexShrink: 0 }} />
+                    }
+                    <div>
+                      <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 1 }}>{sub}</div>
+                    </div>
+                  </button>
+                ))}
+                <div style={{ height: 1, background: 'var(--line)', margin: '8px 0' }} />
+                <div style={{ padding: '0 14px' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%', justifyContent: 'center', gap: 6, fontSize: 12, height: 32 }}
+                    onClick={() => { copyShareLink(); setShowShareSettings(false) }}
+                  >
+                    {copied ? <CheckCircle size={13} /> : <Copy size={13} />}
+                    {copied ? 'Copied!' : 'Copy share link'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button className="viewer-action-btn" onClick={() => setSidebarOpen(o => !o)} title="Toggle panel">
             <SidebarSimple size={15} />
           </button>
@@ -447,6 +542,7 @@ export default function ProjectMediaAssetPage() {
                   currentTime={currentTime}
                   onSeek={seekTo}
                   onCommentsChange={setTimelineComments}
+                  isAssetOwner={!!(user?.id && (user.id === asset?.user_id || user.id === asset?.created_by || user.id === asset?.owner_id))}
                 />
               )}
               {tab === 'versions' && (

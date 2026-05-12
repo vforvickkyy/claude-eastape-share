@@ -14,6 +14,7 @@ import CloudflareVideoPlayer from "./components/media/CloudflareVideoPlayer";
 import "./styles/videojs-theme.css";
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 const AVATAR_COLORS = ['#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#f97316']
 function avatarColor(name) {
@@ -105,7 +106,11 @@ export default function MediaSharePage() {
     try {
       const res = await fetch(`${BASE}/media-comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ANON_KEY}`,
+          'apikey': ANON_KEY,
+        },
         body: JSON.stringify({
           assetId: data?.asset?.id,
           body: newComment.trim(),

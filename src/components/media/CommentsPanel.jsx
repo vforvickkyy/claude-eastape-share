@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  PaperPlaneTilt, CheckCircle, ArrowBendDownRight, Clock,
+  PaperPlaneTilt, CheckCircle, ArrowBendDownRight, Clock, Trash,
 } from "@phosphor-icons/react";
 import { mediaApi } from "../../lib/api";
 import { supabase } from "../../lib/supabaseClient";
@@ -17,7 +17,7 @@ function avatarColor(name) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
-export default function CommentsPanel({ assetId, currentTime, onSeek, onCommentsChange }) {
+export default function CommentsPanel({ assetId, currentTime, onSeek, onCommentsChange, isAssetOwner }) {
   const { user } = useAuth();
   const [comments,   setComments]  = useState([]);
   const [loading,    setLoading]   = useState(true);
@@ -85,6 +85,11 @@ export default function CommentsPanel({ assetId, currentTime, onSeek, onComments
     setComments(cs => cs.map(c => c.id === comment.id ? { ...c, resolved: !c.resolved } : c));
   }
 
+  async function deleteComment(comment) {
+    await mediaApi.deleteComment(comment.id);
+    setComments(cs => cs.filter(c => c.id !== comment.id && c.parent_comment_id !== comment.id));
+  }
+
   const topLevel   = comments.filter(c => !c.parent_comment_id);
   const childrenOf = id => comments.filter(c => c.parent_comment_id === id);
 
@@ -105,8 +110,10 @@ export default function CommentsPanel({ assetId, currentTime, onSeek, onComments
                   children={childrenOf(c.id)}
                   onReply={() => setReplyTo(c.id)}
                   onResolve={() => toggleResolve(c)}
+                  onDelete={deleteComment}
                   onSeek={onSeek}
                   currentUserId={user?.id}
+                  isAssetOwner={isAssetOwner}
                 />
               ))
             )}
@@ -152,27 +159,35 @@ export default function CommentsPanel({ assetId, currentTime, onSeek, onComments
   );
 }
 
-function CommentThread({ comment, children, onReply, onResolve, onSeek, currentUserId }) {
+function CommentThread({ comment, children, onReply, onResolve, onDelete, onSeek, currentUserId, isAssetOwner }) {
   return (
     <div className={`comment-thread ${comment.resolved ? "resolved" : ""}`}>
       <CommentItem
         comment={comment}
         onReply={onReply}
         onResolve={onResolve}
+        onDelete={onDelete}
         onSeek={onSeek}
         isOwner={currentUserId === comment.user_id}
+        canDelete={isAssetOwner || currentUserId === comment.user_id}
       />
       {children.map(child => (
         <div key={child.id} className="comment-reply">
           <ArrowBendDownRight size={12} className="comment-reply-icon" />
-          <CommentItem comment={child} onSeek={onSeek} isOwner={currentUserId === child.user_id} />
+          <CommentItem
+            comment={child}
+            onDelete={onDelete}
+            onSeek={onSeek}
+            isOwner={currentUserId === child.user_id}
+            canDelete={isAssetOwner || currentUserId === child.user_id}
+          />
         </div>
       ))}
     </div>
   );
 }
 
-function CommentItem({ comment, onReply, onResolve, onSeek, isOwner }) {
+function CommentItem({ comment, onReply, onResolve, onDelete, onSeek, isOwner, canDelete }) {
   const name = comment.profiles?.full_name || comment.profiles?.email || "User";
   const color = avatarColor(name);
 
@@ -187,6 +202,16 @@ function CommentItem({ comment, onReply, onResolve, onSeek, isOwner }) {
           </button>
         )}
         <span className="comment-age">{timeAgo(comment.created_at)}</span>
+        {canDelete && onDelete && (
+          <button
+            className="comment-action comment-delete"
+            style={{ marginLeft: 'auto', color: 'var(--text-4)', display: 'flex', alignItems: 'center' }}
+            onClick={() => onDelete(comment)}
+            title="Delete comment"
+          >
+            <Trash size={12} />
+          </button>
+        )}
       </div>
       <p className="comment-body">{comment.body}</p>
       <div className="comment-actions">
