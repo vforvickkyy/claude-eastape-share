@@ -64,15 +64,7 @@ const NAV_SECTIONS = [
 /* ── Logo slot ──────────────────────────────────────────────── */
 function LogoSlot() {
   return (
-    <span style={{
-      fontFamily: "var(--font-display, sans-serif)",
-      fontSize: "17px",
-      fontWeight: 700,
-      letterSpacing: "0.04em",
-      color: "var(--t1)",
-    }}>
-      EASTAPE
-    </span>
+    <img src="/logo.png" alt="Eastape Studio" style={{ height: 28, width: "auto" }} onError={e => { e.target.style.display = "none"; }} />
   );
 }
 

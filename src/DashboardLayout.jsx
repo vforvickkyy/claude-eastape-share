@@ -304,8 +304,7 @@ export default function DashboardLayout({ children, title, crumbs }) {
 
           {/* Brand */}
           <div className="db-logo">
-            <div className="db-brand-mark">E</div>
-            <span className="db-brand-name">Eastape<span style={{ opacity: 0.5 }}> Studio</span></span>
+            <img src="/logo.png" alt="Eastape Studio" className="db-brand-logo" style={{ height: 28, width: "auto" }} onError={e => { e.target.style.display = "none"; }} />
             <button
               className="db-collapse-btn"
               onClick={() => setCollapsed(c => !c)}
