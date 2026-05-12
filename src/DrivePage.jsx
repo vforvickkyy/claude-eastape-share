@@ -1413,13 +1413,24 @@ function UploadingFileCard({ item }) {
   const pct   = isPending ? 0 : (item.progress ?? 0)
   const speed = !isPending ? fmtSpeed(item.speed) : null
   const eta   = !isPending ? fmtEta(item.eta) : null
+  const ext = (item.name?.split('.').pop() || '').toLowerCase()
+  const isVid = ['mp4','mov','avi','mkv','webm','m4v','r3d','mxf','flv','wmv'].includes(ext)
+  const isImg = ['jpg','jpeg','png','gif','webp','psd','tiff','exr','bmp','svg','raw'].includes(ext)
+  const isAud = ['mp3','wav','ogg','flac','aac','m4a','aiff','opus','wma'].includes(ext)
+
   return (
     <div className="drive-file-card v2 uploading" style={{ cursor: 'default', pointerEvents: 'none' }}>
       <div className="upload-thumb">
         <div className="upload-icon">
-          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 10.5V2M5 5l3-3 3 3M2.5 11v1.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V11" />
-          </svg>
+          {isVid ? (
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3.5" width="9" height="9" rx="1"/><path d="M11 6l3-1.5v7L11 10"/></svg>
+          ) : isImg ? (
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="12" height="10" rx="1"/><circle cx="6" cy="7" r="1.2"/><path d="M2.5 11l3-3 2.5 2.5L11 7.5l2.5 2.5"/></svg>
+          ) : isAud ? (
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="2" height="6" rx=".5"/><rect x="7" y="3" width="2" height="10" rx=".5"/><rect x="11" y="6" width="2" height="4" rx=".5"/></svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 1.5h6L12.5 4.5V14a.5.5 0 0 1-.5.5H3.5a.5.5 0 0 1-.5-.5V2a.5.5 0 0 1 .5-.5z"/><path d="M9.5 1.5v3h3"/></svg>
+          )}
           <div className="upload-pulse" />
         </div>
         <div className="upload-overlay">

@@ -7300,6 +7300,7 @@ body { overflow-x: hidden; }
 .drive-file-card.uploading { cursor: default !important; pointer-events: none; }
 .upload-thumb {
   position: relative; display: grid; place-items: center;
+  height: 150px;
   background:
     radial-gradient(120% 80% at 30% 20%, color-mix(in oklch, var(--accent) 22%, transparent), transparent 60%),
     var(--bg-2);
