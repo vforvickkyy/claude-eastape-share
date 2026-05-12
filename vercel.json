@@ -11,6 +11,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/media/share/:token",
+      "destination": "https://zzevqgnhbintrpohunjr.supabase.co/functions/v1/og-preview?token=:token"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

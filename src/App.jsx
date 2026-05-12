@@ -105,6 +105,7 @@ export default function App() {
           <Route path="/media/project/:id"        element={<LegacyProjectRedirect />} />
           <Route path="/media/asset/:id"          element={<Navigate to="/projects" replace />} />
           <Route path="/media/share/:token"       element={<MediaSharePage />} />
+          <Route path="/media/view/:token"        element={<MediaSharePage />} />
           <Route path="/share/:token"             element={<DriveSharePage />} />
           <Route path="/media/recent"             element={<Navigate to="/projects" replace />} />
           <Route path="/media/shared"             element={<Navigate to="/projects" replace />} />
