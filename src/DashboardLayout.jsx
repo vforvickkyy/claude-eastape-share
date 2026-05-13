@@ -5,7 +5,7 @@ import {
   SquaresFour, HardDrive, Trash, CaretDown, SignOut, List, X,
   UserCircle, CurrencyInr, Gear, Question, Scales,
   Plus, Briefcase, MagnifyingGlass, Eye, Users,
-  CaretLeft, CaretRight, FolderPlus, UploadSimple,
+  SidebarSimple, FolderPlus, UploadSimple,
   FolderOpen, FilmSlate, Link as LinkIcon, UserPlus,
   House, ArrowSquareOut, Clock,
 } from "@phosphor-icons/react";
@@ -311,10 +311,7 @@ export default function DashboardLayout({ children, title, crumbs }) {
               onClick={() => setCollapsed(c => !c)}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {collapsed
-                ? <CaretRight size={12} weight="bold" />
-                : <CaretLeft size={12} weight="bold" />
-              }
+              <SidebarSimple size={16} weight="bold" />
             </button>
             <button className="db-sidebar-close" onClick={() => setSideOpen(false)}>
               <X size={16} />

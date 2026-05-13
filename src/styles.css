@@ -1553,12 +1553,12 @@ body.scrollable,
   min-width: 0;
 }
 .db-brand-favicon {
-  height: 28px; width: auto;
+  height: 30px; width: auto;
   flex-shrink: 0;
   object-fit: contain;
 }
 .db-brand-logo {
-  height: 22px; width: auto;
+  height: 24px; width: auto;
   max-width: 140px;
   opacity: 1;
   overflow: hidden;
