@@ -424,6 +424,9 @@ Deno.serve(async (req) => {
       const { data: stages } = await supabase.from('pipeline_stages')
         .select('*').eq('project_id', projectId).eq('is_hidden', false).order('order_index')
 
+      const { data: projectRow } = await supabase.from('projects')
+        .select('hidden_builtin_cols').eq('id', projectId).single()
+
       // Batch fetch linked media names
       const linkedIds = (shots || []).map((s: any) => s.thumbnail_media_id).filter(Boolean)
       const mediaMap: Record<string, string> = {}
@@ -455,7 +458,7 @@ Deno.serve(async (req) => {
         }
       })
 
-      return json({ shots: shotsWithMedia, stages: stages || [] })
+      return json({ shots: shotsWithMedia, stages: stages || [], hidden_builtin_cols: projectRow?.hidden_builtin_cols ?? null })
     }
 
     // ── SHOT PIPELINE (update pipeline_stages JSONB on a shot) ────────

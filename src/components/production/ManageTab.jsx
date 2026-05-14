@@ -6,6 +6,7 @@ import {
   CaretLeft, CaretRight,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
+import { supabase } from '../../lib/supabaseClient'
 import { useProject } from '../../context/ProjectContext'
 
 import ShotListView from './views/ShotListView'
@@ -57,6 +58,7 @@ export default function ManageTab() {
     setHiddenCols(prev => {
       const next = { ...prev, [colId]: hidden }
       localStorage.setItem(`list-cols-${projectId}`, JSON.stringify(next))
+      productionApi.saveBuiltinColVisibility(projectId, next).catch(() => {})
       return next
     })
   }
@@ -77,6 +79,12 @@ export default function ManageTab() {
       setColumns(colRes.columns      || [])
       setShots(shotsRes.shots        || [])
       setTeamMembers(membersRes.members || [])
+      // Prefer DB-persisted column visibility over localStorage
+      const dbHidden = shotsRes.hidden_builtin_cols
+      if (dbHidden && typeof dbHidden === 'object') {
+        setHiddenCols(dbHidden)
+        localStorage.setItem(`list-cols-${projectId}`, JSON.stringify(dbHidden))
+      }
     } catch (err) {
       setLoadError(err?.message || 'Failed to load production data')
     }
@@ -84,6 +92,28 @@ export default function ManageTab() {
   }, [projectId])
 
   useEffect(() => { load() }, [load])
+
+  // Supabase Realtime — live sync production_shots across all users
+  useEffect(() => {
+    const channel = supabase
+      .channel(`production-shots-${projectId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'production_shots',
+        filter: `project_id=eq.${projectId}`,
+      }, payload => {
+        if (payload.eventType === 'INSERT') {
+          load() // Reload to get computed fields (thumbnails, assignee info)
+        } else if (payload.eventType === 'UPDATE') {
+          setShots(prev => prev.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s))
+        } else if (payload.eventType === 'DELETE') {
+          setShots(prev => prev.filter(s => s.id !== payload.old.id))
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [projectId, load])
 
   async function handleSeed() {
     setSeeding(true)

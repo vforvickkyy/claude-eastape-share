@@ -144,33 +144,118 @@ function ColHeader({ label, color, width, widthKey, sortKey, sort, onSort, onRes
 function CustomCell({ shot, col, colWidths, onShotUpdate }) {
   const val = shot.custom_data?.[col.name]
   const w   = colWidths[col.id] || col.width || 150
+  const [editing,    setEditing]    = useState(false)
+  const [editVal,    setEditVal]    = useState('')
+  const [selectOpen, setSelectOpen] = useState(false)
+  const selectRef = useRef()
+
+  useEffect(() => {
+    if (!selectOpen) return
+    const h = e => { if (!selectRef.current?.contains(e.target)) setSelectOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [selectOpen])
+
+  function saveCustom(newVal) {
+    if (!onShotUpdate) return
+    onShotUpdate(shot.id, { custom_data: { ...(shot.custom_data || {}), [col.name]: newVal } })
+  }
+
+  function commitText() {
+    setEditing(false)
+    const trimmed = editVal.trim() || null
+    if (trimmed !== (val ?? null)) saveCustom(trimmed)
+  }
 
   if (col.type === 'checkbox') {
     const checked = !!val
     return (
       <td style={{ width: w, minWidth: w, padding: '0 10px', verticalAlign: 'middle', textAlign: 'center' }}
-        onClick={e => { e.stopPropagation(); onShotUpdate(shot.id, { custom_data: { ...(shot.custom_data || {}), [col.name]: !checked } }) }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 5, cursor: 'pointer', background: checked ? '#6366f1' : 'transparent', border: `2px solid ${checked ? '#6366f1' : 'rgba(255,255,255,0.2)'}`, transition: 'all 0.15s' }}>
+        onClick={e => { e.stopPropagation(); if (onShotUpdate) saveCustom(!checked) }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 5, cursor: onShotUpdate ? 'pointer' : 'default', background: checked ? '#6366f1' : 'transparent', border: `2px solid ${checked ? '#6366f1' : 'rgba(255,255,255,0.2)'}`, transition: 'all 0.15s' }}>
           {checked && <Check size={12} weight="bold" style={{ color: '#fff' }} />}
         </div>
       </td>
     )
   }
+
   if (col.type === 'date') {
+    if (editing) {
+      return (
+        <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle' }} onClick={e => e.stopPropagation()}>
+          <input
+            type="date" autoFocus value={editVal}
+            onChange={e => { const d = e.target.value; setEditing(false); saveCustom(d || null) }}
+            onBlur={() => setEditing(false)}
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #6366f1', borderRadius: 5, color: '#e8e8ff', fontSize: 12, padding: '3px 6px', outline: 'none', width: '100%', colorScheme: 'dark' }}
+          />
+        </td>
+      )
+    }
     const display = val ? new Date(val).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }) : '—'
-    return <td style={{ width: w, minWidth: w, padding: '0 10px', verticalAlign: 'middle', fontSize: 12, color: val ? '#d0d0f0' : 'var(--t4)' }}>{display}</td>
-  }
-  if (col.type === 'select') {
     return (
-      <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle' }}>
-        {val
-          ? <span style={{ fontSize: 11, color: '#d0d0f0', background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '2px 8px' }}>{val}</span>
-          : <span style={{ color: 'var(--t4)', fontSize: 12 }}>—</span>}
+      <td
+        style={{ width: w, minWidth: w, padding: '0 10px', verticalAlign: 'middle', fontSize: 12, color: val ? '#d0d0f0' : 'var(--t4)', cursor: onShotUpdate ? 'pointer' : 'default' }}
+        onClick={e => { e.stopPropagation(); if (onShotUpdate) { setEditing(true); setEditVal(val || '') } }}
+      >{display}</td>
+    )
+  }
+
+  if (col.type === 'select') {
+    const options = col.options || []
+    return (
+      <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle', position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <div ref={selectRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => { if (onShotUpdate) setSelectOpen(o => !o) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: onShotUpdate ? 'pointer' : 'default', padding: '2px 4px', borderRadius: 6, color: val ? '#d0d0f0' : 'var(--t4)', fontSize: 11 }}
+          >
+            {val
+              ? <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '2px 8px' }}>{val}</span>
+              : <span>—</span>}
+          </button>
+          {selectOpen && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 8, minWidth: 120, boxShadow: '0 8px 24px rgba(0,0,0,0.6)', padding: 4 }}>
+              <button
+                onClick={() => { saveCustom(null); setSelectOpen(false) }}
+                style={{ display: 'block', width: '100%', background: 'none', border: 'none', color: 'var(--t4)', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >— None</button>
+              {options.map(opt => (
+                <button key={opt}
+                  onClick={() => { saveCustom(opt); setSelectOpen(false) }}
+                  style={{ display: 'block', width: '100%', background: val === opt ? 'rgba(99,102,241,0.15)' : 'none', border: 'none', color: val === opt ? '#a5b4fc' : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
+                  onMouseEnter={e => { if (val !== opt) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                  onMouseLeave={e => { if (val !== opt) e.currentTarget.style.background = 'none' }}
+                >{opt}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+    )
+  }
+
+  // text / number / default
+  if (editing) {
+    return (
+      <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle' }} onClick={e => e.stopPropagation()}>
+        <input
+          autoFocus value={editVal}
+          onChange={e => setEditVal(e.target.value)}
+          onBlur={commitText}
+          onKeyDown={e => { if (e.key === 'Enter') commitText(); if (e.key === 'Escape') setEditing(false) }}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid #6366f1', borderRadius: 5, color: '#e8e8ff', fontSize: 12, padding: '3px 8px', outline: 'none', boxSizing: 'border-box' }}
+        />
       </td>
     )
   }
   return (
-    <td style={{ width: w, minWidth: w, padding: '0 10px', verticalAlign: 'middle', fontSize: 12, color: val != null ? '#d0d0f0' : 'var(--t4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+    <td
+      style={{ width: w, minWidth: w, padding: '0 10px', verticalAlign: 'middle', fontSize: 12, color: val != null ? '#d0d0f0' : 'var(--t4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onShotUpdate ? 'text' : 'default' }}
+      onClick={e => { e.stopPropagation(); if (onShotUpdate) { setEditing(true); setEditVal(val != null ? String(val) : '') } }}
+    >
       {val != null ? String(val) : '—'}
     </td>
   )
