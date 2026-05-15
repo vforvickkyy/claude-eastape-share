@@ -3,15 +3,19 @@
  * Route: /share/:token
  * Features: folder navigation, breadcrumbs, list/grid toggle, subfolders, file icons.
  */
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   DownloadSimple, FolderSimple, Lock, Warning, Clock,
   MusicNote, Rows, SquaresFour, CaretRight, House,
-  ArrowLeft,
+  ArrowLeft, Play, PaperPlaneTilt, Trash, X, ArrowLeft as BackArrow,
+  CaretLeft, CaretRight as CaretRightIcon, ChatDots,
 } from '@phosphor-icons/react'
 import FileTypeIcon from './components/drive/FileTypeIcon'
 import { shareLinksApi } from './lib/api'
+
+const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatSize(bytes) {
@@ -286,6 +290,414 @@ function FileCard({ file, allowDownload }) {
   )
 }
 
+// ── Comment helpers ───────────────────────────────────────────────────────────
+const AVATAR_COLORS = ['#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#f97316']
+function avatarColor(name) {
+  let h = 0
+  for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) | 0
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+function formatDuration(s) {
+  if (s == null) return ''
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60)
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+// ── Project file tile (media card) ───────────────────────────────────────────
+function ProjectFileTile({ file, allowDownload, onClick }) {
+  const isVideo = file.mime_type?.startsWith('video/') || file.type === 'video'
+  const isImage = file.mime_type?.startsWith('image/') || file.type === 'image'
+  const canPlay  = (isVideo || isImage || file.mime_type?.startsWith('audio/')) && file.downloadUrl
+  const [hov, setHov] = useState(false)
+  return (
+    <div
+      className="media-asset-card"
+      style={{ cursor: canPlay ? 'pointer' : 'default', background: hov ? 'rgba(255,255,255,0.06)' : undefined }}
+      onClick={canPlay ? onClick : undefined}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      <div className="media-asset-thumb" style={{ position: 'relative', background: 'rgba(0,0,0,0.4)', borderRadius: '8px 8px 0 0', overflow: 'hidden', height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {file.thumbnailUrl
+          ? <img src={file.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} loading="lazy" />
+          : <FileTypeIcon mimeType={file.mime_type} fileName={file.name} size={40} />
+        }
+        {isVideo && canPlay && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hov ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.25)', transition: 'background 0.15s' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid rgba(255,255,255,0.5)' }}>
+              <Play size={18} weight="fill" style={{ color: '#fff', marginLeft: 2 }} />
+            </div>
+          </div>
+        )}
+        {file.duration != null && (
+          <span className="media-duration-badge">{formatDuration(file.duration)}</span>
+        )}
+      </div>
+      <div className="media-asset-info" style={{ padding: '8px 10px 10px' }}>
+        <p className="media-asset-name" style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</p>
+        <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
+          {mimeLabel(file.mime_type, file.name)}{file.file_size ? ` · ${formatSize(file.file_size)}` : ''}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Project folder share view ─────────────────────────────────────────────────
+function ProjectFolderView({ rootData, navData, navStack, navLoading, token, authPw, navigateInto, navigateTo }) {
+  const { rootFolder, allowDownload, allowComments } = rootData
+  const current = navData || rootData
+  const { subfolders = [], files = [] } = current
+
+  const [viewMode,    setViewMode]    = useState('grid')
+  const [activeFile,  setActiveFile]  = useState(null)
+  const [activeIdx,   setActiveIdx]   = useState(-1)
+  const [comments,    setComments]    = useState([])
+  const [cmtLoading,  setCmtLoading]  = useState(false)
+  const [newComment,  setNewComment]  = useState('')
+  const [guestName,   setGuestName]   = useState(() => localStorage.getItem('guestCommentName') || '')
+  const [submitting,  setSubmitting]  = useState(false)
+  const [ownIds,      setOwnIds]      = useState(() => { try { return JSON.parse(localStorage.getItem('guestCommentIds') || '[]') } catch { return [] } })
+  const videoRef = useRef(null)
+
+  // Close modal on Escape
+  useEffect(() => {
+    if (!activeFile) return
+    const onKey = (e) => { if (e.key === 'Escape') setActiveFile(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeFile])
+
+  async function openFile(file, idx) {
+    setActiveFile(file)
+    setActiveIdx(idx)
+    setComments([])
+    setNewComment('')
+    if (allowComments && file._source === 'media') {
+      setCmtLoading(true)
+      try {
+        const r = await fetch(`${BASE_URL}/share-resolve?token=${token}&media_id=${file.id}`)
+        const d = await r.json()
+        setComments(d.comments || [])
+      } catch {}
+      setCmtLoading(false)
+    }
+  }
+
+  function navFile(dir) {
+    const next = files[activeIdx + dir]
+    if (next) openFile(next, activeIdx + dir)
+  }
+
+  async function postComment(e) {
+    e.preventDefault()
+    if (!newComment.trim() || !activeFile) return
+    setSubmitting(true)
+    try {
+      const res = await fetch(`${BASE_URL}/media-comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY },
+        body: JSON.stringify({ assetId: activeFile.id, body: newComment.trim(), shareToken: token, guestName: guestName.trim() || 'Anonymous' }),
+      })
+      const d = await res.json()
+      if (d.comment) {
+        const name = guestName.trim() || 'Anonymous'
+        setComments(cs => [...cs, { ...d.comment, guest_name: name }])
+        setNewComment('')
+        localStorage.setItem('guestCommentName', name)
+        const nextIds = [...ownIds, d.comment.id]
+        setOwnIds(nextIds)
+        localStorage.setItem('guestCommentIds', JSON.stringify(nextIds))
+      }
+    } catch {}
+    setSubmitting(false)
+  }
+
+  async function deleteComment(id) {
+    setComments(cs => cs.filter(c => c.id !== id))
+    setOwnIds(ids => { const n = ids.filter(x => x !== id); localStorage.setItem('guestCommentIds', JSON.stringify(n)); return n })
+    try { await fetch(`${BASE_URL}/media-comments?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY } }) } catch {}
+  }
+
+  const isVideo  = f => f?.mime_type?.startsWith('video/') || f?.type === 'video'
+  const isImage  = f => f?.mime_type?.startsWith('image/') || f?.type === 'image'
+  const isAudio  = f => f?.mime_type?.startsWith('audio/') || f?.type === 'audio'
+  const canCommentOn = f => allowComments && f?._source === 'media'
+
+  const page = { minHeight: '100vh', background: '#09090f', display: 'flex', flexDirection: 'column' }
+  const card = { background: '#13131a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16 }
+
+  return (
+    <div style={page}>
+      <PageHeader />
+      <div style={{ flex: 1, padding: '28px 16px 48px', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ ...card, maxWidth: 980, width: '100%', alignSelf: 'flex-start' }}>
+
+          {/* Folder header */}
+          <div className="share-folder-header">
+            <FolderSimple size={38} weight="duotone" color="#f59e0b" style={{ flexShrink: 0 }} />
+            <div className="share-folder-header-info">
+              <h1 style={{ fontSize: 19, fontWeight: 700, margin: '0 0 2px' }}>{rootFolder.name}</h1>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', margin: 0 }}>
+                {subfolders.length > 0 && `${subfolders.length} folder${subfolders.length !== 1 ? 's' : ''} · `}
+                {files.length} file{files.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="share-folder-actions">
+              <ViewToggle view={viewMode} onChange={setViewMode} />
+              {allowDownload && files.length > 0 && (
+                <button className="btn-ghost" style={{ fontSize: 12, height: 32, padding: '0 12px' }}
+                  onClick={() => files.forEach((f, i) => f.downloadUrl && setTimeout(() => triggerDownload(f.downloadUrl, f.name), i * 200))}>
+                  <DownloadSimple size={13} /> Download all
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Breadcrumbs */}
+          {navStack.length > 0 && (
+            <div style={{ padding: '10px 22px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              <button onClick={() => navigateTo(-1)}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 12, padding: '2px 4px', borderRadius: 4 }}
+                onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}>
+                <House size={13} /> {rootFolder.name}
+              </button>
+              {navStack.map((crumb, i) => (
+                <React.Fragment key={crumb.id}>
+                  <CaretRight size={11} color="rgba(255,255,255,0.25)" />
+                  <button onClick={() => navigateTo(i)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '2px 4px', borderRadius: 4, color: i === navStack.length - 1 ? '#fff' : 'rgba(255,255,255,0.5)', fontWeight: i === navStack.length - 1 ? 600 : 400 }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                    onMouseLeave={e => e.currentTarget.style.color = i === navStack.length - 1 ? '#fff' : 'rgba(255,255,255,0.5)'}
+                  >{crumb.name}</button>
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+
+          {/* Content */}
+          <div style={{ padding: '16px 20px 24px', position: 'relative' }}>
+            {navLoading && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(19,19,26,0.7)', zIndex: 10, borderRadius: '0 0 16px 16px' }}>
+                <span className="spinner" style={{ width: 28, height: 28 }} />
+              </div>
+            )}
+
+            {subfolders.length === 0 && files.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.28)', fontSize: 14, padding: '32px 0' }}>This folder is empty.</p>
+            ) : (
+              <>
+                {subfolders.length > 0 && (
+                  <div style={{ marginBottom: files.length > 0 ? 20 : 0 }}>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Folders</p>
+                    <div className="share-folder-grid">
+                      {subfolders.map(sf => <FolderCard key={sf.id} folder={sf} onClick={navigateInto} />)}
+                    </div>
+                  </div>
+                )}
+
+                {files.length > 0 && (
+                  <div>
+                    {subfolders.length > 0 && <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Files</p>}
+                    {viewMode === 'list' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {files.map((f, idx) => (
+                          <div key={f.id} className="share-file-row" onClick={() => f.downloadUrl && openFile(f, idx)} style={{ cursor: f.downloadUrl ? 'pointer' : 'default' }}>
+                            <ThumbOrIcon file={f} size={34} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p className="share-file-row-name" style={{ margin: 0, fontWeight: 600, color: '#fff' }} title={f.name}>{f.name}</p>
+                              <p className="share-file-row-meta" style={{ margin: 0 }}>{mimeLabel(f.mime_type, f.name)} · {formatSize(f.file_size)}</p>
+                            </div>
+                            {isVideo(f) && f.downloadUrl && <Play size={14} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />}
+                            {allowDownload && f.downloadUrl && (
+                              <button onClick={e => { e.stopPropagation(); triggerDownload(f.downloadUrl, f.name) }} title="Download"
+                                style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.25)'; e.currentTarget.style.color = '#a78bfa' }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}>
+                                <DownloadSimple size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="media-asset-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+                        {files.map((f, idx) => (
+                          <ProjectFileTile key={f.id} file={f} allowDownload={allowDownload} onClick={() => openFile(f, idx)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      <PageFooter />
+
+      {/* ── Media modal ── */}
+      {activeFile && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 9999, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          onClick={() => setActiveFile(null)}
+        >
+          {/* Modal topbar */}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: '#0f0f18', flexShrink: 0 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={() => setActiveFile(null)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.55)', fontSize: 13, padding: '4px 8px', borderRadius: 6 }}
+              onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}>
+              <BackArrow size={14} /> Back to folder
+            </button>
+            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>|</span>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.55)', padding: '4px 6px', borderRadius: 5, display: 'flex', alignItems: 'center' }} disabled={activeIdx <= 0} onClick={() => navFile(-1)}
+              onMouseEnter={e => { if (activeIdx > 0) e.currentTarget.style.color = '#fff' }}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}>
+              <CaretLeft size={16} />
+            </button>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', minWidth: 40, textAlign: 'center' }}>{activeIdx + 1}/{files.length}</span>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.55)', padding: '4px 6px', borderRadius: 5, display: 'flex', alignItems: 'center' }} disabled={activeIdx >= files.length - 1} onClick={() => navFile(1)}
+              onMouseEnter={e => { if (activeIdx < files.length - 1) e.currentTarget.style.color = '#fff' }}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}>
+              <CaretRightIcon size={16} />
+            </button>
+            <span style={{ fontWeight: 600, fontSize: 13, flex: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#fff' }}>{activeFile.name}</span>
+            {allowDownload && activeFile.downloadUrl && (
+              <button className="btn-ghost" style={{ fontSize: 12, flexShrink: 0 }} onClick={() => triggerDownload(activeFile.downloadUrl, activeFile.name)}>
+                <DownloadSimple size={13} /> Download
+              </button>
+            )}
+            <button onClick={() => setActiveFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', padding: 4 }}
+              onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}>
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Modal body */}
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+
+            {/* Player area */}
+            <div className="sp-player-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
+              {isVideo(activeFile) && activeFile.downloadUrl ? (
+                <video
+                  key={activeFile.id}
+                  ref={videoRef}
+                  src={activeFile.downloadUrl}
+                  controls
+                  autoPlay
+                  poster={activeFile.thumbnailUrl || undefined}
+                  style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 10, background: '#000', display: 'block' }}
+                />
+              ) : isImage(activeFile) && activeFile.downloadUrl ? (
+                <img src={activeFile.downloadUrl} alt={activeFile.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }} />
+              ) : isAudio(activeFile) && activeFile.downloadUrl ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+                  <MusicNote size={72} weight="duotone" style={{ color: '#34d399' }} />
+                  <audio key={activeFile.id} controls autoPlay src={activeFile.downloadUrl} style={{ width: '80%', maxWidth: 440 }} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: 'rgba(255,255,255,0.35)' }}>
+                  <FileTypeIcon mimeType={activeFile.mime_type} fileName={activeFile.name} size={64} />
+                  <p style={{ fontSize: 13, margin: 0 }}>Preview not available</p>
+                  {allowDownload && activeFile.downloadUrl && (
+                    <button className="btn-primary" onClick={() => triggerDownload(activeFile.downloadUrl, activeFile.name)}>
+                      <DownloadSimple size={14} /> Download
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Comments sidebar */}
+            {canCommentOn(activeFile) && (
+              <div className="sp-sidebar" style={{ width: 300, borderLeft: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', background: '#0f0f18', flexShrink: 0 }}>
+                <div className="sp-sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ChatDots size={14} /> Comments
+                  </span>
+                  <span className="sp-comment-count" style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', borderRadius: 10, padding: '1px 7px' }}>{comments.length}</span>
+                </div>
+
+                <div className="sp-comments" style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+                  {cmtLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><span className="spinner" style={{ width: 20, height: 20 }} /></div>
+                  ) : comments.length === 0 ? (
+                    <p className="sp-comments-empty" style={{ textAlign: 'center', color: 'rgba(255,255,255,0.28)', fontSize: 13, padding: '24px 16px' }}>No comments yet.<br />Be the first!</p>
+                  ) : (
+                    comments.filter(c => !c.parent_comment_id).map(c => {
+                      const name = c.profiles?.full_name || c.guest_name || 'Anonymous'
+                      return (
+                        <div key={c.id} className="sp-comment-item" style={{ padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                            <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarColor(name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{name}</span>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>{timeAgo(c.created_at)}</span>
+                            {ownIds.includes(c.id) && (
+                              <button onClick={() => deleteComment(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', padding: 0 }}
+                                onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}>
+                                <Trash size={11} />
+                              </button>
+                            )}
+                          </div>
+                          <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>{c.body}</p>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                <form className="sp-compose" onSubmit={postComment} style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input
+                    className="sp-compose-field"
+                    placeholder="Your name (optional)"
+                    value={guestName}
+                    onChange={e => setGuestName(e.target.value)}
+                    onBlur={e => { if (e.target.value.trim()) localStorage.setItem('guestCommentName', e.target.value.trim()) }}
+                    disabled={submitting}
+                    style={{ fontSize: 12, padding: '6px 10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#fff', outline: 'none' }}
+                  />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      className="sp-compose-field sp-compose-comment"
+                      placeholder="Add a comment…"
+                      value={newComment}
+                      onChange={e => setNewComment(e.target.value)}
+                      disabled={submitting}
+                      style={{ flex: 1, fontSize: 12, padding: '6px 10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#fff', outline: 'none' }}
+                    />
+                    <button type="submit" disabled={submitting || !newComment.trim()}
+                      style={{ width: 34, height: 34, borderRadius: 7, background: 'var(--accent)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', opacity: (!newComment.trim() || submitting) ? 0.4 : 1 }}>
+                      <PaperPlaneTilt size={14} weight="fill" />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function DriveSharePage() {
   const { token }  = useParams()
@@ -441,8 +853,24 @@ export default function DriveSharePage() {
     )
   }
 
-  // ── Folder view (drive_folder or project_folder) ──────────────────────────
-  if (rootData.type === 'drive_folder' || rootData.type === 'project_folder') {
+  // ── Project folder view (media grid + player + comments) ─────────────────
+  if (rootData.type === 'project_folder') {
+    return (
+      <ProjectFolderView
+        rootData={rootData}
+        navData={navData}
+        navStack={navStack}
+        navLoading={navLoading}
+        token={token}
+        authPw={authPw}
+        navigateInto={navigateInto}
+        navigateTo={navigateTo}
+      />
+    )
+  }
+
+  // ── Folder view (drive_folder) ────────────────────────────────────────────
+  if (rootData.type === 'drive_folder') {
     const { rootFolder, allowDownload } = rootData
     const current = navData || rootData
     const { subfolders = [], files = [] } = current
