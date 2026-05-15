@@ -5,7 +5,7 @@
  *   onClose: () => void
  */
 import React, { useState, useEffect } from 'react'
-import { X, Link, Check, Eye, DownloadSimple, Lock, ClockCountdown, Copy, ShieldCheck } from '@phosphor-icons/react'
+import { X, Link, Check, Eye, DownloadSimple, Lock, ClockCountdown, Copy, ShieldCheck, ChatDots } from '@phosphor-icons/react'
 import { shareLinksApi } from '../../lib/api'
 import { showToast } from '../ui/Toast'
 
@@ -35,14 +35,16 @@ export default function ShareModal({ item, onClose }) {
   const [shareUrl, setShareUrl]     = useState('')
 
   // Settings
-  const [allowDownload, setAllowDownload] = useState(true)
-  const [expiry,        setExpiry]        = useState('')
-  const [password,      setPassword]      = useState('')
-  const [showPw,        setShowPw]        = useState(false)
-  const [pwMode,        setPwMode]        = useState(false) // true = password tab active
+  const [allowDownload,  setAllowDownload]  = useState(true)
+  const [allowComments,  setAllowComments]  = useState(false)
+  const [expiry,         setExpiry]         = useState('')
+  const [password,       setPassword]       = useState('')
+  const [showPw,         setShowPw]         = useState(false)
+  const [pwMode,         setPwMode]         = useState(false)
 
-  const isFile   = item.type === 'file'
-  const isFolder = item.type === 'folder'
+  const isFile          = item.type === 'file'
+  const isFolder        = item.type === 'folder'
+  const isProjectFolder = item.type === 'project_folder'
 
   // Load existing share link on open
   useEffect(() => {
@@ -51,13 +53,16 @@ export default function ShareModal({ item, onClose }) {
       try {
         const res = isFile
           ? await shareLinksApi.listForDriveFile(item.id)
-          : await shareLinksApi.listForDriveFolder(item.id)
+          : isProjectFolder
+            ? await shareLinksApi.listForProjectFolder(item.id)
+            : await shareLinksApi.listForDriveFolder(item.id)
         if (!mounted) return
         const existing = res.links?.[0]
         if (existing) {
           setLink(existing)
           setShareUrl(`${window.location.origin}/share/${existing.short_token || existing.token}`)
           setAllowDownload(existing.allow_download ?? true)
+          setAllowComments(existing.allow_comments ?? false)
           if (existing.password) setPwMode(true)
         }
       } catch {}
@@ -76,25 +81,27 @@ export default function ShareModal({ item, onClose }) {
                       : null
       const opts = {
         allow_download: allowDownload,
+        allow_comments: allowComments,
         expires_at: expiresAt,
         password: (pwMode && password) ? password : null,
         file_name: item.name,
       }
 
       if (link) {
-        // Update existing link
         const res = await shareLinksApi.update(link.id, {
           allow_download: allowDownload,
+          allow_comments: allowComments,
           expires_at: expiresAt,
           password: (pwMode && password) ? password : link.password || null,
         })
         setLink(res.link)
         showToast('Share settings updated', 'success')
       } else {
-        // Create new link
         const res = isFile
           ? await shareLinksApi.createForDriveFile(item.id, opts)
-          : await shareLinksApi.createForDriveFolder(item.id, opts)
+          : isProjectFolder
+            ? await shareLinksApi.createForProjectFolder(item.id, opts)
+            : await shareLinksApi.createForDriveFolder(item.id, opts)
         setLink(res.link)
         setShareUrl(`${window.location.origin}/share/${res.link.short_token || res.link.token}`)
         showToast('Share link created', 'success')
@@ -171,6 +178,24 @@ export default function ShareModal({ item, onClose }) {
                     </button>
                   )
                 })}
+              </div>
+            </div>
+
+            <div className="sm-divider" />
+
+            {/* ── COMMENTS ── */}
+            <div className="sm-section">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <p className="sm-section-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ChatDots size={12} style={{ verticalAlign: 'middle' }} />
+                  Allow comments
+                </p>
+                <button
+                  onClick={() => setAllowComments(p => !p)}
+                  className={`sm-toggle${allowComments ? ' on' : ''}`}
+                >
+                  {allowComments ? 'On' : 'Off'}
+                </button>
               </div>
             </div>
 

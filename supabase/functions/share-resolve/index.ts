@@ -49,12 +49,24 @@ async function presignGet(endpoint: string, bucket: string, key: string, accessK
   return `${endpoint}/${bucket}/${encodedKey}?${canonicalQs}&X-Amz-Signature=${sig}`
 }
 
-// Check if folderId is a descendant of (or equal to) ancestorId
+// Check if folderId is a descendant of (or equal to) ancestorId in drive_folders
 async function isDescendantOf(supabase: ReturnType<typeof createClient>, folderId: string, ancestorId: string): Promise<boolean> {
   let cur = folderId
   for (let i = 0; i < 25; i++) {
     if (cur === ancestorId) return true
     const { data: f } = await supabase.from('drive_folders').select('parent_id').eq('id', cur).single()
+    if (!f || !f.parent_id) return false
+    cur = f.parent_id
+  }
+  return false
+}
+
+// Check if folderId is a descendant of (or equal to) ancestorId in project_folders
+async function isProjectFolderDescendantOf(supabase: ReturnType<typeof createClient>, folderId: string, ancestorId: string): Promise<boolean> {
+  let cur = folderId
+  for (let i = 0; i < 25; i++) {
+    if (cur === ancestorId) return true
+    const { data: f } = await supabase.from('project_folders').select('parent_id').eq('id', cur).single()
     if (!f || !f.parent_id) return false
     cur = f.parent_id
   }
@@ -68,14 +80,14 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const url = new URL(req.url)
-    const token      = url.searchParams.get('token')
-    const password   = url.searchParams.get('password')
+    const token       = url.searchParams.get('token')
+    const password    = url.searchParams.get('password')
     const subFolderId = url.searchParams.get('subfolder_id')
     if (!token) return json({ error: 'Token required' }, 400)
 
     const { data: link, error } = await supabase
       .from('share_links')
-      .select('*, project_media(*), projects(id, name, color, icon), drive_files(id, name, mime_type, file_size, wasabi_key, thumbnail_key), drive_folders(id, name)')
+      .select('*, project_media(*), projects(id, name, color, icon), drive_files(id, name, mime_type, file_size, wasabi_key, thumbnail_key), drive_folders(id, name), project_folders(id, name)')
       .or(`token.eq.${token},short_token.eq.${token}`)
       .single()
 
@@ -112,7 +124,7 @@ Deno.serve(async (req) => {
       return { ...media, videoUrl, thumbnailUrl }
     }
 
-    // ── Single media asset share ──────────────────────────────────────
+    // ── Single media asset share ──────────────────────────────────────────────
     if (link.project_media_id && link.project_media) {
       const asset = await signMedia(link.project_media)
       let comments: unknown[] = []
@@ -127,7 +139,7 @@ Deno.serve(async (req) => {
       return json({ asset, allowDownload: link.allow_download ?? true, allowComments: link.allow_comments ?? false, comments })
     }
 
-    // ── Project-level share ───────────────────────────────────────────
+    // ── Project-level share ───────────────────────────────────────────────────
     if (link.project_id && !link.project_media_id) {
       const { data: assets } = await supabase
         .from('project_media')
@@ -139,7 +151,7 @@ Deno.serve(async (req) => {
       return json({ type: 'project', project: link.projects, assets: enriched, allowDownload: link.allow_download ?? true })
     }
 
-    // ── Drive file share ──────────────────────────────────────────────
+    // ── Drive file share ──────────────────────────────────────────────────────
     if (link.drive_file_id && link.drive_files) {
       const f = link.drive_files
       let downloadUrl: string | null = null
@@ -154,16 +166,14 @@ Deno.serve(async (req) => {
       return json({ type: 'drive_file', file: { ...f, downloadUrl, thumbnailUrl }, allowDownload: link.allow_download ?? true })
     }
 
-    // ── Drive folder share ────────────────────────────────────────────
+    // ── Drive folder share ────────────────────────────────────────────────────
     if (link.drive_folder_id && link.drive_folders) {
       const rootFolder = link.drive_folders
 
-      // Determine which folder level to list
       let listFolderId = link.drive_folder_id
       let currentFolder: any = rootFolder
 
       if (subFolderId && subFolderId !== link.drive_folder_id) {
-        // Security: verify subfolder is actually a descendant of the shared root
         const ok = await isDescendantOf(supabase, subFolderId, link.drive_folder_id)
         if (!ok) return json({ error: 'Access denied' }, 403)
         const { data: sf } = await supabase.from('drive_folders').select('id, name, parent_id').eq('id', subFolderId).single()
@@ -172,7 +182,6 @@ Deno.serve(async (req) => {
         currentFolder = sf
       }
 
-      // Fetch files and sub-folders at current level in parallel
       const [filesResult, subfoldersResult] = await Promise.all([
         supabase.from('drive_files')
           .select('id, name, mime_type, file_size, wasabi_key, thumbnail_key, created_at')
@@ -205,6 +214,80 @@ Deno.serve(async (req) => {
         subfolders: subfoldersResult.data || [],
         files: enrichedFiles,
         allowDownload: link.allow_download ?? true,
+      })
+    }
+
+    // ── Project folder share ──────────────────────────────────────────────────
+    if (link.project_folder_id && link.project_folders) {
+      const rootFolder = link.project_folders
+
+      let listFolderId = link.project_folder_id
+      let currentFolder: any = rootFolder
+
+      if (subFolderId && subFolderId !== link.project_folder_id) {
+        const ok = await isProjectFolderDescendantOf(supabase, subFolderId, link.project_folder_id)
+        if (!ok) return json({ error: 'Access denied' }, 403)
+        const { data: sf } = await supabase.from('project_folders').select('id, name, parent_id').eq('id', subFolderId).single()
+        if (!sf) return json({ error: 'Subfolder not found' }, 404)
+        listFolderId = subFolderId
+        currentFolder = sf
+      }
+
+      const [mediaResult, filesResult, subfoldersResult] = await Promise.all([
+        supabase.from('project_media')
+          .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, file_size, created_at')
+          .eq('folder_id', listFolderId)
+          .eq('is_trashed', false)
+          .order('name'),
+        supabase.from('project_files')
+          .select('id, name, mime_type, wasabi_key, thumbnail_key, file_size, created_at')
+          .eq('folder_id', listFolderId)
+          .order('name'),
+        supabase.from('project_folders')
+          .select('id, name, created_at')
+          .eq('parent_id', listFolderId)
+          .order('name'),
+      ])
+
+      // Sign media files
+      const signedMedia = await Promise.all((mediaResult.data || []).map(async (m: any) => {
+        let downloadUrl: string | null = null
+        let thumbnailUrl: string | null = null
+        if (m.wasabi_key && wKey) {
+          try { downloadUrl = await presignGet(wEndpoint, wBucket, m.wasabi_key, wKey, wSecret, wRegion, 14400, m.name) } catch {}
+        }
+        const thumbKey = m.wasabi_thumbnail_key || (m.type === 'image' || m.mime_type?.startsWith('image/') ? m.wasabi_key : null)
+        if (thumbKey && wKey) {
+          try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
+        }
+        return { ...m, downloadUrl, thumbnailUrl }
+      }))
+
+      // Sign raw files
+      const signedFiles = await Promise.all((filesResult.data || []).map(async (f: any) => {
+        let downloadUrl: string | null = null
+        let thumbnailUrl: string | null = null
+        if (f.wasabi_key && wKey) {
+          try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion, 14400, f.name) } catch {}
+        }
+        const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
+        if (thumbKey && wKey) {
+          try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
+        }
+        return { ...f, downloadUrl, thumbnailUrl }
+      }))
+
+      // Merge and sort all files by name
+      const allFiles = [...signedMedia, ...signedFiles].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+      return json({
+        type: 'project_folder',
+        rootFolder,
+        currentFolder,
+        subfolders: subfoldersResult.data || [],
+        files: allFiles,
+        allowDownload: link.allow_download ?? true,
+        allowComments: link.allow_comments ?? false,
       })
     }
 

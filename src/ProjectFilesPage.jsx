@@ -7,12 +7,13 @@ import {
   Trash, PencilSimple, DownloadSimple, CheckCircle, X,
   CaretRight, House, Play, ArrowLeft, ArrowRight,
   CheckSquare, Square, Copy, Tag, CaretRight as ChevronRight,
-  ArrowsDownUp, ArrowUp, ArrowDown, CloudArrowUp,
+  ArrowsDownUp, ArrowUp, ArrowDown, CloudArrowUp, LinkSimple,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
 import { projectMediaApi, projectFilesApi, projectFoldersApi, shareLinksApi, formatSize } from "./lib/api";
 import { useUpload } from "./context/UploadContext";
+import ShareModal from "./components/drive/ShareModal";
 import { uploadMediaFile, ingestToCloudflare } from "./lib/mediaUpload";
 
 const STATUS_COLORS = {
@@ -111,6 +112,9 @@ export default function ProjectFilesPage() {
 
   // Background right-click context menu
   const [bgCtxMenu, setBgCtxMenu] = useState(null);
+
+  // Share modal
+  const [shareTarget, setShareTarget] = useState(null); // { id, name }
 
   // Preview state
   const [preview,        setPreview]        = useState(null);
@@ -867,6 +871,9 @@ export default function ProjectFilesPage() {
               <button onClick={() => { navigate(`/projects/${projectId}/files/folder/${ctxMenu.item.id}`); closeCtx(); }}>
                 <FolderOpen size={13} /> Open
               </button>
+              <button onClick={() => { setShareTarget({ id: ctxMenu.item.id, name: ctxMenu.item.name }); closeCtx(); }}>
+                <LinkSimple size={13} /> Share
+              </button>
               {canEdit && (
                 <>
                   <button onClick={() => { setRenameItem({ ...ctxMenu.item, _type: "folder" }); setRenameVal(ctxMenu.item.name); closeCtx(); }}>
@@ -1034,6 +1041,14 @@ export default function ProjectFilesPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Share modal */}
+      {shareTarget && (
+        <ShareModal
+          item={{ id: shareTarget.id, name: shareTarget.name, type: 'project_folder' }}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
 
       {/* Hidden file input */}
       <input

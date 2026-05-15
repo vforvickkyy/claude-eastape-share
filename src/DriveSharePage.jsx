@@ -441,8 +441,8 @@ export default function DriveSharePage() {
     )
   }
 
-  // ── Folder view ────────────────────────────────────────────────────────────
-  if (rootData.type === 'drive_folder') {
+  // ── Folder view (drive_folder or project_folder) ──────────────────────────
+  if (rootData.type === 'drive_folder' || rootData.type === 'project_folder') {
     const { rootFolder, allowDownload } = rootData
     const current = navData || rootData
     const { subfolders = [], files = [] } = current

@@ -29,20 +29,21 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
     const url = new URL(req.url)
-    const linkId    = url.searchParams.get('id')
-    const projectId = url.searchParams.get('projectId')
-    const mediaId   = url.searchParams.get('mediaId')
-
-    const driveFileId   = url.searchParams.get('driveFileId')
-    const driveFolderId = url.searchParams.get('driveFolderId')
+    const linkId          = url.searchParams.get('id')
+    const projectId       = url.searchParams.get('projectId')
+    const mediaId         = url.searchParams.get('mediaId')
+    const driveFileId     = url.searchParams.get('driveFileId')
+    const driveFolderId   = url.searchParams.get('driveFolderId')
+    const projectFolderId = url.searchParams.get('projectFolderId')
 
     // GET — list share links
     if (req.method === 'GET') {
-      let q = supabase.from('share_links').select('*, project_media(*), project_files(name, mime_type), drive_files(name, mime_type, file_size), drive_folders(name)').eq('created_by', user.id).order('created_at', { ascending: false })
-      if (projectId)     q = q.eq('project_id', projectId)
-      if (mediaId)       q = q.eq('project_media_id', mediaId)
-      if (driveFileId)   q = q.eq('drive_file_id', driveFileId)
-      if (driveFolderId) q = q.eq('drive_folder_id', driveFolderId)
+      let q = supabase.from('share_links').select('*, project_media(*), project_files(name, mime_type), drive_files(name, mime_type, file_size), drive_folders(name), project_folders(name)').eq('created_by', user.id).order('created_at', { ascending: false })
+      if (projectId)       q = q.eq('project_id', projectId)
+      if (mediaId)         q = q.eq('project_media_id', mediaId)
+      if (driveFileId)     q = q.eq('drive_file_id', driveFileId)
+      if (driveFolderId)   q = q.eq('drive_folder_id', driveFolderId)
+      if (projectFolderId) q = q.eq('project_folder_id', projectFolderId)
       const { data: links, error } = await q
       if (error) return json({ error: error.message }, 500)
       return json({ links: links || [] })
@@ -51,16 +52,17 @@ Deno.serve(async (req) => {
     // POST — create share link
     if (req.method === 'POST') {
       const body = await req.json()
-      const { project_media_id, project_file_id, project_id, drive_file_id, drive_folder_id, allow_download, allow_comments, access_type, password, expires_at, recipient_email, share_message, file_name } = body
+      const { project_media_id, project_file_id, project_id, drive_file_id, drive_folder_id, project_folder_id, allow_download, allow_comments, access_type, password, expires_at, recipient_email, share_message, file_name } = body
 
-      if (!project_media_id && !project_file_id && !project_id && !drive_file_id && !drive_folder_id) {
-        return json({ error: 'One of project_media_id, project_file_id, project_id, drive_file_id, or drive_folder_id required' }, 400)
+      if (!project_media_id && !project_file_id && !project_id && !drive_file_id && !drive_folder_id && !project_folder_id) {
+        return json({ error: 'One of project_media_id, project_file_id, project_id, drive_file_id, drive_folder_id, or project_folder_id required' }, 400)
       }
 
       const { data: link, error } = await supabase.from('share_links').insert({
         created_by: user.id, project_media_id, project_file_id, project_id,
-        drive_file_id: drive_file_id || null,
-        drive_folder_id: drive_folder_id || null,
+        drive_file_id:     drive_file_id     || null,
+        drive_folder_id:   drive_folder_id   || null,
+        project_folder_id: project_folder_id || null,
         allow_download: allow_download ?? true,
         allow_comments: allow_comments ?? false,
         access_type: access_type || 'anyone',
@@ -69,15 +71,17 @@ Deno.serve(async (req) => {
       }).select().single()
       if (error) return json({ error: error.message }, 500)
 
-      const baseUrl = Deno.env.get('SITE_URL') || 'https://eastapestudio.vercel.app'
-      const isDriveShare = !!(drive_file_id || drive_folder_id)
-      const shareUrl = isDriveShare ? `${baseUrl}/share/${link.token}` : `${baseUrl}/media/share/${link.token}`
+      const baseUrl = Deno.env.get('SITE_URL') || 'https://studio.eastape.com'
+      const isPublicFolderShare = !!(drive_file_id || drive_folder_id || project_folder_id)
+      const shareUrl = isPublicFolderShare
+        ? `${baseUrl}/share/${link.token}`
+        : `${baseUrl}/media/share/${link.token}`
 
       // Send share email if recipient provided (non-fatal)
       if (recipient_email) {
         try {
           const { data: sharer } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
-          const displayName = file_name || (drive_file_id ? 'a file' : drive_folder_id ? 'a folder' : project_media_id ? 'a video' : project_file_id ? 'a file' : 'a project')
+          const displayName = file_name || (drive_file_id ? 'a file' : drive_folder_id ? 'a folder' : project_folder_id ? 'a folder' : project_media_id ? 'a video' : project_file_id ? 'a file' : 'a project')
           const expiresFormatted = expires_at
             ? new Date(expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             : null
@@ -98,7 +102,7 @@ Deno.serve(async (req) => {
       return json({ link, shareUrl })
     }
 
-    // PUT — update (toggle allow_download, access_type, etc.)
+    // PUT — update
     if (req.method === 'PUT') {
       if (!linkId) return json({ error: 'id required' }, 400)
       const body = await req.json()

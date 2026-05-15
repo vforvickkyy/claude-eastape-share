@@ -299,6 +299,9 @@ export const shareLinksApi = {
     if (res.links?.length) return { link: res.links[0], shareUrl: `${window.location.origin}/share/${res.links[0].short_token || res.links[0].token}` }
     return post(`${BASE}/share-links`, { drive_folder_id: folderId, allow_download: true, ...opts }, true)
   },
+  // Project-folder-specific helpers
+  listForProjectFolder:   (folderId)        => get(`${BASE}/share-links`, { projectFolderId: folderId }, true),
+  createForProjectFolder: (folderId, opts={}) => post(`${BASE}/share-links`, { project_folder_id: folderId, allow_download: true, ...opts }, true),
 }
 
 // ── User ───────────────────────────────────────────────────────────
