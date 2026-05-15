@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
     const token       = url.searchParams.get('token')
     const password    = url.searchParams.get('password')
     const subFolderId = url.searchParams.get('subfolder_id')
+    const mediaId     = url.searchParams.get('media_id')
     if (!token) return json({ error: 'Token required' }, 400)
 
     const { data: link, error } = await supabase
@@ -103,6 +104,20 @@ Deno.serve(async (req) => {
       .update({ view_count: (link.view_count || 0) + 1, last_accessed_at: new Date().toISOString() })
       .eq('id', link.id)
       .then(() => {})
+
+    // ── Per-media comments request (project_folder share) ────────────────────
+    if (mediaId && link.project_folder_id && link.allow_comments) {
+      const { data: mediaRow } = await supabase.from('project_media').select('folder_id').eq('id', mediaId).single()
+      if (!mediaRow) return json({ error: 'Media not found' }, 404)
+      const ok = await isProjectFolderDescendantOf(supabase, mediaRow.folder_id, link.project_folder_id)
+      if (!ok) return json({ error: 'Access denied' }, 403)
+      const { data: comments } = await supabase
+        .from('project_media_comments')
+        .select('*, profiles:user_id(full_name, avatar_url)')
+        .eq('media_id', mediaId)
+        .order('created_at')
+      return json({ comments: comments || [] })
+    }
 
     const wEndpoint = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '') || 'https://s3.ap-southeast-1.wasabisys.com'
     const wBucket   = Deno.env.get('AWS_BUCKET_NAME') ?? Deno.env.get('WASABI_BUCKET') ?? ''
@@ -235,7 +250,7 @@ Deno.serve(async (req) => {
 
       const [mediaResult, filesResult, subfoldersResult] = await Promise.all([
         supabase.from('project_media')
-          .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, file_size, created_at')
+          .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, file_size, created_at, cloudflare_uid, cloudflare_status, duration')
           .eq('folder_id', listFolderId)
           .eq('is_trashed', false)
           .order('name'),
@@ -260,7 +275,7 @@ Deno.serve(async (req) => {
         if (thumbKey && wKey) {
           try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
         }
-        return { ...m, downloadUrl, thumbnailUrl }
+        return { ...m, downloadUrl, thumbnailUrl, videoUrl: downloadUrl, _source: 'media' }
       }))
 
       // Sign raw files
@@ -274,7 +289,7 @@ Deno.serve(async (req) => {
         if (thumbKey && wKey) {
           try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
         }
-        return { ...f, downloadUrl, thumbnailUrl }
+        return { ...f, downloadUrl, thumbnailUrl, _source: 'file' }
       }))
 
       // Merge and sort all files by name

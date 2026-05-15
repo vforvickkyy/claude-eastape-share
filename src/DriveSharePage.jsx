@@ -12,6 +12,7 @@ import {
   CaretLeft, CaretRight as CaretRightIcon, ChatDots,
 } from '@phosphor-icons/react'
 import FileTypeIcon from './components/drive/FileTypeIcon'
+import CloudflareVideoPlayer from './components/media/CloudflareVideoPlayer'
 import { shareLinksApi } from './lib/api'
 
 const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
@@ -592,11 +593,19 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
 
             {/* Player area */}
-            <div className="sp-player-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
-              {isVideo(activeFile) && activeFile.downloadUrl ? (
+            <div className="sp-player-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isVideo(activeFile) && activeFile._source === 'media' ? 0 : 16, overflow: 'hidden' }}>
+              {isVideo(activeFile) && activeFile._source === 'media' ? (
+                <div key={activeFile.id} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 320, background: '#000' }}>
+                  <CloudflareVideoPlayer
+                    mediaId={activeFile.id}
+                    cloudflareUid={activeFile.cloudflare_uid}
+                    cloudflareStatus={activeFile.cloudflare_status}
+                    fallbackUrl={activeFile.downloadUrl}
+                  />
+                </div>
+              ) : isVideo(activeFile) && activeFile.downloadUrl ? (
                 <video
                   key={activeFile.id}
-                  ref={videoRef}
                   src={activeFile.downloadUrl}
                   controls
                   autoPlay
