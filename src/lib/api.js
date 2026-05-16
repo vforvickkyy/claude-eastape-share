@@ -447,6 +447,12 @@ export const productionApi = {
   // Update shot assignee
   updateShotAssignee: (shotId, assignedTo, customAssignee) =>
     patch(`${PROD}?resource=update_shot&shot_id=${shotId}`, {}, { assigned_to: assignedTo || null, custom_assignee: customAssignee || null }, true),
+
+  // Auto-sync drive → manage tab
+  syncFolderToManage: (folderId, projectId) =>
+    post(`${PROD}?resource=sync_folder_to_manage`, { folder_id: folderId, project_id: projectId }, true),
+  syncMediaToManage: (mediaId, projectId, folderId) =>
+    post(`${PROD}?resource=sync_media_to_manage`, { media_id: mediaId, project_id: projectId, folder_id: folderId || null }, true),
 }
 
 // ── Utility ────────────────────────────────────────────────────────

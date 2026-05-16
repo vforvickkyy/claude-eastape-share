@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
                 projectName: project?.name || 'a project',
                 dueDate: data.due_date ? formatDate(data.due_date) : null,
                 priority: data.custom_data?.priority || null,
-                projectUrl: `https://claude-eastape-share.vercel.app/projects/${existing.project_id}`,
+                projectUrl: `https://studio.eastape.com/projects/${existing.project_id}`,
               }
             })
           } catch {}
@@ -406,15 +406,22 @@ Deno.serve(async (req) => {
     if (resource === 'project_members_list') {
       if (!projectId) return json({ error: 'project_id required' }, 400)
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
-      const { data: members } = await supabase
-        .from('project_members')
-        .select('user_id, role, profiles:user_id(full_name, avatar_url)')
-        .eq('project_id', projectId).eq('accepted', true)
-      return json({ members: (members || []).map((m: any) => ({
-        user_id: m.user_id, role: m.role,
-        full_name: m.profiles?.full_name || null,
-        avatar_url: m.profiles?.avatar_url || null,
-      })) })
+      const [{ data: projRow }, { data: members }] = await Promise.all([
+        supabase.from('projects').select('user_id, profiles:user_id(full_name, avatar_url)').eq('id', projectId).single(),
+        supabase.from('project_members').select('user_id, role, profiles:user_id(full_name, avatar_url)').eq('project_id', projectId).eq('accepted', true),
+      ])
+      const result: any[] = []
+      // Add project owner first (if not already a project_member row)
+      if (projRow?.user_id) {
+        const ownerInMembers = (members || []).some((m: any) => m.user_id === projRow.user_id)
+        if (!ownerInMembers) {
+          result.push({ user_id: projRow.user_id, role: 'owner', full_name: (projRow.profiles as any)?.full_name || null, avatar_url: (projRow.profiles as any)?.avatar_url || null })
+        }
+      }
+      for (const m of (members || [])) {
+        result.push({ user_id: (m as any).user_id, role: (m as any).role, full_name: (m as any).profiles?.full_name || null, avatar_url: (m as any).profiles?.avatar_url || null })
+      }
+      return json({ members: result })
     }
 
     // ── SHOTS WITH MEDIA ─────────────────────────────────────────────
@@ -434,13 +441,16 @@ Deno.serve(async (req) => {
       const { data: projectRow } = await supabase.from('projects')
         .select('hidden_builtin_cols').eq('id', projectId).single()
 
-      // Batch fetch linked media names
+      // Batch fetch linked media names + Cloudflare info for thumbnails
       const linkedIds = (shots || []).map((s: any) => s.thumbnail_media_id).filter(Boolean)
-      const mediaMap: Record<string, string> = {}
+      type MediaInfo = { name: string; cloudflare_uid: string | null; cloudflare_status: string | null }
+      const mediaMap: Record<string, MediaInfo> = {}
       if (linkedIds.length > 0) {
         const { data: mediaRows } = await supabase
-          .from('project_media').select('id, name').in('id', linkedIds)
-        for (const m of (mediaRows || [])) mediaMap[m.id] = m.name
+          .from('project_media').select('id, name, cloudflare_uid, cloudflare_status').in('id', linkedIds)
+        for (const m of (mediaRows || [])) {
+          mediaMap[m.id] = { name: m.name, cloudflare_uid: m.cloudflare_uid || null, cloudflare_status: m.cloudflare_status || null }
+        }
       }
 
       // Batch fetch assignee profile info
@@ -454,11 +464,14 @@ Deno.serve(async (req) => {
 
       const shotsWithMedia = (shots || []).map((shot: any) => {
         const mid = shot.thumbnail_media_id
+        const mediaInfo = mid ? mediaMap[mid] : null
         const profile = shot.assigned_to ? profileMap[shot.assigned_to] : null
         return {
           ...shot,
-          linked_media_id:    mid && mediaMap[mid] ? mid : null,
-          linked_media_name:  mid && mediaMap[mid] ? mediaMap[mid] : null,
+          linked_media_id:         mid && mediaInfo ? mid : null,
+          linked_media_name:       mid && mediaInfo ? mediaInfo.name : null,
+          linked_cloudflare_uid:   mediaInfo?.cloudflare_uid || null,
+          linked_cloudflare_status: mediaInfo?.cloudflare_status || null,
           assigned_to_name:   profile?.full_name || null,
           assigned_to_avatar: profile?.avatar_url || null,
           custom_assignee:    shot.custom_assignee || null,
@@ -530,7 +543,7 @@ Deno.serve(async (req) => {
               projectName: project?.name || 'a project',
               dueDate: existing.due_date ? formatDate(existing.due_date) : null,
               priority: existing.custom_data?.priority || null,
-              projectUrl: `https://claude-eastape-share.vercel.app/projects/${existing.project_id}`,
+              projectUrl: `https://studio.eastape.com/projects/${existing.project_id}`,
             }
           }).catch(err => console.error('Shot assigned email failed:', err))
         } catch {}
@@ -775,6 +788,87 @@ Deno.serve(async (req) => {
       }))
 
       return json({ media: result })
+    }
+
+    // ── SYNC FOLDER → SCENE ──────────────────────────────────────────
+    // Called after a project_folder is created; creates a matching scene if production is set up.
+    if (resource === 'sync_folder_to_manage' && req.method === 'POST') {
+      const body = await req.json()
+      const { folder_id, project_id: pid } = body
+      if (!folder_id || !pid) return json({ ok: true, skipped: 'missing_params' })
+      if (!(await canAccess(pid))) return json({ error: 'Forbidden' }, 403)
+
+      // Skip if production not set up yet
+      const { count: statusCount } = await supabase
+        .from('production_statuses').select('*', { count: 'exact', head: true }).eq('project_id', pid)
+      if (!statusCount) return json({ ok: true, skipped: 'not_setup' })
+
+      // Idempotent: skip if scene already linked to this folder
+      const { data: existing } = await supabase
+        .from('production_scenes').select('id').eq('source_folder_id', folder_id).maybeSingle()
+      if (existing) return json({ ok: true, scene: existing, skipped: 'exists' })
+
+      const { data: folder } = await supabase.from('project_folders').select('name').eq('id', folder_id).single()
+      if (!folder) return json({ error: 'Folder not found' }, 404)
+
+      const { count: scenePos } = await supabase
+        .from('production_scenes').select('*', { count: 'exact', head: true }).eq('project_id', pid)
+
+      const { data: scene, error: sceneErr } = await supabase.from('production_scenes')
+        .insert({ project_id: pid, name: folder.name, source_folder_id: folder_id, position: scenePos || 0 })
+        .select().single()
+      if (sceneErr) return json({ error: sceneErr.message }, 500)
+      return json({ ok: true, scene })
+    }
+
+    // ── SYNC MEDIA → SHOT ─────────────────────────────────────────────
+    // Called after project_media is uploaded; creates a matching shot if production is set up.
+    if (resource === 'sync_media_to_manage' && req.method === 'POST') {
+      const body = await req.json()
+      const { media_id, project_id: pid, folder_id } = body
+      if (!media_id || !pid) return json({ ok: true, skipped: 'missing_params' })
+      if (!(await canAccess(pid))) return json({ error: 'Forbidden' }, 403)
+
+      // Skip if production not set up yet
+      const { count: statusCount } = await supabase
+        .from('production_statuses').select('*', { count: 'exact', head: true }).eq('project_id', pid)
+      if (!statusCount) return json({ ok: true, skipped: 'not_setup' })
+
+      // Idempotent: skip if shot already linked to this media
+      const { data: existing } = await supabase
+        .from('production_shots').select('id').eq('source_media_id', media_id).maybeSingle()
+      if (existing) return json({ ok: true, shot: existing, skipped: 'exists' })
+
+      // Find scene matching the folder
+      let sceneId: string | null = null
+      if (folder_id) {
+        const { data: scene } = await supabase
+          .from('production_scenes').select('id').eq('source_folder_id', folder_id).eq('project_id', pid).maybeSingle()
+        sceneId = scene?.id || null
+      }
+
+      const { data: media } = await supabase.from('project_media').select('name').eq('id', media_id).single()
+      if (!media) return json({ error: 'Media not found' }, 404)
+
+      const { data: firstStatus } = await supabase
+        .from('production_statuses').select('id').eq('project_id', pid).order('position').limit(1).single()
+      const { data: maxRow } = await supabase
+        .from('production_shots').select('position').eq('project_id', pid)
+        .order('position', { ascending: false }).limit(1).maybeSingle()
+
+      const { data: shot, error: shotErr } = await supabase.from('production_shots')
+        .insert({
+          project_id: pid, scene_id: sceneId,
+          title: media.name,
+          thumbnail_media_id: media_id,
+          source_media_id: media_id,
+          status_id: firstStatus?.id || null,
+          position: ((maxRow?.position as number) ?? -1) + 1,
+          custom_data: {},
+        })
+        .select().single()
+      if (shotErr) return json({ error: shotErr.message }, 500)
+      return json({ ok: true, shot })
     }
 
     // ── SEED ─────────────────────────────────────────────────────────

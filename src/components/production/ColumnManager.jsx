@@ -8,11 +8,12 @@ const PRESET_COLORS = [
 ]
 
 const TYPE_OPTS = [
-  { value: 'text',     label: 'Text'     },
-  { value: 'number',   label: 'Number'   },
-  { value: 'date',     label: 'Date'     },
-  { value: 'checkbox', label: 'Checkbox' },
-  { value: 'select',   label: 'Select'   },
+  { value: 'text',     label: 'Text'        },
+  { value: 'number',   label: 'Number'      },
+  { value: 'date',     label: 'Date'        },
+  { value: 'checkbox', label: 'Checkbox'    },
+  { value: 'select',   label: 'Select'      },
+  { value: 'team',     label: 'Team Member' },
 ]
 
 // ── Color picker dot ──────────────────────────────────────────────────

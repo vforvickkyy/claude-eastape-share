@@ -11,7 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { useProject } from "./context/ProjectContext";
-import { projectMediaApi, projectFilesApi, projectFoldersApi, shareLinksApi, formatSize } from "./lib/api";
+import { projectMediaApi, projectFilesApi, projectFoldersApi, shareLinksApi, productionApi, formatSize } from "./lib/api";
 import { useUpload } from "./context/UploadContext";
 import ShareModal from "./components/drive/ShareModal";
 import { uploadMediaFile, ingestToCloudflare } from "./lib/mediaUpload";
@@ -175,6 +175,9 @@ export default function ProjectFilesPage() {
       addCustomUpload(file.name, file.size, async (onProgress) => {
         const asset = await uploadMediaFile(file, projectId, folderId, onProgress);
         load();
+        if (asset?.id) {
+          productionApi.syncMediaToManage(asset.id, projectId, folderId).catch(() => {});
+        }
         if (file.type.startsWith("video/") && asset?.id) {
           cfQueue.current.push(asset.id);
           runCfQueue();
@@ -444,7 +447,10 @@ export default function ProjectFilesPage() {
     const name = newFolderName.trim();
     if (!name) return;
     const d = await projectFoldersApi.create({ name, project_id: projectId, parent_id: folderId || null }).catch(() => null);
-    if (d?.folder) setFolders(fs => [...fs, d.folder]);
+    if (d?.folder) {
+      setFolders(fs => [...fs, d.folder]);
+      productionApi.syncFolderToManage(d.folder.id, projectId).catch(() => {});
+    }
     setShowNewFolder(false); setNewFolderName("");
   }
 

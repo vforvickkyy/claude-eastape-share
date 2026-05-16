@@ -22,7 +22,9 @@ function ShotCard({ shot, statuses, scenes, mediaThumbs, projectId, onEdit, onDe
 
   const status   = statuses.find(s => s.id === shot.status_id)
   const scene    = scenes.find(s => s.id === shot.scene_id)
-  const thumbUrl = mediaThumbs[shot.thumbnail_media_id] || null
+  const thumbUrl = shot.linked_cloudflare_uid
+    ? `https://videodelivery.net/${shot.linked_cloudflare_uid}/thumbnails/thumbnail.jpg`
+    : (mediaThumbs[shot.thumbnail_media_id] || null)
   const linkedId = shot.linked_media_id || shot.thumbnail_media_id
   const color    = sceneColor || '#6366f1'
 

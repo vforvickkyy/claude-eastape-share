@@ -141,13 +141,15 @@ function ColHeader({ label, color, width, widthKey, sortKey, sort, onSort, onRes
 }
 
 // ── Custom column cell renderer ───────────────────────────────────────
-function CustomCell({ shot, col, colWidths, onShotUpdate }) {
+function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
   const val = shot.custom_data?.[col.name]
   const w   = colWidths[col.id] || col.width || 150
   const [editing,    setEditing]    = useState(false)
   const [editVal,    setEditVal]    = useState('')
   const [selectOpen, setSelectOpen] = useState(false)
+  const [teamOpen,   setTeamOpen]   = useState(false)
   const selectRef = useRef()
+  const teamRef   = useRef()
 
   useEffect(() => {
     if (!selectOpen) return
@@ -155,6 +157,13 @@ function CustomCell({ shot, col, colWidths, onShotUpdate }) {
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [selectOpen])
+
+  useEffect(() => {
+    if (!teamOpen) return
+    const h = e => { if (!teamRef.current?.contains(e.target)) setTeamOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [teamOpen])
 
   function saveCustom(newVal) {
     if (!onShotUpdate) return
@@ -237,6 +246,58 @@ function CustomCell({ shot, col, colWidths, onShotUpdate }) {
     )
   }
 
+  if (col.type === 'team') {
+    const member = teamMembers.find(m => m.user_id === val)
+    const initials = member?.full_name ? member.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+    return (
+      <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle' }} onClick={e => e.stopPropagation()}>
+        <div ref={teamRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => { if (onShotUpdate) setTeamOpen(o => !o) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: onShotUpdate ? 'pointer' : 'default', padding: '2px 4px', borderRadius: 6, color: 'var(--t3)', fontSize: 12, maxWidth: w - 16, overflow: 'hidden' }}
+          >
+            {member ? (
+              <>
+                {member.avatar_url
+                  ? <img src={member.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                  : <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700, flexShrink: 0 }}>{initials}</div>
+                }
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#d0d0f0' }}>{member.full_name || 'Unknown'}</span>
+              </>
+            ) : <span style={{ color: 'var(--t4)' }}>—</span>}
+          </button>
+          {teamOpen && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 8, minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,0.6)', padding: 4 }}>
+              <button
+                onClick={() => { saveCustom(null); setTeamOpen(false) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', color: 'var(--t4)', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >— None</button>
+              {teamMembers.map(m => {
+                const ini = m.full_name ? m.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+                return (
+                  <button key={m.user_id}
+                    onClick={() => { saveCustom(m.user_id); setTeamOpen(false) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: val === m.user_id ? 'rgba(99,102,241,0.15)' : 'none', border: 'none', color: val === m.user_id ? '#a5b4fc' : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
+                    onMouseEnter={e => { if (val !== m.user_id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => { if (val !== m.user_id) e.currentTarget.style.background = 'none' }}
+                  >
+                    {m.avatar_url
+                      ? <img src={m.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                      : <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700 }}>{ini}</div>
+                    }
+                    {m.full_name || 'Unknown'}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </td>
+    )
+  }
+
   // text / number / default
   if (editing) {
     return (
@@ -271,6 +332,10 @@ function colStat(col, shots) {
     const vals = shots.map(s => Number(s.custom_data?.[col.name] || 0))
     const avg  = vals.reduce((a, b) => a + b, 0) / Math.max(shots.length, 1)
     return `avg ${Math.round(avg)}`
+  }
+  if (col.type === 'team') {
+    const assigned = shots.filter(s => !!s.custom_data?.[col.name]).length
+    return assigned > 0 ? `${assigned} assigned` : null
   }
   return null
 }
@@ -341,6 +406,7 @@ export default function ShotListView({
   projectId, statuses, scenes, columns = [], shots,
   filterSceneId = null,
   hiddenCols = {},
+  teamMembers = [],
   onShotCreate, onShotUpdate, onShotDelete, onSceneCreate, onReload, onManageColumns,
 }) {
   const canEdit   = !!onShotCreate
@@ -507,7 +573,9 @@ export default function ShotListView({
 
   // ── Shot row renderer ──────────────────────────────────────────────
   function renderShotRow(shot, rowIdx, sceneColor) {
-    const thumbUrl  = mediaThumbs[shot.thumbnail_media_id] || null
+    const thumbUrl  = shot.linked_cloudflare_uid
+      ? `https://videodelivery.net/${shot.linked_cloudflare_uid}/thumbnails/thumbnail.jpg`
+      : (mediaThumbs[shot.thumbnail_media_id] || null)
     const linkedId  = shot.linked_media_id || shot.thumbnail_media_id
     const thumbColor = sceneColor || SCENE_COLORS[0]
     const isEditing = editingName === shot.id
@@ -586,7 +654,7 @@ export default function ShotListView({
 
         {/* Custom columns */}
         {visibleCols.map(col => (
-          <CustomCell key={col.id} shot={shot} col={col} colWidths={colWidths} onShotUpdate={onShotUpdate} />
+          <CustomCell key={col.id} shot={shot} col={col} colWidths={colWidths} onShotUpdate={onShotUpdate} teamMembers={teamMembers} />
         ))}
 
         <td style={{ width: 40 }} />
