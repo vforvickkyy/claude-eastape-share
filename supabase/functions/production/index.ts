@@ -151,6 +151,26 @@ Deno.serve(async (req) => {
 
     // ── COLUMNS ──────────────────────────────────────────────────────
     if (resource === 'columns') {
+      // PUT and DELETE look up project_id from the row (no query param needed)
+      if ((req.method === 'PUT' || req.method === 'DELETE') && id) {
+        const { data: colRow } = await supabase.from('shot_columns').select('project_id').eq('id', id).single()
+        if (!colRow) return json({ error: 'Not found' }, 404)
+        if (!(await canAccess(colRow.project_id))) return json({ error: 'Forbidden' }, 403)
+        if (!(await isOwner(colRow.project_id))) return json({ error: 'Forbidden' }, 403)
+        if (req.method === 'DELETE') {
+          await supabase.from('shot_columns').delete().eq('id', id)
+          return json({ ok: true })
+        }
+        // PUT
+        const body = await req.json()
+        const allowed = ['name', 'type', 'options', 'position']
+        const updates: Record<string, unknown> = {}
+        for (const k of allowed) if (k in body) updates[k] = body[k]
+        const { data, error } = await supabase.from('shot_columns').update(updates).eq('id', id).select().single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ column: data })
+      }
+      // GET and POST require project_id query param
       if (!projectId) return json({ error: 'project_id required' }, 400)
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
       if (req.method === 'GET') {
@@ -166,19 +186,6 @@ Deno.serve(async (req) => {
           .select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ column: data }, 201)
-      }
-      if (req.method === 'PUT' && id) {
-        const body = await req.json()
-        const allowed = ['name', 'type', 'options', 'position']
-        const updates: Record<string, unknown> = {}
-        for (const k of allowed) if (k in body) updates[k] = body[k]
-        const { data, error } = await supabase.from('shot_columns').update(updates).eq('id', id).select().single()
-        if (error) return json({ error: error.message }, 500)
-        return json({ column: data })
-      }
-      if (req.method === 'DELETE' && id) {
-        await supabase.from('shot_columns').delete().eq('id', id)
-        return json({ ok: true })
       }
     }
 
