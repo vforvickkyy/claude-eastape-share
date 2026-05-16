@@ -4184,6 +4184,37 @@ body.scrollable,
 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 
+/* ── Dashboard Range Bar ─────────────────────────────────── */
+.dash-range-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.dash-range-pills { display: flex; gap: 3px; background: var(--admin-bg,var(--bg)); border: 1px solid var(--admin-border,var(--border)); border-radius: 9px; padding: 3px; }
+.dash-range-pill { padding: 5px 14px; border-radius: 7px; border: none; font-size: 12px; font-weight: 500; background: transparent; color: var(--admin-text-dim,var(--t2)); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.dash-range-pill:hover { background: rgba(255,255,255,0.06); color: var(--admin-text,var(--t1)); }
+.dash-range-pill.active { background: var(--admin-accent); color: #fff; }
+.dash-range-custom { display: flex; align-items: center; gap: 6px; }
+.dash-range-date { background: var(--admin-bg,var(--bg)); border: 1px solid var(--admin-border,var(--border)); border-radius: 7px; padding: 5px 10px; color: var(--admin-text,var(--t1)); font-size: 12px; outline: none; cursor: pointer; }
+.dash-range-date:focus { border-color: var(--admin-accent); }
+
+/* ── Dashboard Stat Cards ────────────────────────────────── */
+.dash-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.dash-stat-card { background: var(--admin-card,var(--card)); border: 1px solid var(--admin-border,var(--border)); border-radius: 13px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden; transition: box-shadow 0.2s; }
+.dash-stat-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+.dash-stat-top-bar { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 13px 13px 0 0; opacity: 0.8; }
+.dash-stat-header { display: flex; align-items: center; gap: 8px; }
+.dash-stat-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dash-stat-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+.dash-stat-trend { display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
+.dash-stat-trend.up { color: #22c55e; background: rgba(34,197,94,0.12); }
+.dash-stat-trend.down { color: #f87171; background: rgba(248,113,113,0.12); }
+.dash-stat-body { display: flex; flex-direction: column; gap: 2px; }
+.dash-stat-value { font-size: 28px; font-weight: 700; color: var(--admin-text,var(--t1)); line-height: 1.1; letter-spacing: -0.5px; }
+.dash-stat-label { font-size: 12px; color: var(--admin-text-dim,var(--t2)); font-weight: 500; margin-top: 2px; }
+.dash-stat-sub { font-size: 11px; color: var(--admin-text-muted,var(--t3)); }
+.dash-stat-skeleton { height: 48px; border-radius: 8px; background: var(--admin-border,var(--border)); animation: pulse 1.5s ease-in-out infinite; }
+
+/* ── Activity Feed Row ───────────────────────────────────── */
+.dash-activity-row { display: flex; align-items: flex-start; gap: 11px; padding: 10px 18px; transition: background 0.1s; }
+.dash-activity-row:hover { background: rgba(255,255,255,0.025); }
+
 /* ── Admin Toggle Switch ─────────────────────────────────── */
 .admin-toggle { position: relative; width: 40px; height: 22px; display: inline-block; flex-shrink: 0; }
 .admin-toggle input { opacity: 0; width: 0; height: 0; }
@@ -4237,6 +4268,8 @@ body { overflow-x: hidden; }
   /* Admin layout padding */
   .admin-content { padding: 16px; }
   .admin-page-title { font-size: 20px; }
+  .dash-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .dash-range-pills { flex-wrap: wrap; }
 
   /* Admin modal: full-width on mobile */
   .admin-modal-overlay { padding: 16px; align-items: flex-end; }
@@ -4301,6 +4334,7 @@ body { overflow-x: hidden; }
 
   /* Admin stats: 1 column */
   .admin-stats-grid { grid-template-columns: 1fr 1fr; }
+  .dash-stats-grid { grid-template-columns: repeat(2, 1fr); }
 
   /* Pricing: tighter */
   .pricing-wrap { padding: 28px 12px 48px; }

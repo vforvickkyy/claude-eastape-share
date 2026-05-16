@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, UserPlus, CreditCard, File, VideoCamera, FolderOpen,
-  HardDrive, ChatCircle, UserCircle, Export, ClipboardText,
-  Wrench, CheckCircle, X, TrendUp, TrendDown, CloudCheck,
-  Spinner, Warning, ArrowRight, Database, ShieldCheck,
-  FilesIcon, Monitor, Lightning,
+  Users, UserPlus, CreditCard, FolderOpen, HardDrive, ChatCircle,
+  UserCircle, Export, ClipboardText, Wrench, CheckCircle, X,
+  TrendUp, TrendDown, Monitor, ArrowRight, Database, ShieldCheck,
+  CloudArrowUp, FilmStrip, Timer, Chats, Trash, SignIn,
+  Lightning, CalendarBlank, ArrowsClockwise, File, VideoCamera,
+  Warning,
 } from "@phosphor-icons/react";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
@@ -31,12 +32,18 @@ function getRestHeaders() {
 const BASE = import.meta.env.VITE_SUPABASE_URL;
 
 /* ── Formatters ──────────────────────────────────────────── */
-function formatBytes(b) {
+function fmtBytes(b) {
   if (!b) return "0 B";
   if (b < 1024) return b + " B";
   if (b < 1024 ** 2) return (b / 1024).toFixed(1) + " KB";
   if (b < 1024 ** 3) return (b / 1024 ** 2).toFixed(1) + " MB";
   return (b / 1024 ** 3).toFixed(2) + " GB";
+}
+function fmtMinutes(min) {
+  if (!min) return "0 min";
+  if (min < 60) return `${Math.round(min)} min`;
+  if (min < 1440) return `${(min / 60).toFixed(1)} hrs`;
+  return `${(min / 60 / 24).toFixed(1)} days`;
 }
 function timeAgo(d) {
   const diff = Date.now() - new Date(d).getTime();
@@ -47,7 +54,7 @@ function timeAgo(d) {
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 }
-function formatDate(d) {
+function fmtDate(d) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -56,8 +63,8 @@ function formatDate(d) {
 function Avatar({ name, avatarUrl, size = 30 }) {
   const initial = (name || "?").charAt(0).toUpperCase();
   if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  const colors = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#7c3aed"];
-  const bg = colors[initial.charCodeAt(0) % colors.length];
+  const COLORS = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#0891b2","#db2777","#65a30d"];
+  const bg = COLORS[initial.charCodeAt(0) % COLORS.length];
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.38, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
       {initial}
@@ -70,36 +77,74 @@ function Toast({ message, type = "success", onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, [onDone]);
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }}
-      style={{ position: "fixed", bottom: 24, right: 24, background: type === "error" ? "rgba(248,113,113,0.12)" : "rgba(74,222,128,0.1)", border: `1px solid ${type === "error" ? "rgba(248,113,113,0.3)" : "rgba(74,222,128,0.25)"}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: type === "error" ? "#f87171" : "#4ade80", zIndex: 999, display: "flex", alignItems: "center", gap: 8, maxWidth: 300 }}>
+      style={{ position: "fixed", bottom: 24, right: 24, background: type === "error" ? "rgba(248,113,113,0.12)" : "rgba(74,222,128,0.1)", border: `1px solid ${type === "error" ? "rgba(248,113,113,0.3)" : "rgba(74,222,128,0.25)"}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: type === "error" ? "#f87171" : "#4ade80", zIndex: 999, display: "flex", alignItems: "center", gap: 8, maxWidth: 320 }}>
       <CheckCircle size={15} weight="bold" /> {message}
     </motion.div>
   );
 }
 
-/* ── Stat Card ───────────────────────────────────────────── */
-function StatCard({ icon, label, value, sub, color = "#7c3aed", trend, loading }) {
+/* ── Range Bar ───────────────────────────────────────────── */
+const RANGES = [
+  { value: "24h", label: "24 Hours" },
+  { value: "7d",  label: "7 Days"   },
+  { value: "30d", label: "30 Days"  },
+  { value: "90d", label: "90 Days"  },
+  { value: "custom", label: "Custom" },
+];
+function RangeBar({ range, onRange, customFrom, customTo, onCustomFrom, onCustomTo }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", borderRadius: 12, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12, position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: color, borderRadius: "12px 12px 0 0", opacity: 0.7 }} />
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: color + "22", display: "flex", alignItems: "center", justifyContent: "center", color }}>
+    <div className="dash-range-bar">
+      <CalendarBlank size={14} weight="duotone" style={{ color: "var(--admin-accent)", flexShrink: 0 }} />
+      <div className="dash-range-pills">
+        {RANGES.map(r => (
+          <button key={r.value} className={`dash-range-pill${range === r.value ? " active" : ""}`} onClick={() => onRange(r.value)}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {range === "custom" && (
+        <div className="dash-range-custom">
+          <input type="date" value={customFrom} onChange={e => onCustomFrom(e.target.value)} className="dash-range-date" />
+          <span style={{ color: "var(--admin-text-muted)", fontSize: 12 }}>to</span>
+          <input type="date" value={customTo} onChange={e => onCustomTo(e.target.value)} className="dash-range-date" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Stat Card ───────────────────────────────────────────── */
+function StatCard({ icon, label, value, sub, sub2, color = "#7c3aed", trend, loading, badge }) {
+  return (
+    <motion.div className="dash-stat-card" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      style={{ "--stat-color": color }}>
+      <div className="dash-stat-top-bar" style={{ background: color }} />
+      <div className="dash-stat-header">
+        <div className="dash-stat-icon" style={{ background: color + "22", color }}>
           {React.cloneElement(icon, { size: 18, weight: "duotone" })}
         </div>
-        {trend !== undefined && trend !== null && (
-          <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 600, color: trend >= 0 ? "#22c55e" : "#f87171" }}>
-            {trend >= 0 ? <TrendUp size={13} weight="bold" /> : <TrendDown size={13} weight="bold" />}
-            {Math.abs(trend)}%
-          </div>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+          {badge && (
+            <span className="dash-stat-badge" style={{ background: color + "22", color, border: `1px solid ${color}44` }}>
+              {badge}
+            </span>
+          )}
+          {trend !== undefined && trend !== null && (
+            <div className={`dash-stat-trend ${trend >= 0 ? "up" : "down"}`}>
+              {trend >= 0 ? <TrendUp size={11} weight="bold" /> : <TrendDown size={11} weight="bold" />}
+              {Math.abs(trend)}%
+            </div>
+          )}
+        </div>
       </div>
       {loading ? (
-        <div style={{ height: 28, borderRadius: 6, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite" }} />
+        <div className="dash-stat-skeleton" />
       ) : (
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "var(--admin-text)", lineHeight: 1.1, letterSpacing: "-0.5px" }}>{value}</div>
-          <div style={{ fontSize: 12, color: "var(--admin-text-dim)", marginTop: 3, fontWeight: 500 }}>{label}</div>
-          {sub && <div style={{ fontSize: 11, color: "var(--admin-text-muted)", marginTop: 2 }}>{sub}</div>}
+        <div className="dash-stat-body">
+          <div className="dash-stat-value">{value}</div>
+          <div className="dash-stat-label">{label}</div>
+          {sub  && <div className="dash-stat-sub">{sub}</div>}
+          {sub2 && <div className="dash-stat-sub" style={{ marginTop: 1 }}>{sub2}</div>}
         </div>
       )}
     </motion.div>
@@ -112,6 +157,22 @@ function StorageBar({ pct }) {
   return (
     <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden", minWidth: 80 }}>
       <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 3, transition: "width 0.4s" }} />
+    </div>
+  );
+}
+
+/* ── Activity Icon ───────────────────────────────────────── */
+function ActivityDot({ type }) {
+  const map = {
+    signup:         { icon: <SignIn   size={13} weight="bold" />, color: "#22c55e", bg: "rgba(34,197,94,0.15)"    },
+    project_create: { icon: <FolderOpen size={13} weight="bold" />, color: "#3b82f6", bg: "rgba(59,130,246,0.15)" },
+    delete:         { icon: <Trash    size={13} weight="bold" />, color: "#ef4444", bg: "rgba(239,68,68,0.15)"    },
+    admin:          { icon: <ShieldCheck size={13} weight="bold" />, color: "#f97316", bg: "rgba(249,115,22,0.15)"},
+  };
+  const m = map[type] || map.admin;
+  return (
+    <div style={{ width: 28, height: 28, borderRadius: "50%", background: m.bg, color: m.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      {m.icon}
     </div>
   );
 }
@@ -177,46 +238,85 @@ function ActionTile({ icon, label, desc, onClick, loading, active, color = "var(
   );
 }
 
+/* ── Plan distribution pills ─────────────────────────────── */
+function PlanPills({ distribution, freeUsers }) {
+  const PLAN_COLORS = { Free: "#64748b", Pro: "#7c3aed", Business: "#f59e0b", Enterprise: "#06b6d4" };
+  const entries = [
+    ...(freeUsers > 0 ? [["Free", freeUsers]] : []),
+    ...Object.entries(distribution || {}),
+  ];
+  if (entries.length === 0) return null;
+  return (
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+      {entries.map(([name, count]) => {
+        const c = PLAN_COLORS[name] || "#6366f1";
+        return (
+          <span key={name} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 999, background: c + "22", color: c, border: `1px solid ${c}33` }}>
+            {name} {count}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Range label helper ──────────────────────────────────── */
+function rangeLabel(range) {
+  const map = { "24h": "last 24h", "7d": "last 7d", "30d": "last 30d", "90d": "last 90d", "custom": "in range" };
+  return map[range] || "in period";
+}
+
 /* ── Main Dashboard ──────────────────────────────────────── */
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  const [stats, setStats] = useState(null);
-  const [recentUsers, setRecentUsers] = useState([]);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [topUsers, setTopUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [stats,            setStats]            = useState(null);
+  const [platformActivity, setPlatformActivity] = useState([]);
+  const [recentSignups,    setRecentSignups]    = useState([]);
+  const [topUsers,         setTopUsers]         = useState([]);
+  const [loading,          setLoading]          = useState(true);
 
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [range,       setRange]       = useState("30d");
+  const [customFrom,  setCustomFrom]  = useState("");
+  const [customTo,    setCustomTo]    = useState("");
+
+  const [maintenanceMode,    setMaintenanceMode]    = useState(false);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [showAddUser,        setShowAddUser]        = useState(false);
+  const [toast,              setToast]              = useState(null);
 
   function showToast(msg, type = "success") { setToast({ message: msg, type, id: Date.now() }); }
 
-  /* ── Load dashboard data ─────────────────────────────── */
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [dashData, maintData] = await Promise.all([
-          apiFetch("/admin-dashboard-stats"),
-          fetch(`${BASE}/rest/v1/platform_settings?key=eq.maintenance_mode&select=value`, { headers: getRestHeaders() }).then(r => r.json()).catch(() => []),
-        ]);
-        if (dashData.stats) setStats(dashData.stats);
-        if (Array.isArray(dashData.recent_users)) setRecentUsers(dashData.recent_users);
-        if (Array.isArray(dashData.recent_activity)) setRecentActivity(dashData.recent_activity);
-        if (Array.isArray(dashData.top_users_by_storage)) setTopUsers(dashData.top_users_by_storage);
-        if (Array.isArray(maintData) && maintData.length > 0) {
-          setMaintenanceMode(maintData[0]?.value === true || maintData[0]?.value === "true");
-        }
-      } catch (err) {
-        console.error("Dashboard error:", err);
-        showToast("Failed to load dashboard data", "error");
-      } finally { setLoading(false); }
-    }
-    load();
+  /* ── Load ─────────────────────────────────────────────── */
+  const load = useCallback(async (r, cf, ct) => {
+    setLoading(true);
+    let qs = `?range=${r}`;
+    if (r === "custom" && cf && ct) qs = `?range=custom&from=${cf}&to=${ct}`;
+    try {
+      const [dashData, maintData] = await Promise.all([
+        apiFetch(`/admin-dashboard-stats${qs}`),
+        fetch(`${BASE}/rest/v1/platform_settings?key=eq.maintenance_mode&select=value`, { headers: getRestHeaders() })
+          .then(r => r.json()).catch(() => []),
+      ]);
+      if (dashData.stats)                     setStats(dashData.stats);
+      if (Array.isArray(dashData.platform_activity)) setPlatformActivity(dashData.platform_activity);
+      if (Array.isArray(dashData.recent_signups))    setRecentSignups(dashData.recent_signups);
+      if (Array.isArray(dashData.top_users_by_storage)) setTopUsers(dashData.top_users_by_storage);
+      if (Array.isArray(maintData) && maintData.length > 0)
+        setMaintenanceMode(maintData[0]?.value === true || maintData[0]?.value === "true");
+    } catch (err) {
+      console.error("Dashboard error:", err);
+      showToast("Failed to load dashboard data", "error");
+    } finally { setLoading(false); }
   }, []);
+
+  useEffect(() => {
+    if (range !== "custom") {
+      load(range, "", "");
+    } else if (customFrom && customTo && customTo >= customFrom) {
+      load(range, customFrom, customTo);
+    }
+  }, [range, customFrom, customTo, load]);
 
   /* ── Maintenance toggle ──────────────────────────────── */
   async function toggleMaintenance() {
@@ -234,55 +334,106 @@ export default function AdminDashboard() {
     finally { setMaintenanceLoading(false); }
   }
 
-  /* ── Export users ────────────────────────────────────── */
+  /* ── Export ──────────────────────────────────────────── */
   async function handleExport() {
     try {
       const { token } = getAuth();
       const res = await fetch(`${BASE}/functions/v1/admin-export-users`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
       showToast("Export downloaded");
     } catch { showToast("Export failed", "error"); }
   }
 
   /* ── Derived ─────────────────────────────────────────── */
-  const s = stats || {};
-  const totalFiles = (s.total_drive_files || 0) + (s.total_project_media || 0);
+  const s  = stats || {};
+  const rl = rangeLabel(range);
   const cfTotal = (s.cf_ready || 0) + (s.cf_processing || 0) + (s.cf_failed || 0);
 
   const statCards = [
-    { icon: <Users />, label: "Total Users", value: (s.total_users || 0).toLocaleString(), sub: `${s.suspended_users || 0} suspended`, color: "#7c3aed" },
-    { icon: <UserPlus />, label: "New This Month", value: (s.new_this_month || 0).toLocaleString(), sub: `${s.new_today || 0} today · ${s.new_this_week || 0} this week`, trend: s.growth_rate, color: "#2563eb" },
-    { icon: <CreditCard />, label: "Active Plans", value: (s.active_plans || 0).toLocaleString(), sub: `of ${s.total_users || 0} users`, color: "#059669" },
-    { icon: <FolderOpen />, label: "Total Projects", value: (s.total_projects || 0).toLocaleString(), color: "#d97706" },
-    { icon: <File />, label: "Drive Files", value: (s.total_drive_files || 0).toLocaleString(), sub: formatBytes(s.drive_storage_bytes), color: "#0891b2" },
-    { icon: <VideoCamera />, label: "Project Media", value: (s.total_project_media || 0).toLocaleString(), sub: formatBytes(s.media_storage_bytes), color: "#7c3aed" },
-    { icon: <HardDrive />, label: "Total Storage", value: formatBytes(s.storage_bytes), sub: `Drive + Media combined`, color: "#dc2626" },
-    { icon: <ChatCircle />, label: "Comments", value: (s.total_comments || 0).toLocaleString(), color: "#6366f1" },
+    {
+      icon: <Users />, label: "Total Users", color: "#7c3aed",
+      value: (s.total_users || 0).toLocaleString(),
+      sub: `${(s.new_users_in_range || 0).toLocaleString()} new ${rl}`,
+      sub2: `${s.suspended_users || 0} suspended`,
+      trend: s.growth_rate,
+      badge: (s.total_users || 0) > 0 ? `${s.active_plans || 0} paid` : undefined,
+      extra: <PlanPills distribution={s.plan_distribution} freeUsers={s.free_users} />,
+    },
+    {
+      icon: <HardDrive />, label: "Total Storage", color: "#dc2626",
+      value: fmtBytes(s.storage_bytes),
+      sub: `Drive: ${fmtBytes(s.drive_storage_bytes)}`,
+      sub2: `Media: ${fmtBytes(s.media_storage_bytes)}`,
+    },
+    {
+      icon: <File />, label: "Files on Wasabi", color: "#0891b2",
+      value: ((s.total_drive_files || 0) + (s.total_project_media || 0)).toLocaleString(),
+      sub: `Drive: ${(s.total_drive_files || 0).toLocaleString()} files`,
+      sub2: `Media: ${(s.total_project_media || 0).toLocaleString()} files`,
+    },
+    {
+      icon: <FolderOpen />, label: "Total Projects", color: "#d97706",
+      value: (s.total_projects || 0).toLocaleString(),
+      sub: `${(s.new_projects_in_range || 0).toLocaleString()} new ${rl}`,
+    },
+    {
+      icon: <Chats />, label: "Total Comments", color: "#6366f1",
+      value: (s.total_comments || 0).toLocaleString(),
+      sub: `${(s.new_comments_in_range || 0).toLocaleString()} new ${rl}`,
+    },
+    {
+      icon: <VideoCamera />, label: "CF Stream Videos", color: "#8b5cf6",
+      value: cfTotal.toLocaleString(),
+      sub: `Ready: ${(s.cf_ready || 0).toLocaleString()} · Processing: ${(s.cf_processing || 0).toLocaleString()}`,
+      sub2: s.cf_failed > 0 ? `Failed: ${s.cf_failed}` : undefined,
+      badge: s.cf_failed > 0 ? `${s.cf_failed} failed` : undefined,
+    },
+    {
+      icon: <CloudArrowUp />, label: "CF Minutes Stored", color: "#06b6d4",
+      value: fmtMinutes(s.cf_minutes_stored),
+      sub: s.cf_minutes_stored > 0 ? `≈ ${Math.round(s.cf_minutes_stored / 60)} hours total` : "No data yet",
+    },
+    {
+      icon: <Timer />, label: "CF Minutes Streamed", color: "#10b981",
+      value: fmtMinutes(s.cf_minutes_streamed),
+      sub: `${rl}`,
+    },
   ];
 
   return (
     <div>
       {/* ── Page header ───────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
         <div>
           <div className="admin-page-title">Dashboard</div>
-          <div className="admin-page-sub">Platform overview and health metrics.</div>
+          <div className="admin-page-sub" style={{ marginBottom: 0 }}>Platform overview and health metrics.</div>
         </div>
-        <button className="admin-action-btn primary" onClick={() => setShowAddUser(true)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <UserPlus size={15} weight="bold" /> Invite User
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button className="admin-action-btn" onClick={() => load(range, customFrom, customTo)} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <ArrowsClockwise size={13} weight="bold" /> Refresh
+          </button>
+          <button className="admin-action-btn primary" onClick={() => setShowAddUser(true)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <UserPlus size={15} weight="bold" /> Invite User
+          </button>
+        </div>
       </div>
 
+      {/* ── Range bar ─────────────────────────────────── */}
+      <RangeBar
+        range={range} onRange={setRange}
+        customFrom={customFrom} customTo={customTo}
+        onCustomFrom={setCustomFrom} onCustomTo={setCustomTo}
+      />
+
       {/* ── Stats grid ────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
+      <div className="dash-stats-grid">
         {statCards.map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
             <StatCard {...c} loading={loading} />
+            {c.extra && !loading && <div style={{ marginTop: -8, padding: "0 4px 4px" }}>{c.extra}</div>}
           </motion.div>
         ))}
       </div>
@@ -290,46 +441,106 @@ export default function AdminDashboard() {
       {/* ── CF Stream status bar ──────────────────────── */}
       {!loading && cfTotal > 0 && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", borderRadius: 12, padding: "14px 20px", marginBottom: 24, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Monitor size={16} weight="duotone" style={{ color: "var(--admin-accent)" }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--admin-text)", letterSpacing: "0.3px" }}>CLOUDFLARE STREAM</span>
+          style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", borderRadius: 12, padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <Monitor size={14} weight="duotone" style={{ color: "var(--admin-accent)" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--admin-text)", letterSpacing: "0.04em" }}>CLOUDFLARE STREAM</span>
           </div>
-          <div style={{ display: "flex", gap: 20 }}>
+          <div style={{ display: "flex", gap: 18 }}>
             {[
-              { label: "Ready", value: s.cf_ready || 0, color: "#22c55e" },
+              { label: "Ready",      value: s.cf_ready      || 0, color: "#22c55e" },
               { label: "Processing", value: s.cf_processing || 0, color: "#f59e0b" },
-              { label: "Failed", value: s.cf_failed || 0, color: "#ef4444" },
+              { label: "Failed",     value: s.cf_failed     || 0, color: "#ef4444" },
             ].map(item => (
-              <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.color }} />
+              <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: item.color }} />
                 <span style={{ fontSize: 12, color: "var(--admin-text)", fontWeight: 600 }}>{item.value.toLocaleString()}</span>
                 <span style={{ fontSize: 11, color: "var(--admin-text-dim)" }}>{item.label}</span>
               </div>
             ))}
           </div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <div style={{ marginLeft: "auto" }}>
             {cfTotal > 0 && (
-              <div style={{ height: 8, borderRadius: 4, overflow: "hidden", display: "flex", width: 120, background: "rgba(255,255,255,0.06)" }}>
+              <div style={{ height: 7, borderRadius: 4, overflow: "hidden", display: "flex", width: 100, background: "rgba(255,255,255,0.06)" }}>
                 {[{ c: "#22c55e", v: s.cf_ready }, { c: "#f59e0b", v: s.cf_processing }, { c: "#ef4444", v: s.cf_failed }]
                   .filter(x => x.v > 0)
-                  .map((x, i) => (
-                    <div key={i} style={{ height: "100%", width: `${(x.v / cfTotal) * 100}%`, background: x.c }} />
-                  ))}
+                  .map((x, i) => <div key={i} style={{ height: "100%", width: `${(x.v / cfTotal) * 100}%`, background: x.c }} />)}
               </div>
             )}
           </div>
         </motion.div>
       )}
 
-      {/* ── Main 2-col layout ─────────────────────────── */}
+      {/* ── 2-col: Activity + Quick Actions ───────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20, marginBottom: 20, alignItems: "start" }}>
 
-        {/* LEFT: Recent Signups */}
+        {/* Activity Feed */}
         <div className="admin-section">
           <div className="admin-section-title">
+            <span>Platform Activity</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{rl}</span>
+              <button className="admin-action-btn" onClick={() => navigate("/adminpanel/audit")}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
+                Full log <ArrowRight size={11} />
+              </button>
+            </div>
+          </div>
+          <div style={{ padding: "0" }}>
+            {loading ? (
+              <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
+                    <div style={{ flex: 1, height: 13, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${40 + i * 9}%` }} />
+                  </div>
+                ))}
+              </div>
+            ) : platformActivity.length === 0 ? (
+              <div className="admin-empty">No activity in this period.</div>
+            ) : (
+              <div>
+                {platformActivity.map((entry, i) => (
+                  <div key={entry.id} className="dash-activity-row" style={{ borderBottom: i < platformActivity.length - 1 ? "1px solid var(--admin-border)" : "none" }}>
+                    <ActivityDot type={entry.type} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "var(--admin-text)", lineHeight: 1.4 }}>
+                        <span style={{ fontWeight: 600 }}>{entry.actor_name}</span>{" "}
+                        <span style={{ color: "var(--admin-text-dim)" }}>{entry.description}</span>
+                        {entry.detail && (
+                          <span style={{ color: "var(--admin-text-muted)" }}>{" "}· {entry.detail}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, color: "var(--admin-text-muted)", flexShrink: 0 }}>{timeAgo(entry.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="admin-section">
+          <div className="admin-section-title">Quick Actions</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: "12px 16px 16px" }}>
+            <ActionTile icon={<UserCircle />}   label="Invite User"  desc="Send magic link"    onClick={() => setShowAddUser(true)} />
+            <ActionTile icon={<Wrench />}        label={maintenanceMode ? "Disable Maint." : "Maintenance"} desc={maintenanceMode ? "Currently ON" : "Take offline"} onClick={toggleMaintenance} loading={maintenanceLoading} active={maintenanceMode} />
+            <ActionTile icon={<Export />}        label="Export CSV"   desc="All users data"    onClick={handleExport} />
+            <ActionTile icon={<ClipboardText />} label="Audit Log"    desc="Admin actions"     onClick={() => navigate("/adminpanel/audit")} />
+            <ActionTile icon={<HardDrive />}     label="Storage"      desc="Usage by user"     onClick={() => navigate("/adminpanel/storage")} />
+            <ActionTile icon={<Database />}      label="Database"     desc="Browse tables"     onClick={() => navigate("/adminpanel/database")} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Recent Signups ────────────────────────────── */}
+      {(recentSignups.length > 0 || loading) && (
+        <div className="admin-section" style={{ marginBottom: 20 }}>
+          <div className="admin-section-title">
             <span>Recent Signups</span>
-            <button className="admin-action-btn" onClick={() => navigate("/adminpanel/users")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
+            <button className="admin-action-btn" onClick={() => navigate("/adminpanel/users")}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
               View all <ArrowRight size={11} />
             </button>
           </div>
@@ -344,17 +555,15 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i}>
-                      {[1, 2, 3, 4].map(c => (
-                        <td key={c}><div style={{ height: 13, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${50 + Math.random() * 40}%` }} /></td>
-                      ))}
-                    </tr>
-                  ))
-                ) : recentUsers.length === 0 ? (
-                  <tr><td colSpan={4}><div className="admin-empty">No users yet.</div></td></tr>
-                ) : recentUsers.map(u => {
+                {loading ? Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    {[1,2,3,4].map(c => (
+                      <td key={c}><div style={{ height: 13, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${50 + Math.random() * 40}%` }} /></td>
+                    ))}
+                  </tr>
+                )) : recentSignups.length === 0 ? (
+                  <tr><td colSpan={4}><div className="admin-empty">No signups in this period.</div></td></tr>
+                ) : recentSignups.map(u => {
                   const plan = (u.user_plans || []).find(p => p.is_active);
                   const planName = plan?.plans?.name || "Free";
                   return (
@@ -373,7 +582,7 @@ export default function AdminDashboard() {
                           {planName}
                         </span>
                       </td>
-                      <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{formatDate(u.created_at)}</td>
+                      <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{fmtDate(u.created_at)}</td>
                       <td>
                         <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: u.is_suspended ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.1)", color: u.is_suspended ? "#f87171" : "#4ade80", fontWeight: 600 }}>
                           {u.is_suspended ? "Suspended" : "Active"}
@@ -386,41 +595,22 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
-
-        {/* RIGHT: Quick Actions */}
-        <div className="admin-section">
-          <div className="admin-section-title">Quick Actions</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: "12px 16px 16px" }}>
-            <ActionTile icon={<UserCircle />} label="Invite User" desc="Send magic link" onClick={() => setShowAddUser(true)} />
-            <ActionTile icon={<Wrench />} label={maintenanceMode ? "Disable Maint." : "Maintenance"} desc={maintenanceMode ? "Currently ON" : "Take offline"} onClick={toggleMaintenance} loading={maintenanceLoading} active={maintenanceMode} />
-            <ActionTile icon={<Export />} label="Export CSV" desc="All users data" onClick={handleExport} />
-            <ActionTile icon={<ClipboardText />} label="Audit Log" desc="Admin actions" onClick={() => navigate("/adminpanel/audit")} />
-            <ActionTile icon={<HardDrive />} label="Storage" desc="Usage by user" onClick={() => navigate("/adminpanel/storage")} />
-            <ActionTile icon={<Database />} label="Database" desc="Browse tables" onClick={() => navigate("/adminpanel/database")} />
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* ── Top Users by Storage ──────────────────────── */}
       {topUsers.length > 0 && (
         <motion.div className="admin-section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginBottom: 20 }}>
           <div className="admin-section-title">
             <span>Top Users by Storage</span>
-            <button className="admin-action-btn" onClick={() => navigate("/adminpanel/storage")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
+            <button className="admin-action-btn" onClick={() => navigate("/adminpanel/storage")}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
               Full report <ArrowRight size={11} />
             </button>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="admin-table">
               <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Plan</th>
-                  <th>Drive</th>
-                  <th>Media</th>
-                  <th>Total</th>
-                  <th>Usage</th>
-                </tr>
+                <tr><th>User</th><th>Plan</th><th>Drive</th><th>Media</th><th>Total</th><th>Usage</th></tr>
               </thead>
               <tbody>
                 {topUsers.map(u => (
@@ -439,9 +629,9 @@ export default function AdminDashboard() {
                         {u.plan_name}
                       </span>
                     </td>
-                    <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{formatBytes(u.drive_bytes)}</td>
-                    <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{formatBytes(u.media_bytes)}</td>
-                    <td style={{ fontSize: 12, fontWeight: 600, color: "var(--admin-text)" }}>{formatBytes(u.total_bytes)}</td>
+                    <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{fmtBytes(u.drive_bytes)}</td>
+                    <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{fmtBytes(u.media_bytes)}</td>
+                    <td style={{ fontSize: 12, fontWeight: 600, color: "var(--admin-text)" }}>{fmtBytes(u.total_bytes)}</td>
                     <td style={{ minWidth: 100 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <StorageBar pct={u.pct} />
@@ -455,50 +645,6 @@ export default function AdminDashboard() {
           </div>
         </motion.div>
       )}
-
-      {/* ── Recent Activity ───────────────────────────── */}
-      <div className="admin-section">
-        <div className="admin-section-title">
-          <span>Recent Activity</span>
-          <button className="admin-action-btn" onClick={() => navigate("/adminpanel/audit")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
-            Full log <ArrowRight size={11} />
-          </button>
-        </div>
-        <div className="admin-section-body" style={{ padding: "0 0" }}>
-          {loading ? (
-            <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} style={{ height: 14, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${40 + i * 12}%` }} />
-              ))}
-            </div>
-          ) : recentActivity.length === 0 ? (
-            <div className="admin-empty">No activity yet.</div>
-          ) : (
-            <div>
-              {recentActivity.map((entry, i) => (
-                <div key={entry.id ?? i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 20px", borderBottom: i < recentActivity.length - 1 ? "1px solid var(--admin-border)" : "none" }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--admin-accent-bg)", color: "var(--admin-accent)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700 }}>
-                    {(entry.profiles?.full_name || entry.action || "A").charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "var(--admin-text)", lineHeight: 1.4 }}>
-                      <span style={{ fontWeight: 600 }}>{entry.profiles?.full_name || "Admin"}</span>{" "}
-                      <span style={{ color: "var(--admin-text-dim)" }}>{entry.action}</span>
-                      {entry.target_type && <span style={{ color: "var(--admin-text-muted)" }}> · {entry.target_type}</span>}
-                    </div>
-                    {entry.metadata && Object.keys(entry.metadata).length > 0 && (
-                      <div style={{ fontSize: 11, color: "var(--admin-text-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {Object.entries(entry.metadata).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-                      </div>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 11, color: "var(--admin-text-muted)", flexShrink: 0, paddingTop: 2 }}>{timeAgo(entry.created_at)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* ── Modals + Toast ────────────────────────────── */}
       <AnimatePresence>
