@@ -7,7 +7,7 @@ import {
   Plus, Briefcase, MagnifyingGlass, Eye, Users,
   SidebarSimple, FolderPlus, UploadSimple,
   FolderOpen, FilmSlate, Link as LinkIcon, UserPlus,
-  House, ArrowSquareOut, Clock,
+  House, ArrowSquareOut, Clock, WifiSlash, ArrowClockwise,
 } from "@phosphor-icons/react";
 import { useAuth } from "./context/AuthContext";
 import { projectsApi } from "./lib/api";
@@ -210,6 +210,8 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const [newModalOpen, setNewModalOpen] = useState(false);
   const [newModalRect, setNewModalRect] = useState(null);
   const [cmdOpen,      setCmdOpen]      = useState(false);
+  const [isOnline,     setIsOnline]     = useState(() => navigator.onLine);
+  const [checking,     setChecking]     = useState(false);
 
   const menuRef    = useRef(null);
   const settRef    = useRef(null);
@@ -217,6 +219,27 @@ export default function DashboardLayout({ children, title, crumbs }) {
   const newBtnRef  = useRef(null);
   const fileInputRef   = useRef(null);
   const folderInputRef = useRef(null);
+
+  useEffect(() => {
+    const goOnline  = () => { setIsOnline(true);  setChecking(false); };
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online",  goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online",  goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  async function handleTryAgain() {
+    setChecking(true);
+    try {
+      await fetch("/favicon.ico", { cache: "no-store", signal: AbortSignal.timeout(5000) });
+      window.location.reload();
+    } catch {
+      setChecking(false);
+    }
+  }
 
   useEffect(() => { setUsername(profile?.username || null); }, [profile?.username]);
   useEffect(() => { localStorage.setItem("db-sidebar-collapsed", collapsed ? "1" : "0"); }, [collapsed]);
@@ -493,7 +516,33 @@ export default function DashboardLayout({ children, title, crumbs }) {
         )}
 
         <main className="db-content">
-          {children}
+          {!isOnline ? (
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              height: "100%", minHeight: 420, gap: 16, padding: "40px 24px", textAlign: "center",
+            }}>
+              <div style={{
+                width: 72, height: 72, borderRadius: "50%",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <WifiSlash size={32} weight="duotone" style={{ color: "rgba(255,255,255,0.3)" }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 6px", color: "var(--text)" }}>You're offline</h2>
+                <p style={{ fontSize: 14, color: "var(--text-4)", margin: 0 }}>Check your connection and try again.</p>
+              </div>
+              <button
+                className="btn-primary"
+                style={{ height: 40, padding: "0 22px", fontSize: 14, gap: 8, minWidth: 130, justifyContent: "center" }}
+                onClick={handleTryAgain}
+                disabled={checking}
+              >
+                <ArrowClockwise size={15} weight="bold" style={{ animation: checking ? "spin 0.8s linear infinite" : "none" }} />
+                {checking ? "Checking…" : "Try again"}
+              </button>
+            </div>
+          ) : children}
         </main>
       </div>
 
