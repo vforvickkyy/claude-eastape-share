@@ -406,7 +406,6 @@ export default function AdminDatabase() {
                 display: "block",
                 border: "none",
                 outline: "none",
-                borderLeft: selectedTable === t ? "3px solid #f97316" : "3px solid transparent",
               }}
               onMouseEnter={(e) => { if (selectedTable !== t) e.currentTarget.style.color = "var(--t1)"; }}
               onMouseLeave={(e) => { if (selectedTable !== t) e.currentTarget.style.color = "var(--t2)"; }}

@@ -3,7 +3,7 @@ import { NavLink, Link, Outlet, useLocation } from "react-router-dom";
 import {
   House, Users, CreditCard, HardDrive, VideoCamera, Database,
   ChartBar, ClipboardText, Gear, ShieldCheck, PlayCircle,
-  SignOut, Bell, MagnifyingGlass, Mail, Wrench, List,
+  SignOut, Bell, MagnifyingGlass, Envelope, Wrench, List,
 } from "@phosphor-icons/react";
 
 const NAV_SECTIONS = [
@@ -112,7 +112,7 @@ export default function AdminLayout({ user }) {
           <div className="adm-qa-title">Quick Actions</div>
           <div className="adm-qa-grid">
             <NavLink to="/adminpanel/users" className="adm-qa-tile">
-              <span className="ic"><Mail size={13} /></span>
+              <span className="ic"><Envelope size={13} /></span>
               <span>Invite</span>
             </NavLink>
             <NavLink to="/adminpanel/settings" className="adm-qa-tile">
