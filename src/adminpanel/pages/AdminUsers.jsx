@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import UserDetailPanel from "../components/UserDetailPanel";
 import {
   DotsThree,
   Eye,
@@ -1425,26 +1426,18 @@ export default function AdminUsers() {
 
         {/* User Detail Drawer */}
         {showDetail && selectedUser && (
-          <>
-            <motion.div
-              key="drawer-backdrop"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowDetail(false)}
-              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 299 }}
-            />
-            <UserDetailDrawer
-              key="drawer"
-              user={selectedUser}
-              planName={userPlans[selectedUser.id]?.name}
-              planId={userPlans[selectedUser.id]?.planId}
-              plans={planList}
-              onClose={() => setShowDetail(false)}
-              onChangePlan={() => openChangePlan(selectedUser)}
-              onToggleSuspend={() => handleToggleSuspend(selectedUser)}
-              onDelete={() => openDelete(selectedUser)}
-              onSuccess={showToast}
-            />
-          </>
+          <UserDetailPanel
+            key="drawer"
+            user={selectedUser}
+            planName={userPlans[selectedUser.id]?.name}
+            planId={userPlans[selectedUser.id]?.planId}
+            plans={planList}
+            onClose={() => setShowDetail(false)}
+            onChangePlan={() => openChangePlan(selectedUser)}
+            onToggleSuspend={() => handleToggleSuspend(selectedUser)}
+            onDelete={() => openDelete(selectedUser)}
+            onSuccess={showToast}
+          />
         )}
 
         {/* Change Plan */}

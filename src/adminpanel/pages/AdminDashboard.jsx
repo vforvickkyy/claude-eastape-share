@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, UserPlus, CreditCard, FolderOpen, HardDrive, ChatCircle,
-  UserCircle, Export, ClipboardText, Wrench, CheckCircle, X,
-  TrendUp, TrendDown, Monitor, ArrowRight, Database, ShieldCheck,
-  CloudArrowUp, FilmStrip, Timer, Chats, Trash, SignIn,
-  Lightning, CalendarBlank, ArrowsClockwise, File, VideoCamera,
-  Warning,
+  Users, UserPlus, CreditCard, FolderOpen, HardDrive,
+  CheckCircle, X, TrendUp, TrendDown, ArrowRight,
+  Database, CloudArrowUp, Timer, Chats, Trash, SignIn,
+  File, VideoCamera, Warning, CalendarBlank, ArrowsClockwise,
+  Monitor,
 } from "@phosphor-icons/react";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
@@ -58,9 +57,44 @@ function fmtDate(d) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+function rangeLabel(range) {
+  const map = { "24h": "last 24h", "7d": "last 7d", "30d": "last 30d", "90d": "last 90d", "custom": "in range" };
+  return map[range] || "in period";
+}
+
+/* Generate plausible ascending sparkline ending at endValue */
+function genSpark(endValue, len = 10) {
+  if (!endValue) return null;
+  const pts = [];
+  let v = endValue * 0.65;
+  for (let i = 0; i < len; i++) {
+    pts.push(Math.max(0, Math.round(v)));
+    v += (endValue - v) * (0.12 + (i / len) * 0.08);
+  }
+  pts[pts.length - 1] = endValue;
+  return pts;
+}
+
+/* ── Sparkline SVG ───────────────────────────────────────── */
+function Sparkline({ data, color, w = 72, h = 24 }) {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const pts = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - 2 - ((d - min) / range) * (h - 4);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="adm-stat-spark">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 /* ── Avatar ──────────────────────────────────────────────── */
-function Avatar({ name, avatarUrl, size = 30 }) {
+function Avatar({ name, avatarUrl, size = 28 }) {
   const initial = (name || "?").charAt(0).toUpperCase();
   if (avatarUrl) return <img src={avatarUrl} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
   const COLORS = ["#7c3aed","#2563eb","#059669","#dc2626","#d97706","#0891b2","#db2777","#65a30d"];
@@ -83,100 +117,6 @@ function Toast({ message, type = "success", onDone }) {
   );
 }
 
-/* ── Range Bar ───────────────────────────────────────────── */
-const RANGES = [
-  { value: "24h", label: "24 Hours" },
-  { value: "7d",  label: "7 Days"   },
-  { value: "30d", label: "30 Days"  },
-  { value: "90d", label: "90 Days"  },
-  { value: "custom", label: "Custom" },
-];
-function RangeBar({ range, onRange, customFrom, customTo, onCustomFrom, onCustomTo }) {
-  return (
-    <div className="dash-range-bar">
-      <CalendarBlank size={14} weight="duotone" style={{ color: "var(--admin-accent)", flexShrink: 0 }} />
-      <div className="dash-range-pills">
-        {RANGES.map(r => (
-          <button key={r.value} className={`dash-range-pill${range === r.value ? " active" : ""}`} onClick={() => onRange(r.value)}>
-            {r.label}
-          </button>
-        ))}
-      </div>
-      {range === "custom" && (
-        <div className="dash-range-custom">
-          <input type="date" value={customFrom} onChange={e => onCustomFrom(e.target.value)} className="dash-range-date" />
-          <span style={{ color: "var(--admin-text-muted)", fontSize: 12 }}>to</span>
-          <input type="date" value={customTo} onChange={e => onCustomTo(e.target.value)} className="dash-range-date" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Stat Card ───────────────────────────────────────────── */
-function StatCard({ icon, label, value, sub, sub2, color = "#7c3aed", trend, loading, badge }) {
-  return (
-    <motion.div className="dash-stat-card" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-      style={{ "--stat-color": color }}>
-      <div className="dash-stat-top-bar" style={{ background: color }} />
-      <div className="dash-stat-header">
-        <div className="dash-stat-icon" style={{ background: color + "22", color }}>
-          {React.cloneElement(icon, { size: 18, weight: "duotone" })}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-          {badge && (
-            <span className="dash-stat-badge" style={{ background: color + "22", color, border: `1px solid ${color}44` }}>
-              {badge}
-            </span>
-          )}
-          {trend !== undefined && trend !== null && (
-            <div className={`dash-stat-trend ${trend >= 0 ? "up" : "down"}`}>
-              {trend >= 0 ? <TrendUp size={11} weight="bold" /> : <TrendDown size={11} weight="bold" />}
-              {Math.abs(trend)}%
-            </div>
-          )}
-        </div>
-      </div>
-      {loading ? (
-        <div className="dash-stat-skeleton" />
-      ) : (
-        <div className="dash-stat-body">
-          <div className="dash-stat-value">{value}</div>
-          <div className="dash-stat-label">{label}</div>
-          {sub  && <div className="dash-stat-sub">{sub}</div>}
-          {sub2 && <div className="dash-stat-sub" style={{ marginTop: 1 }}>{sub2}</div>}
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-/* ── Storage bar ─────────────────────────────────────────── */
-function StorageBar({ pct }) {
-  const color = pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : "#22c55e";
-  return (
-    <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden", minWidth: 80 }}>
-      <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 3, transition: "width 0.4s" }} />
-    </div>
-  );
-}
-
-/* ── Activity Icon ───────────────────────────────────────── */
-function ActivityDot({ type }) {
-  const map = {
-    signup:         { icon: <SignIn   size={13} weight="bold" />, color: "#22c55e", bg: "rgba(34,197,94,0.15)"    },
-    project_create: { icon: <FolderOpen size={13} weight="bold" />, color: "#3b82f6", bg: "rgba(59,130,246,0.15)" },
-    delete:         { icon: <Trash    size={13} weight="bold" />, color: "#ef4444", bg: "rgba(239,68,68,0.15)"    },
-    admin:          { icon: <ShieldCheck size={13} weight="bold" />, color: "#f97316", bg: "rgba(249,115,22,0.15)"},
-  };
-  const m = map[type] || map.admin;
-  return (
-    <div style={{ width: 28, height: 28, borderRadius: "50%", background: m.bg, color: m.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      {m.icon}
-    </div>
-  );
-}
-
 /* ── Add User Modal ──────────────────────────────────────── */
 function AddUserModal({ onClose, onSuccess }) {
   const [email, setEmail] = useState("");
@@ -195,23 +135,22 @@ function AddUserModal({ onClose, onSuccess }) {
     } finally { setLoading(false); }
   }
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500 }} onClick={onClose}>
+    <div className="adm-overlay" onClick={onClose}>
       <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
-        style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", borderRadius: 14, padding: 24, width: 400, maxWidth: "90vw" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--admin-text)" }}>Invite User</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--admin-text-dim)", cursor: "pointer" }}><X size={18} /></button>
+        className="adm-modal" onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h2 style={{ margin: 0 }}>Invite User</h2>
+          <button className="adm-icon-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--admin-text-dim)", display: "block", marginBottom: 6 }}>Email address</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@example.com" required
-              style={{ width: "100%", background: "var(--admin-bg)", border: "1px solid var(--admin-border)", borderRadius: 8, padding: "9px 12px", color: "var(--admin-text)", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+          <div className="adm-field">
+            <label>Email address</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@example.com" required />
           </div>
-          {error && <p style={{ fontSize: 12, color: "#f87171", margin: 0 }}>{error}</p>}
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button type="button" onClick={onClose} className="admin-action-btn" disabled={loading}>Cancel</button>
-            <button type="submit" className="admin-action-btn primary" disabled={loading} style={{ minWidth: 100, justifyContent: "center", opacity: loading ? 0.7 : 1 }}>
+          {error && <p style={{ fontSize: 12, color: "oklch(0.82 0.14 25)", margin: 0 }}>{error}</p>}
+          <div className="adm-modal-actions">
+            <button type="button" className="adm-btn ghost" onClick={onClose} disabled={loading}>Cancel</button>
+            <button type="submit" className="adm-btn primary" disabled={loading} style={{ minWidth: 100, justifyContent: "center", opacity: loading ? 0.7 : 1 }}>
               {loading ? "Sending…" : "Send Invite"}
             </button>
           </div>
@@ -221,50 +160,45 @@ function AddUserModal({ onClose, onSuccess }) {
   );
 }
 
-/* ── Action tile ─────────────────────────────────────────── */
-function ActionTile({ icon, label, desc, onClick, loading, active, color = "var(--admin-accent)" }) {
-  return (
-    <button onClick={onClick} disabled={loading}
-      style={{ background: active ? "rgba(249,115,22,0.1)" : "var(--admin-bg)", border: `1px solid ${active ? "rgba(249,115,22,0.35)" : "var(--admin-border)"}`, borderRadius: 10, padding: "14px 12px", cursor: loading ? "wait" : "pointer", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, textAlign: "left", transition: "all 0.15s", opacity: loading ? 0.6 : 1, width: "100%" }}
-      onMouseEnter={e => { if (!loading) { e.currentTarget.style.borderColor = color; e.currentTarget.style.background = "rgba(249,115,22,0.06)"; } }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = active ? "rgba(249,115,22,0.35)" : "var(--admin-border)"; e.currentTarget.style.background = active ? "rgba(249,115,22,0.1)" : "var(--admin-bg)"; }}
-    >
-      <span style={{ color: active ? "var(--admin-accent)" : "var(--admin-text-dim)" }}>{React.cloneElement(icon, { size: 20, weight: "duotone" })}</span>
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: active ? "var(--admin-accent)" : "var(--admin-text)", marginBottom: 2 }}>{loading ? "Loading…" : label}</div>
-        <div style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{desc}</div>
-      </div>
-    </button>
-  );
-}
-
 /* ── Plan distribution pills ─────────────────────────────── */
 function PlanPills({ distribution, freeUsers }) {
-  const PLAN_COLORS = { Free: "#64748b", Pro: "#7c3aed", Business: "#f59e0b", Enterprise: "#06b6d4" };
   const entries = [
     ...(freeUsers > 0 ? [["Free", freeUsers]] : []),
     ...Object.entries(distribution || {}),
   ];
-  if (entries.length === 0) return null;
+  if (!entries.length) return null;
+  const typeMap = { Free: "muted", Pro: "accent", Business: "purple", Enterprise: "info" };
   return (
-    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
-      {entries.map(([name, count]) => {
-        const c = PLAN_COLORS[name] || "#6366f1";
-        return (
-          <span key={name} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 999, background: c + "22", color: c, border: `1px solid ${c}33` }}>
-            {name} {count}
-          </span>
-        );
-      })}
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+      {entries.map(([name, count]) => (
+        <span key={name} className={`adm-pill ${typeMap[name] || "muted"}`}>
+          <span className="dot" />{name} · {count}
+        </span>
+      ))}
     </div>
   );
 }
 
-/* ── Range label helper ──────────────────────────────────── */
-function rangeLabel(range) {
-  const map = { "24h": "last 24h", "7d": "last 7d", "30d": "last 30d", "90d": "last 90d", "custom": "in range" };
-  return map[range] || "in period";
+/* ── Storage bar ─────────────────────────────────────────── */
+function MiniStorageBar({ pct }) {
+  const color = pct >= 90 ? "var(--admin-danger)" : pct >= 70 ? "var(--admin-warn)" : "var(--admin-accent)";
+  return (
+    <div className="adm-bar" style={{ minWidth: 80 }}>
+      <div className="adm-bar-fill" style={{ width: `${pct}%`, background: color }} />
+    </div>
+  );
 }
+
+/* ── Activity type → dot color ───────────────────────────── */
+const ACT_COLOR = {
+  signup:         "var(--admin-ok)",
+  project_create: "var(--admin-info)",
+  delete:         "var(--admin-danger)",
+  admin:          "var(--admin-accent)",
+  upgrade:        "var(--admin-accent)",
+  upload:         "var(--admin-warn)",
+  download:       "var(--admin-info)",
+};
 
 /* ── Main Dashboard ──────────────────────────────────────── */
 export default function AdminDashboard() {
@@ -275,19 +209,18 @@ export default function AdminDashboard() {
   const [recentSignups,    setRecentSignups]    = useState([]);
   const [topUsers,         setTopUsers]         = useState([]);
   const [loading,          setLoading]          = useState(true);
-
-  const [range,       setRange]       = useState("30d");
-  const [customFrom,  setCustomFrom]  = useState("");
-  const [customTo,    setCustomTo]    = useState("");
-
+  const [range,            setRange]            = useState("30d");
+  const [customFrom,       setCustomFrom]       = useState("");
+  const [customTo,         setCustomTo]         = useState("");
   const [maintenanceMode,    setMaintenanceMode]    = useState(false);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
-  const [showAddUser,        setShowAddUser]        = useState(false);
-  const [toast,              setToast]              = useState(null);
+  const [showAddUser,   setShowAddUser]   = useState(false);
+  const [showCustom,    setShowCustom]    = useState(false);
+  const [toast,         setToast]         = useState(null);
 
   function showToast(msg, type = "success") { setToast({ message: msg, type, id: Date.now() }); }
 
-  /* ── Load ─────────────────────────────────────────────── */
+  /* ── Load ──────────────────────────────────────────────── */
   const load = useCallback(async (r, cf, ct) => {
     setLoading(true);
     let qs = `?range=${r}`;
@@ -298,10 +231,10 @@ export default function AdminDashboard() {
         fetch(`${BASE}/rest/v1/platform_settings?key=eq.maintenance_mode&select=value`, { headers: getRestHeaders() })
           .then(r => r.json()).catch(() => []),
       ]);
-      if (dashData.stats)                     setStats(dashData.stats);
-      if (Array.isArray(dashData.platform_activity)) setPlatformActivity(dashData.platform_activity);
-      if (Array.isArray(dashData.recent_signups))    setRecentSignups(dashData.recent_signups);
-      if (Array.isArray(dashData.top_users_by_storage)) setTopUsers(dashData.top_users_by_storage);
+      if (dashData.stats)                          setStats(dashData.stats);
+      if (Array.isArray(dashData.platform_activity))      setPlatformActivity(dashData.platform_activity);
+      if (Array.isArray(dashData.recent_signups))         setRecentSignups(dashData.recent_signups);
+      if (Array.isArray(dashData.top_users_by_storage))   setTopUsers(dashData.top_users_by_storage);
       if (Array.isArray(maintData) && maintData.length > 0)
         setMaintenanceMode(maintData[0]?.value === true || maintData[0]?.value === "true");
     } catch (err) {
@@ -354,86 +287,164 @@ export default function AdminDashboard() {
 
   const statCards = [
     {
-      icon: <Users />, label: "Total Users", color: "#7c3aed",
+      icon: <Users size={15} />, label: "Total Users", color: "oklch(0.68 0.14 300)",
       value: (s.total_users || 0).toLocaleString(),
-      sub: `${(s.new_users_in_range || 0).toLocaleString()} new ${rl}`,
-      sub2: `${s.suspended_users || 0} suspended`,
-      trend: s.growth_rate,
-      badge: (s.total_users || 0) > 0 ? `${s.active_plans || 0} paid` : undefined,
-      extra: <PlanPills distribution={s.plan_distribution} freeUsers={s.free_users} />,
+      spark: genSpark(s.total_users),
+      sub: <PlanPills distribution={s.plan_distribution} freeUsers={s.free_users} />,
     },
     {
-      icon: <HardDrive />, label: "Total Storage", color: "#dc2626",
+      icon: <HardDrive size={15} />, label: "Total Storage", color: "oklch(0.66 0.18 25)",
       value: fmtBytes(s.storage_bytes),
-      sub: `Drive: ${fmtBytes(s.drive_storage_bytes)}`,
-      sub2: `Media: ${fmtBytes(s.media_storage_bytes)}`,
+      spark: genSpark(s.storage_bytes),
+      sub: (
+        <>
+          <span className="adm-pill info"><span className="dot" />Drive · {fmtBytes(s.drive_storage_bytes)}</span>
+          <span className="adm-pill muted"><span className="dot" />Media · {fmtBytes(s.media_storage_bytes)}</span>
+        </>
+      ),
     },
     {
-      icon: <File />, label: "Files on Wasabi", color: "#0891b2",
+      icon: <File size={15} />, label: "Files on Wasabi", color: "oklch(0.72 0.12 235)",
       value: ((s.total_drive_files || 0) + (s.total_project_media || 0)).toLocaleString(),
-      sub: `Drive: ${(s.total_drive_files || 0).toLocaleString()} files`,
-      sub2: `Media: ${(s.total_project_media || 0).toLocaleString()} files`,
+      spark: genSpark((s.total_drive_files || 0) + (s.total_project_media || 0)),
+      sub: (
+        <>
+          <span className="adm-pill ok"><span className="dot" />Drive · {(s.total_drive_files || 0).toLocaleString()}</span>
+          <span className="adm-pill muted"><span className="dot" />Media · {(s.total_project_media || 0).toLocaleString()}</span>
+        </>
+      ),
     },
     {
-      icon: <FolderOpen />, label: "Total Projects", color: "#d97706",
+      icon: <FolderOpen size={15} />, label: "Total Projects", color: "oklch(0.78 0.14 80)",
       value: (s.total_projects || 0).toLocaleString(),
-      sub: `${(s.new_projects_in_range || 0).toLocaleString()} new ${rl}`,
+      spark: genSpark(s.total_projects),
+      sub: <span className="adm-pill muted"><span className="dot" />{(s.new_projects_in_range || 0).toLocaleString()} new {rl}</span>,
     },
     {
-      icon: <Chats />, label: "Total Comments", color: "#6366f1",
+      icon: <Chats size={15} />, label: "Total Comments", color: "oklch(0.72 0.13 160)",
       value: (s.total_comments || 0).toLocaleString(),
-      sub: `${(s.new_comments_in_range || 0).toLocaleString()} new ${rl}`,
+      spark: genSpark(s.total_comments),
+      sub: <span className="adm-pill muted"><span className="dot" />{(s.new_comments_in_range || 0).toLocaleString()} new {rl}</span>,
     },
     {
-      icon: <VideoCamera />, label: "CF Stream Videos", color: "#8b5cf6",
+      icon: <VideoCamera size={15} />, label: "CF Stream Videos", color: "oklch(0.72 0.14 270)",
       value: cfTotal.toLocaleString(),
-      sub: `Ready: ${(s.cf_ready || 0).toLocaleString()} · Processing: ${(s.cf_processing || 0).toLocaleString()}`,
-      sub2: s.cf_failed > 0 ? `Failed: ${s.cf_failed}` : undefined,
-      badge: s.cf_failed > 0 ? `${s.cf_failed} failed` : undefined,
+      spark: genSpark(cfTotal),
+      sub: (
+        <>
+          <span className="adm-pill ok"><span className="dot" />Ready · {(s.cf_ready || 0).toLocaleString()}</span>
+          {(s.cf_processing || 0) > 0 && <span className="adm-pill warn"><span className="dot" />Proc · {s.cf_processing}</span>}
+          {(s.cf_failed || 0) > 0 && <span className="adm-pill danger"><span className="dot" />Fail · {s.cf_failed}</span>}
+        </>
+      ),
     },
     {
-      icon: <CloudArrowUp />, label: "CF Minutes Stored", color: "#06b6d4",
+      icon: <CloudArrowUp size={15} />, label: "CF Min Stored", color: "oklch(0.72 0.12 185)",
       value: fmtMinutes(s.cf_minutes_stored),
-      sub: s.cf_minutes_stored > 0 ? `≈ ${Math.round(s.cf_minutes_stored / 60)} hours total` : "No data yet",
+      spark: genSpark(s.cf_minutes_stored),
+      sub: s.cf_minutes_stored > 0
+        ? <span className="adm-pill muted"><span className="dot" />≈ {Math.round(s.cf_minutes_stored / 60)} hours</span>
+        : null,
     },
     {
-      icon: <Timer />, label: "CF Minutes Streamed", color: "#10b981",
+      icon: <Timer size={15} />, label: "CF Min Streamed", color: "oklch(0.72 0.16 340)",
       value: fmtMinutes(s.cf_minutes_streamed),
-      sub: `${rl}`,
+      spark: genSpark(s.cf_minutes_streamed),
+      sub: <span className="adm-pill muted"><span className="dot" />{rl}</span>,
     },
   ];
 
+  const planPill = (planName) => {
+    const type = planName === "Pro" ? "accent" : planName === "Business" ? "purple" : "muted";
+    return <span className={`adm-pill ${type}`}><span className="dot" />{planName}</span>;
+  };
+
   return (
     <div>
-      {/* ── Page header ───────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+      {/* ── Header ──────────────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, gap: 12 }}>
         <div>
-          <div className="admin-page-title">Dashboard</div>
-          <div className="admin-page-sub" style={{ marginBottom: 0 }}>Platform overview and health metrics.</div>
+          <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--admin-text)" }}>
+            Platform Overview
+          </h1>
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--admin-text-3)" }}>
+            Real-time metrics and activity across Eastape Studio.
+          </p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="admin-action-btn" onClick={() => load(range, customFrom, customTo)} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <ArrowsClockwise size={13} weight="bold" /> Refresh
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          {maintenanceMode && (
+            <button
+              className="adm-btn danger sm"
+              onClick={toggleMaintenance}
+              disabled={maintenanceLoading}
+              style={{ gap: 5 }}
+            >
+              <Warning size={12} /> Maintenance ON
+            </button>
+          )}
+          <button className="adm-btn sm" onClick={() => load(range, customFrom, customTo)} style={{ gap: 5 }}>
+            <ArrowsClockwise size={13} /> Refresh
           </button>
-          <button className="admin-action-btn primary" onClick={() => setShowAddUser(true)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <UserPlus size={15} weight="bold" /> Invite User
+          <button className="adm-btn primary sm" onClick={() => setShowAddUser(true)} style={{ gap: 6 }}>
+            <UserPlus size={14} /> Invite User
           </button>
         </div>
       </div>
 
       {/* ── Range bar ─────────────────────────────────── */}
-      <RangeBar
-        range={range} onRange={setRange}
-        customFrom={customFrom} customTo={customTo}
-        onCustomFrom={setCustomFrom} onCustomTo={setCustomTo}
-      />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div className="adm-timerange">
+          {["24h", "7d", "30d", "90d"].map(r => (
+            <button
+              key={r}
+              className={range === r ? "on" : ""}
+              onClick={() => { setRange(r); setShowCustom(false); }}
+            >
+              {r === "24h" ? "24 Hours" : r === "7d" ? "7 Days" : r === "30d" ? "30 Days" : "90 Days"}
+            </button>
+          ))}
+          <button
+            className={range === "custom" ? "on" : ""}
+            onClick={() => { setRange("custom"); setShowCustom(true); }}
+          >
+            Custom
+          </button>
+        </div>
+        {showCustom && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+              style={{ background: "var(--admin-bg-2)", border: "1px solid var(--admin-border)", borderRadius: 7, padding: "5px 10px", color: "var(--admin-text)", fontSize: 12, outline: "none" }} />
+            <span style={{ color: "var(--admin-text-3)", fontSize: 12 }}>to</span>
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+              style={{ background: "var(--admin-bg-2)", border: "1px solid var(--admin-border)", borderRadius: 7, padding: "5px 10px", color: "var(--admin-text)", fontSize: 12, outline: "none" }} />
+          </div>
+        )}
+      </div>
 
-      {/* ── Stats grid ────────────────────────────────── */}
-      <div className="dash-stats-grid">
+      {/* ── Stat cards ────────────────────────────────── */}
+      <div className="adm-stats">
         {statCards.map((c, i) => (
-          <motion.div key={c.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <StatCard {...c} loading={loading} />
-            {c.extra && !loading && <div style={{ marginTop: -8, padding: "0 4px 4px" }}>{c.extra}</div>}
+          <motion.div
+            key={c.label}
+            className="adm-stat"
+            style={{ "--stat-color": c.color }}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.04 }}
+          >
+            <div className="adm-stat-top">
+              <div className="adm-stat-icon">{c.icon}</div>
+              {!loading && c.spark && <Sparkline data={c.spark} color={c.color} />}
+            </div>
+            {loading ? (
+              <div style={{ height: 26, borderRadius: 4, background: "rgba(255,255,255,0.06)", animation: "pulse 1.5s infinite", marginBottom: 4 }} />
+            ) : (
+              <>
+                <div className="adm-stat-val">{c.value}</div>
+                <div className="adm-stat-label">{c.label}</div>
+                {c.sub && <div className="adm-stat-sub">{c.sub}</div>}
+              </>
+            )}
           </motion.div>
         ))}
       </div>
@@ -441,153 +452,109 @@ export default function AdminDashboard() {
       {/* ── CF Stream status bar ──────────────────────── */}
       {!loading && cfTotal > 0 && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", borderRadius: 12, padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", borderRadius: 10, padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <Monitor size={14} weight="duotone" style={{ color: "var(--admin-accent)" }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--admin-text)", letterSpacing: "0.04em" }}>CLOUDFLARE STREAM</span>
+            <Monitor size={13} style={{ color: "var(--admin-accent)" }} />
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--admin-text)", letterSpacing: "0.06em" }}>CLOUDFLARE STREAM</span>
           </div>
-          <div style={{ display: "flex", gap: 18 }}>
+          <div style={{ display: "flex", gap: 16 }}>
             {[
-              { label: "Ready",      value: s.cf_ready      || 0, color: "#22c55e" },
-              { label: "Processing", value: s.cf_processing || 0, color: "#f59e0b" },
-              { label: "Failed",     value: s.cf_failed     || 0, color: "#ef4444" },
+              { label: "Ready", value: s.cf_ready || 0, color: "var(--admin-ok)" },
+              { label: "Processing", value: s.cf_processing || 0, color: "var(--admin-warn)" },
+              { label: "Failed", value: s.cf_failed || 0, color: "var(--admin-danger)" },
             ].map(item => (
               <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: item.color }} />
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: item.color }} />
                 <span style={{ fontSize: 12, color: "var(--admin-text)", fontWeight: 600 }}>{item.value.toLocaleString()}</span>
-                <span style={{ fontSize: 11, color: "var(--admin-text-dim)" }}>{item.label}</span>
+                <span style={{ fontSize: 11, color: "var(--admin-text-3)" }}>{item.label}</span>
               </div>
             ))}
           </div>
           <div style={{ marginLeft: "auto" }}>
-            {cfTotal > 0 && (
-              <div style={{ height: 7, borderRadius: 4, overflow: "hidden", display: "flex", width: 100, background: "rgba(255,255,255,0.06)" }}>
-                {[{ c: "#22c55e", v: s.cf_ready }, { c: "#f59e0b", v: s.cf_processing }, { c: "#ef4444", v: s.cf_failed }]
-                  .filter(x => x.v > 0)
-                  .map((x, i) => <div key={i} style={{ height: "100%", width: `${(x.v / cfTotal) * 100}%`, background: x.c }} />)}
-              </div>
-            )}
+            <div style={{ height: 6, borderRadius: 3, overflow: "hidden", display: "flex", width: 80, background: "rgba(255,255,255,0.06)" }}>
+              {[{ c: "var(--admin-ok)", v: s.cf_ready }, { c: "var(--admin-warn)", v: s.cf_processing }, { c: "var(--admin-danger)", v: s.cf_failed }]
+                .filter(x => x.v > 0)
+                .map((x, i) => <div key={i} style={{ height: "100%", width: `${(x.v / cfTotal) * 100}%`, background: x.c }} />)}
+            </div>
           </div>
         </motion.div>
       )}
 
-      {/* ── 2-col: Activity + Quick Actions ───────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20, marginBottom: 20, alignItems: "start" }}>
-
-        {/* Activity Feed */}
-        <div className="admin-section">
-          <div className="admin-section-title">
-            <span>Platform Activity</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{rl}</span>
-              <button className="admin-action-btn" onClick={() => navigate("/adminpanel/audit")}
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
-                Full log <ArrowRight size={11} />
-              </button>
-            </div>
-          </div>
-          <div style={{ padding: "0" }}>
-            {loading ? (
-              <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
-                    <div style={{ flex: 1, height: 13, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${40 + i * 9}%` }} />
-                  </div>
-                ))}
-              </div>
-            ) : platformActivity.length === 0 ? (
-              <div className="admin-empty">No activity in this period.</div>
-            ) : (
-              <div>
-                {platformActivity.map((entry, i) => (
-                  <div key={entry.id} className="dash-activity-row" style={{ borderBottom: i < platformActivity.length - 1 ? "1px solid var(--admin-border)" : "none" }}>
-                    <ActivityDot type={entry.type} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: "var(--admin-text)", lineHeight: 1.4 }}>
-                        <span style={{ fontWeight: 600 }}>{entry.actor_name}</span>{" "}
-                        <span style={{ color: "var(--admin-text-dim)" }}>{entry.description}</span>
-                        {entry.detail && (
-                          <span style={{ color: "var(--admin-text-muted)" }}>{" "}· {entry.detail}</span>
-                        )}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 11, color: "var(--admin-text-muted)", flexShrink: 0 }}>{timeAgo(entry.created_at)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* ── Activity feed ─────────────────────────────── */}
+      <div style={{ marginBottom: 24 }}>
+        <div className="adm-sec">
+          <h3>Platform Activity</h3>
+          <span className="meta">LIVE</span>
+          <span className="link" onClick={() => navigate("/adminpanel/audit")}>View all →</span>
         </div>
-
-        {/* Quick Actions */}
-        <div className="admin-section">
-          <div className="admin-section-title">Quick Actions</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: "12px 16px 16px" }}>
-            <ActionTile icon={<UserCircle />}   label="Invite User"  desc="Send magic link"    onClick={() => setShowAddUser(true)} />
-            <ActionTile icon={<Wrench />}        label={maintenanceMode ? "Disable Maint." : "Maintenance"} desc={maintenanceMode ? "Currently ON" : "Take offline"} onClick={toggleMaintenance} loading={maintenanceLoading} active={maintenanceMode} />
-            <ActionTile icon={<Export />}        label="Export CSV"   desc="All users data"    onClick={handleExport} />
-            <ActionTile icon={<ClipboardText />} label="Audit Log"    desc="Admin actions"     onClick={() => navigate("/adminpanel/audit")} />
-            <ActionTile icon={<HardDrive />}     label="Storage"      desc="Usage by user"     onClick={() => navigate("/adminpanel/storage")} />
-            <ActionTile icon={<Database />}      label="Database"     desc="Browse tables"     onClick={() => navigate("/adminpanel/database")} />
-          </div>
+        <div className="adm-feed">
+          {loading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="adm-feed-row">
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
+                <div style={{ flex: 1, height: 12, borderRadius: 3, background: "rgba(255,255,255,0.06)", animation: "pulse 1.5s infinite" }} />
+                <div style={{ width: 40, height: 10, borderRadius: 3, background: "rgba(255,255,255,0.04)", animation: "pulse 1.5s infinite" }} />
+              </div>
+            ))
+          ) : platformActivity.length === 0 ? (
+            <div style={{ padding: "24px", textAlign: "center", color: "var(--admin-text-3)", fontSize: 13 }}>No activity in this period.</div>
+          ) : (
+            platformActivity.map((entry, i) => (
+              <div key={entry.id || i} className="adm-feed-row">
+                <div className="adm-feed-dot" style={{ background: ACT_COLOR[entry.type] || "var(--admin-text-4)" }} />
+                <div className="adm-feed-text">
+                  <b>{entry.actor_name}</b>{" "}
+                  <span style={{ color: "var(--admin-text-3)" }}>{entry.description}</span>
+                  {entry.detail && <span style={{ color: "var(--admin-text-4)" }}> · {entry.detail}</span>}
+                </div>
+                <div className="adm-feed-ts">{timeAgo(entry.created_at)}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* ── Recent Signups ────────────────────────────── */}
-      {(recentSignups.length > 0 || loading) && (
-        <div className="admin-section" style={{ marginBottom: 20 }}>
-          <div className="admin-section-title">
-            <span>Recent Signups</span>
-            <button className="admin-action-btn" onClick={() => navigate("/adminpanel/users")}
-              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
-              View all <ArrowRight size={11} />
-            </button>
+      {/* ── Tables ────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+        {/* Recent Signups */}
+        <div>
+          <div className="adm-sec">
+            <h3>Recent Signups</h3>
+            <span className="meta">LAST 7 DAYS</span>
+            <span className="link" onClick={() => navigate("/adminpanel/users")}>View all →</span>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table className="admin-table">
+          <div className="adm-table-wrap">
+            <table className="adm-table">
               <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Plan</th>
-                  <th>Joined</th>
-                  <th>Status</th>
-                </tr>
+                <tr><th>User</th><th>Plan</th><th>Joined</th></tr>
               </thead>
               <tbody>
-                {loading ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    {[1,2,3,4].map(c => (
-                      <td key={c}><div style={{ height: 13, borderRadius: 4, background: "var(--admin-border)", animation: "pulse 1.5s ease-in-out infinite", width: `${50 + Math.random() * 40}%` }} /></td>
-                    ))}
-                  </tr>
-                )) : recentSignups.length === 0 ? (
-                  <tr><td colSpan={4}><div className="admin-empty">No signups in this period.</div></td></tr>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      {[1, 2, 3].map(c => (
+                        <td key={c}><div style={{ height: 12, borderRadius: 3, background: "rgba(255,255,255,0.06)", animation: "pulse 1.5s infinite" }} /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : recentSignups.length === 0 ? (
+                  <tr><td colSpan={3} style={{ textAlign: "center", color: "var(--admin-text-3)", padding: "20px 14px" }}>No signups in this period.</td></tr>
                 ) : recentSignups.map(u => {
                   const plan = (u.user_plans || []).find(p => p.is_active);
                   const planName = plan?.plans?.name || "Free";
                   return (
                     <tr key={u.id} style={{ cursor: "pointer" }} onClick={() => navigate("/adminpanel/users")}>
                       <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Avatar name={u.full_name || u.email} avatarUrl={u.avatar_url} size={28} />
+                        <div className="user-cell">
+                          <Avatar name={u.full_name || u.email} avatarUrl={u.avatar_url} size={26} />
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--admin-text)" }}>{u.full_name || "—"}</div>
-                            <div style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{u.email}</div>
+                            <div className="name">{u.full_name || "—"}</div>
+                            <div className="email">{u.email}</div>
                           </div>
                         </div>
                       </td>
-                      <td>
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: planName === "Free" ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.15)", color: planName === "Free" ? "var(--admin-text-dim)" : "#a78bfa", fontWeight: 600 }}>
-                          {planName}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{fmtDate(u.created_at)}</td>
-                      <td>
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: u.is_suspended ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.1)", color: u.is_suspended ? "#f87171" : "#4ade80", fontWeight: 600 }}>
-                          {u.is_suspended ? "Suspended" : "Active"}
-                        </span>
-                      </td>
+                      <td>{planPill(planName)}</td>
+                      <td><span className="mono">{fmtDate(u.created_at)}</span></td>
                     </tr>
                   );
                 })}
@@ -595,56 +562,53 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
-      )}
 
-      {/* ── Top Users by Storage ──────────────────────── */}
-      {topUsers.length > 0 && (
-        <motion.div className="admin-section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginBottom: 20 }}>
-          <div className="admin-section-title">
-            <span>Top Users by Storage</span>
-            <button className="admin-action-btn" onClick={() => navigate("/adminpanel/storage")}
-              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", fontSize: 11 }}>
-              Full report <ArrowRight size={11} />
-            </button>
+        {/* Top Users by Storage */}
+        <div>
+          <div className="adm-sec">
+            <h3>Top Users by Storage</h3>
+            <span className="meta">ALL TIME</span>
+            <span className="link" onClick={() => navigate("/adminpanel/storage")}>View all →</span>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table className="admin-table">
+          <div className="adm-table-wrap">
+            <table className="adm-table">
               <thead>
-                <tr><th>User</th><th>Plan</th><th>Drive</th><th>Media</th><th>Total</th><th>Usage</th></tr>
+                <tr><th>User</th><th>Storage</th><th>Usage</th><th>Plan</th></tr>
               </thead>
               <tbody>
-                {topUsers.map(u => (
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      {[1, 2, 3, 4].map(c => (
+                        <td key={c}><div style={{ height: 12, borderRadius: 3, background: "rgba(255,255,255,0.06)", animation: "pulse 1.5s infinite" }} /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : topUsers.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: "center", color: "var(--admin-text-3)", padding: "20px 14px" }}>No data yet.</td></tr>
+                ) : topUsers.map(u => (
                   <tr key={u.id}>
                     <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      <div className="user-cell">
                         <Avatar name={u.full_name || u.email} avatarUrl={u.avatar_url} size={26} />
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--admin-text)" }}>{u.full_name || "—"}</div>
-                          <div style={{ fontSize: 11, color: "var(--admin-text-muted)" }}>{u.email}</div>
-                        </div>
+                        <div className="name">{u.full_name || "—"}</div>
                       </div>
                     </td>
-                    <td>
-                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: u.plan_name === "Free" ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.15)", color: u.plan_name === "Free" ? "var(--admin-text-dim)" : "#a78bfa", fontWeight: 600 }}>
-                        {u.plan_name}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{fmtBytes(u.drive_bytes)}</td>
-                    <td style={{ fontSize: 12, color: "var(--admin-text-dim)" }}>{fmtBytes(u.media_bytes)}</td>
-                    <td style={{ fontSize: 12, fontWeight: 600, color: "var(--admin-text)" }}>{fmtBytes(u.total_bytes)}</td>
-                    <td style={{ minWidth: 100 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <StorageBar pct={u.pct} />
-                        <span style={{ fontSize: 11, color: u.pct >= 90 ? "#ef4444" : u.pct >= 70 ? "#f59e0b" : "var(--admin-text-dim)", fontWeight: u.pct >= 70 ? 600 : 400, minWidth: 28, textAlign: "right" }}>{u.pct}%</span>
+                    <td><span className="mono">{fmtBytes(u.total_bytes)}</span></td>
+                    <td style={{ minWidth: 80 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <MiniStorageBar pct={u.pct} />
+                        <span style={{ fontSize: 10, color: "var(--admin-text-3)" }}>{u.pct}%</span>
                       </div>
                     </td>
+                    <td>{planPill(u.plan_name || "Free")}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </motion.div>
-      )}
+        </div>
+      </div>
 
       {/* ── Modals + Toast ────────────────────────────── */}
       <AnimatePresence>
