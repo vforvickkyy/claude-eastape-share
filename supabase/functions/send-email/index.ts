@@ -415,7 +415,24 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json()
-    const { to, template, data, userId, notificationType } = body
+    const { to, template, data, userId, notificationType, preview } = body
+
+    // Preview mode: render HTML without sending (admin-only)
+    if (preview === true) {
+      const authClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } },
+      )
+      const { data: { user }, error: authErr } = await authClient.auth.getUser()
+      if (authErr || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } })
+      const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const { data: prof } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', user.id).single()
+      if (!prof?.is_admin) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } })
+      if (!template || !templates[template]) return new Response(JSON.stringify({ error: `Invalid template: ${template}` }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } })
+      const { subject, html } = templates[template](data || {})
+      return new Response(JSON.stringify({ subject, html }), { headers: { ...cors, 'Content-Type': 'application/json' } })
+    }
 
     let recipientEmail = to
 

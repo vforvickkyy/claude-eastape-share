@@ -41,6 +41,7 @@ const NAV_SECTIONS = [
   {
     label: "Platform",
     items: [
+      { to: "/adminpanel/emails", label: "Emails", icon: Envelope },
       { to: "/adminpanel/audit", label: "Audit Logs", icon: ClipboardText },
       { to: "/adminpanel/settings", label: "Settings", icon: Gear },
       { to: "/adminpanel/admins", label: "Admins", icon: ShieldCheck },
@@ -57,6 +58,7 @@ const PATH_CRUMBS = {
   "/adminpanel/database": "Database",
   "/adminpanel/analytics": "Analytics",
   "/adminpanel/ui/player": "Player Settings",
+  "/adminpanel/emails": "Emails",
   "/adminpanel/audit": "Audit Logs",
   "/adminpanel/settings": "Settings",
   "/adminpanel/admins": "Admins",
