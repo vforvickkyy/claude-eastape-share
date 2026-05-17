@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Envelope, Gear, Prohibit, Trash, FolderOpen, File, VideoCamera,
-  Chats, CloudArrowUp, Timer, Share, Eye, Clock, Globe, Shield,
-  CheckCircle, Warning, PlayCircle, Database, Key,
+  CloudArrowUp, Timer, Eye, Clock, Globe, Shield,
+  CheckCircle, Warning, PlayCircle, Database,
 } from "@phosphor-icons/react";
 
 const SB = import.meta.env.VITE_SUPABASE_URL;
@@ -56,7 +56,8 @@ function Avatar({ name, url, size = 56 }) {
   return <div className="udp-av" style={{ width: size, height: size, background: bg, fontSize: size * 0.33 }}>{chars}</div>;
 }
 
-const PLAN_LIMITS = { Free: 10 * 1024 ** 3, Pro: 500 * 1024 ** 3, Business: 2 * 1024 ** 4 };
+const PLAN_LIMITS_GB = { Free: 2, Pro: 500, Business: 2000 };
+function planLimitBytes(gb) { return (gb || 2) * 1024 ** 3; }
 
 const EMAIL_TEMPLATES = [
   {
@@ -161,10 +162,10 @@ function EmailModal({ user, planName, onClose, onSuccess }) {
     if (!subject.trim() || !body.trim()) return;
     setSending(true);
     try {
-      const res = await fetch(`${SB}/functions/v1/admin-send-email`, {
+      const res = await fetch(`${SB}/functions/v1/send-email`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ to: user.email, subject, body }),
+        body: JSON.stringify({ to: user.email, template: "custom", data: { subject, body } }),
       });
       if (!res.ok) throw new Error();
       onSuccess?.("Email sent to " + user.email);
@@ -309,11 +310,12 @@ export default function UserDetailPanel({
 
   // Profile extended data
   const [profile, setProfile] = useState(null);
+  const [planData, setPlanData] = useState(null); // { name, storage_limit_gb }
 
   // Overview stats
   const [stats, setStats] = useState({
-    projects: null, files: null, comments: null, cfMinutes: null,
-    uploads30d: null, shares: null,
+    projects: null, driveFiles: null, projectFiles: null, projectMedia: null,
+    uploads30d: null,
   });
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -325,7 +327,6 @@ export default function UserDetailPanel({
   // Content
   const [projects, setProjects] = useState([]);
   const [recentFiles, setRecentFiles] = useState([]);
-  const [cfStats, setCfStats] = useState(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [contentLoaded, setContentLoaded] = useState(false);
 
@@ -345,14 +346,16 @@ export default function UserDetailPanel({
   const [saved, setSaved] = useState(false);
 
   const displayName = user?.full_name || user?.email || "Unknown";
-  const displayPlan = planName || "Free";
+  const displayPlan = planData?.name || planName || "Free";
   const planType = displayPlan === "Pro" ? "accent" : displayPlan === "Business" ? "purple" : "muted";
-  const storageLimit = PLAN_LIMITS[displayPlan] || PLAN_LIMITS.Free;
+  const limitGb = planData?.storage_limit_gb || PLAN_LIMITS_GB[displayPlan] || 2;
+  const storageLimit = planLimitBytes(limitGb);
   const storageUsed = profile?.storage_used || user?.storage_used || 0;
   const storagePct = Math.min(100, Math.round((storageUsed / storageLimit) * 100));
   const storageColor = storagePct > 80 ? "var(--admin-danger)" : storagePct > 60 ? "var(--admin-warn)" : "var(--admin-accent)";
+  const totalFiles = (stats.driveFiles || 0) + (stats.projectFiles || 0) + (stats.projectMedia || 0);
 
-  // Fetch profile + stats on mount
+  // Fetch profile + stats + plan on mount
   useEffect(() => {
     if (!user?.id) return;
     const uid = user.id;
@@ -369,55 +372,65 @@ export default function UserDetailPanel({
       })
       .catch(() => {});
 
-    // Counts in parallel
+    // Plan data for accurate storage limit
+    fetch(`${SB}/rest/v1/user_plans?user_id=eq.${uid}&is_active=eq.true&select=plans(name,storage_limit_gb)`, { headers: hdr() })
+      .then(r => r.json())
+      .then(d => { if (d?.[0]?.plans) setPlanData(d[0].plans); })
+      .catch(() => {});
+
+    // File counts — drive_files, project_files, project_media (all use service-role-accessible tables)
+    const safeCnt = (url) =>
+      fetch(`${SB}/rest/v1/${url}`, { headers: cntHdr() })
+        .then(r => r.ok ? getCount(r) : 0)
+        .catch(() => 0);
+
     Promise.all([
-      fetch(`${SB}/rest/v1/projects?user_id=eq.${uid}&select=id`, { headers: cntHdr() }),
-      fetch(`${SB}/rest/v1/media_assets?user_id=eq.${uid}&select=id`, { headers: cntHdr() }),
-      fetch(`${SB}/rest/v1/comments?user_id=eq.${uid}&select=id`, { headers: cntHdr() }).catch(() => null),
-      fetch(`${SB}/rest/v1/shares?user_id=eq.${uid}&select=id`, { headers: cntHdr() }),
-      fetch(`${SB}/rest/v1/media_assets?user_id=eq.${uid}&created_at=gte.${ago30}&select=id`, { headers: cntHdr() }),
-    ]).then(([pR, mR, cR, sR, u30R]) => {
-      setStats({
-        projects: getCount(pR),
-        files: getCount(mR),
-        comments: cR ? getCount(cR) : 0,
-        cfMinutes: null,
-        uploads30d: getCount(u30R),
-        shares: getCount(sR),
-      });
-    }).catch(() => {}).finally(() => setLoadingStats(false));
+      safeCnt(`projects?user_id=eq.${uid}&select=id`),
+      safeCnt(`drive_files?user_id=eq.${uid}&is_trashed=eq.false&select=id`),
+      safeCnt(`project_files?user_id=eq.${uid}&is_trashed=eq.false&select=id`),
+      safeCnt(`project_media?user_id=eq.${uid}&is_trashed=eq.false&select=id`),
+      safeCnt(`drive_files?user_id=eq.${uid}&is_trashed=eq.false&created_at=gte.${ago30}&select=id`),
+    ]).then(([projects, driveFiles, projectFiles, projectMedia, uploads30d]) => {
+      setStats({ projects, driveFiles, projectFiles, projectMedia, uploads30d });
+    }).finally(() => setLoadingStats(false));
   }, [user?.id]);
 
-  // Activity tab
+  // Activity tab — filter by target_id + target_type (not target_user_id)
   useEffect(() => {
     if (tab !== "activity" || actLoaded || !user?.id) return;
     setLoadingActivity(true);
-    fetch(`${SB}/rest/v1/admin_audit_logs?target_user_id=eq.${user.id}&select=*&order=created_at.desc&limit=30`, { headers: hdr() })
+    fetch(
+      `${SB}/rest/v1/admin_audit_logs?target_id=eq.${user.id}&target_type=eq.user&select=*&order=created_at.desc&limit=30`,
+      { headers: hdr() }
+    )
       .then(r => r.json())
       .then(d => { setActivity(Array.isArray(d) ? d : []); setActLoaded(true); })
       .catch(() => setActivity([]))
       .finally(() => setLoadingActivity(false));
   }, [tab, user?.id, actLoaded]);
 
-  // Content tab
+  // Content tab — use drive_files + project_media (not media_assets/shares)
   useEffect(() => {
     if (tab !== "content" || contentLoaded || !user?.id) return;
     setLoadingContent(true);
     const uid = user.id;
+    const safeJson = (url) =>
+      fetch(`${SB}/rest/v1/${url}`, { headers: hdr() })
+        .then(r => r.ok ? r.json() : [])
+        .catch(() => []);
+
     Promise.all([
-      fetch(`${SB}/rest/v1/projects?user_id=eq.${uid}&select=id,name,created_at,status&order=created_at.desc`, { headers: hdr() }).then(r => r.json()).catch(() => []),
-      fetch(`${SB}/rest/v1/media_assets?user_id=eq.${uid}&select=id,name,size_bytes,file_size,created_at&order=created_at.desc&limit=10`, { headers: hdr() }).then(r => r.json()).catch(() => []),
-      fetch(`${SB}/rest/v1/media_assets?user_id=eq.${uid}&select=cloudflare_minutes_stored,cloudflare_minutes_delivered&limit=2000`, { headers: hdr() }).then(r => r.json()).catch(() => []),
-    ]).then(([p, f, cf]) => {
+      safeJson(`projects?user_id=eq.${uid}&select=id,name,created_at,status&order=created_at.desc`),
+      safeJson(`drive_files?user_id=eq.${uid}&is_trashed=eq.false&select=id,name,file_size,created_at&order=created_at.desc&limit=10`),
+      safeJson(`project_media?user_id=eq.${uid}&is_trashed=eq.false&select=id,name,file_size,created_at&order=created_at.desc&limit=10`),
+    ]).then(([p, df, pm]) => {
       setProjects(Array.isArray(p) ? p : []);
-      setRecentFiles(Array.isArray(f) ? f : []);
-      if (Array.isArray(cf) && cf.length > 0) {
-        setCfStats({
-          minStored: Math.round(cf.reduce((s, r) => s + (r.cloudflare_minutes_stored || 0), 0)),
-          minStreamed: Math.round(cf.reduce((s, r) => s + (r.cloudflare_minutes_delivered || 0), 0)),
-          videos: cf.length,
-        });
-      }
+      // Merge drive + project media files, sorted by date
+      const allFiles = [
+        ...(Array.isArray(df) ? df.map(f => ({ ...f, _src: "drive" })) : []),
+        ...(Array.isArray(pm) ? pm.map(f => ({ ...f, _src: "media" })) : []),
+      ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+      setRecentFiles(allFiles);
       setContentLoaded(true);
     }).finally(() => setLoadingContent(false));
   }, [tab, user?.id, contentLoaded]);
@@ -586,14 +599,14 @@ export default function UserDetailPanel({
 
               {/* 8-stat grid */}
               <div className="udp-stats">
-                <StatCard icon={FolderOpen} color="#a78bfa" label="PROJECTS"   value={stats.projects}  loading={loadingStats} />
-                <StatCard icon={File}       color="#60a5fa" label="FILES"       value={stats.files}     loading={loadingStats} />
-                <StatCard icon={Chats}      color="#34d399" label="COMMENTS"    value={stats.comments}  loading={loadingStats} />
-                <StatCard icon={Timer}      color="#fb923c" label="CF MINUTES"  value={stats.cfMinutes ?? "—"} loading={false} />
-                <StatCard icon={CloudArrowUp} color="#60a5fa" label="UPLOADS 30D" value={stats.uploads30d} loading={loadingStats} />
-                <StatCard icon={Share}      color="#fb923c" label="SHARES"      value={stats.shares}    loading={loadingStats} />
-                <StatCard icon={Eye}        color="#a78bfa" label="REVIEWS"     value="—"               loading={false} />
-                <StatCard icon={Globe}      color="#6b7280" label="SESSIONS"    value="—"               loading={false} />
+                <StatCard icon={FolderOpen}   color="#a78bfa" label="PROJECTS"     value={stats.projects}    loading={loadingStats} />
+                <StatCard icon={File}          color="#60a5fa" label="TOTAL FILES"  value={loadingStats ? null : totalFiles} loading={loadingStats} />
+                <StatCard icon={CloudArrowUp}  color="#34d399" label="DRIVE FILES"  value={stats.driveFiles}  loading={loadingStats} />
+                <StatCard icon={VideoCamera}   color="#fb923c" label="MEDIA FILES"  value={stats.projectMedia} loading={loadingStats} />
+                <StatCard icon={File}          color="#60a5fa" label="PROJ FILES"   value={stats.projectFiles} loading={loadingStats} />
+                <StatCard icon={CloudArrowUp}  color="#fb923c" label="UPL 30D"      value={stats.uploads30d}  loading={loadingStats} />
+                <StatCard icon={Eye}           color="#a78bfa" label="REVIEWS"      value="—"                 loading={false} />
+                <StatCard icon={Globe}         color="#6b7280" label="SESSIONS"     value="—"                 loading={false} />
               </div>
 
               {/* Account details */}
@@ -686,28 +699,6 @@ export default function UserDetailPanel({
                     </div>
                   ) : <div className="udp-empty" style={{ padding: "12px 0 20px" }}>No files.</div>}
 
-                  {cfStats && (
-                    <>
-                      <SecHead>Cloudflare Stream</SecHead>
-                      <div className="udp-cf-grid">
-                        <div className="udp-cf-card">
-                          <div className="udp-cf-ic"><Database size={16} /></div>
-                          <div className="udp-cf-val">{cfStats.minStored.toLocaleString()}</div>
-                          <div className="udp-cf-lbl">MIN STORED</div>
-                        </div>
-                        <div className="udp-cf-card">
-                          <div className="udp-cf-ic"><PlayCircle size={16} /></div>
-                          <div className="udp-cf-val">{cfStats.minStreamed.toLocaleString()}</div>
-                          <div className="udp-cf-lbl">MIN STREAMED</div>
-                        </div>
-                        <div className="udp-cf-card">
-                          <div className="udp-cf-ic"><VideoCamera size={16} /></div>
-                          <div className="udp-cf-val">{cfStats.videos.toLocaleString()}</div>
-                          <div className="udp-cf-lbl">VIDEOS</div>
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </>
               )}
             </div>

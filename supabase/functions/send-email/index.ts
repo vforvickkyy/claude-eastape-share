@@ -9,7 +9,7 @@ const corsHeaders = {
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') || 'notifications@eastape.com'
 const FROM_NAME = 'Eastape'
-const APP_URL = 'https://claude-eastape-share.vercel.app'
+const APP_URL = 'https://studio.eastape.com'
 const LOGO_URL = 'https://zzevqgnhbintrpohunjr.supabase.co/storage/v1/object/public/Site%20Assets/logo.png'
 
 // Shared components
@@ -322,6 +322,19 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           Link expires: ${data.expiresAt}
         </p>
       ` : ''}
+    `))
+  }),
+
+  custom: (data) => ({
+    subject: data.subject || 'Message from Eastape',
+    html: wrapper(card(`
+      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
+        ${(data.subject || 'Message from Eastape').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+      </h2>
+      <div style="color:#a0a0b0;font-size:15px;line-height:1.7">
+        ${(data.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}
+      </div>
+      ${button('Open Eastape →', APP_URL + '/dashboard')}
     `))
   }),
 
