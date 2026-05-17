@@ -30,10 +30,11 @@ function eLogo() {
   return `<div style="padding:36px 40px 0;background-color:${CARD}"><img src="${LOGO_URL}" alt="Eastape Studio" height="26" style="height:26px;width:auto;display:block;border:0;outline:0"></div>`
 }
 function eH(text: string) {
-  return `<h1 class="eh" style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};background-color:${CARD};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
+  return `<h1 class="eh" style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};-webkit-text-fill-color:${T1};background-color:${CARD};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
 }
 function eP(text: string, muted = false) {
-  return `<p class="${muted ? 'epm' : 'ep'}" style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${muted ? T3 : T2};background-color:${CARD};margin:0 0 20px;font-family:${FONT}">${text}</p>`
+  const c = muted ? T3 : T2
+  return `<p class="${muted ? 'epm' : 'ep'}" style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${c};-webkit-text-fill-color:${c};background-color:${CARD};margin:0 0 20px;font-family:${FONT}">${text}</p>`
 }
 function eBtn(text: string, href: string) {
   return `<a href="${href}" target="_blank" style="display:inline-block;padding:14px 36px;background:${ACCENT};color:#1a1408;font-weight:600;font-size:14px;font-family:${FONT};border-radius:8px;text-decoration:none;letter-spacing:-0.01em">${text}</a>`
@@ -53,9 +54,9 @@ function eBoxRows(rows: [string, string][]) {
 }
 function eFooter() {
   const lnk = `color:${T3};text-decoration:underline;text-underline-offset:2px;font-family:${FONT}`
-  return `<div style="padding:28px 20px 12px;text-align:center;font-size:12px;color:${T4};line-height:1.8;font-family:${FONT};background-color:${BG}">
-    <div style="margin-bottom:6px;color:${T3};font-weight:500;font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase">Eastape Studio</div>
-    <div>You're receiving this because you have an Eastape Studio account.</div>
+  return `<div style="padding:28px 20px 12px;text-align:center;font-size:12px;color:${T4};-webkit-text-fill-color:${T4};line-height:1.8;font-family:${FONT};background-color:${BG}">
+    <div style="margin-bottom:6px;color:${T3};-webkit-text-fill-color:${T3};font-weight:500;font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase">Eastape Studio</div>
+    <div style="-webkit-text-fill-color:${T4}">You're receiving this because you have an Eastape Studio account.</div>
     <div style="margin-top:10px">
       <a href="${APP_URL}" style="${lnk}">Unsubscribe</a>&nbsp;·&nbsp;
       <a href="${APP_URL}/privacy" style="${lnk}">Privacy</a>&nbsp;·&nbsp;
@@ -81,19 +82,28 @@ function eWrap(inner: string) {
   [data-ogsc] .edark { background-color:${BG}!important; }
   @media (prefers-color-scheme:light) { .edark { background-color:${BG}!important; } }
 
-  /* ── Prevent Gmail dark mode from overriding text colors ── */
-  .eh  { color:${T1}!important; background-color:${CARD}!important; }
-  .ep  { color:${T2}!important; background-color:${CARD}!important; }
-  .epm { color:${T3}!important; background-color:${CARD}!important; }
-  .ecard { background-color:${CARD}!important; }
+  /* ── Preserve text colors in ALL Gmail modes (light + dark) ──
+     Gmail overrides color but does NOT override -webkit-text-fill-color */
+  .eh  { color:${T1}!important; -webkit-text-fill-color:${T1}!important; background-color:${CARD}!important; }
+  .ep  { color:${T2}!important; -webkit-text-fill-color:${T2}!important; background-color:${CARD}!important; }
+  .epm { color:${T3}!important; -webkit-text-fill-color:${T3}!important; background-color:${CARD}!important; }
+  .etxt { color:${T2}!important; -webkit-text-fill-color:${T2}!important; }
+  .ecard { background-color:${CARD}!important; color:${T2}!important; -webkit-text-fill-color:${T2}!important; }
 
-  /* [data-ogsc] = Gmail dark mode selector */
-  [data-ogsc] .eh  { color:${T1}!important; }
-  [data-ogsc] .ep  { color:${T2}!important; }
-  [data-ogsc] .epm { color:${T3}!important; }
+  /* Fallback: target element types directly */
+  h1 { color:${T1}!important; -webkit-text-fill-color:${T1}!important; }
+  p  { color:${T2}!important; -webkit-text-fill-color:${T2}!important; }
+
+  /* [data-ogsc] = Gmail dark mode */
+  [data-ogsc] .eh   { color:${T1}!important; -webkit-text-fill-color:${T1}!important; }
+  [data-ogsc] .ep   { color:${T2}!important; -webkit-text-fill-color:${T2}!important; }
+  [data-ogsc] .epm  { color:${T3}!important; -webkit-text-fill-color:${T3}!important; }
+  [data-ogsc] .etxt { color:${T2}!important; -webkit-text-fill-color:${T2}!important; }
   [data-ogsc] .ecard { background-color:${CARD}!important; }
+  [data-ogsc] h1 { color:${T1}!important; -webkit-text-fill-color:${T1}!important; }
+  [data-ogsc] p  { color:${T2}!important; -webkit-text-fill-color:${T2}!important; }
 
-  /* Prevent Gmail from applying CSS filters to invert content */
+  /* Block CSS filter inversions */
   [data-ogsc] table, [data-ogsc] td, [data-ogsc] div, [data-ogsc] span, [data-ogsc] p, [data-ogsc] h1 {
     -webkit-filter:none!important; filter:none!important;
   }
@@ -248,7 +258,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       ${eLogo()}
       <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH((data.subject || 'Message from Eastape Studio').replace(/</g, '&lt;').replace(/>/g, '&gt;'))}
-        <div style="font-size:15px;line-height:1.65;color:${T2};font-family:${FONT};margin-bottom:${data.ctaText && data.ctaUrl ? '24px' : '0'}">
+        <div class="etxt" style="font-size:15px;line-height:1.65;color:${T2};-webkit-text-fill-color:${T2};background-color:${CARD};font-family:${FONT};margin-bottom:${data.ctaText && data.ctaUrl ? '24px' : '0'}">
           ${(data.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}
         </div>
         ${data.ctaText && data.ctaUrl ? eBtn(data.ctaText, data.ctaUrl) : ''}
