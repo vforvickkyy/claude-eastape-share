@@ -4384,6 +4384,117 @@ body.scrollable,
 .c-danger { color: var(--admin-danger); }
 .c-info { color: var(--admin-info); }
 
+/* ── User Detail Panel (udp-*) ── */
+.udp-av { border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; flex-shrink: 0; -webkit-user-select: none; user-select: none; }
+.udp-av-img { border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+
+.udp-head { padding: 18px 20px 0; border-bottom: 1px solid var(--admin-border); position: relative; flex-shrink: 0; background: color-mix(in oklch, var(--admin-accent) 3%, var(--admin-card)); }
+.udp-close { position: absolute; top: 14px; right: 14px; }
+.udp-head-top { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.udp-head-info { flex: 1; min-width: 0; }
+.udp-head-info h2 { font-size: 17px; font-weight: 700; color: var(--admin-text); margin: 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.udp-email-line { font-size: 12px; color: var(--admin-text-3); margin-bottom: 7px; }
+.udp-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.udp-head-meta { display: flex; gap: 14px; padding: 8px 0 12px; font-size: 11px; color: var(--admin-text-3); }
+.udp-head-meta span { display: flex; align-items: center; gap: 4px; }
+
+.udp-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; padding: 10px 20px; border-bottom: 1px solid var(--admin-border); flex-shrink: 0; }
+.udp-btn { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--admin-border); background: rgba(255,255,255,0.04); color: var(--admin-text); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.udp-btn:hover { background: rgba(255,255,255,0.08); }
+.udp-btn.primary { background: var(--admin-accent); color: #fff; border-color: var(--admin-accent); }
+.udp-btn.primary:hover { opacity: 0.88; }
+.udp-btn.ban { border-color: color-mix(in oklch, var(--admin-danger) 40%, transparent); color: var(--admin-danger); }
+.udp-btn.ban:hover { background: color-mix(in oklch, var(--admin-danger) 10%, transparent); }
+.udp-btn.del { border-color: color-mix(in oklch, var(--admin-danger) 40%, transparent); color: var(--admin-danger); }
+.udp-btn.del:hover { background: color-mix(in oklch, var(--admin-danger) 10%, transparent); }
+
+.udp-tabs { display: flex; border-bottom: 1px solid var(--admin-border); flex-shrink: 0; }
+.udp-tab { padding: 10px 18px; font-size: 13px; color: var(--admin-text-3); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+.udp-tab:hover { color: var(--admin-text); }
+.udp-tab.on { color: var(--admin-accent); border-bottom-color: var(--admin-accent); }
+
+.udp-body { flex: 1; overflow-y: auto; padding: 20px; scrollbar-width: thin; scrollbar-color: var(--admin-border) transparent; }
+.udp-fade { animation: admFadeIn 0.15s ease; }
+
+.udp-storage { background: rgba(255,255,255,0.02); border: 1px solid var(--admin-border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+.udp-storage-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--admin-text-2); margin-bottom: 8px; }
+.udp-storage-track { height: 5px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; }
+.udp-storage-fill { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+.udp-storage-pct { font-size: 10px; color: var(--admin-text-3); margin-top: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.udp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 20px; }
+.udp-stat { background: rgba(255,255,255,0.02); border: 1px solid var(--admin-border); border-radius: 10px; padding: 12px 8px; text-align: center; }
+.udp-stat-ic { margin-bottom: 6px; display: flex; justify-content: center; }
+.udp-stat-val { font-size: 19px; font-weight: 700; color: var(--admin-text); line-height: 1; margin-bottom: 4px; }
+.udp-stat-lbl { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--admin-text-3); }
+.udp-skel-inline { display: inline-block; width: 28px; height: 16px; background: rgba(255,255,255,0.07); border-radius: 4px; animation: admSkel 1.5s infinite; vertical-align: middle; }
+
+.udp-sec { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--admin-text-3); margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--admin-border); }
+.udp-sec:first-child { margin-top: 0; }
+
+.udp-info { background: rgba(255,255,255,0.02); border: 1px solid var(--admin-border); border-radius: 10px; overflow: hidden; }
+.udp-info-row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--admin-border); }
+.udp-info-row:last-child { border-bottom: none; }
+.udp-info-key { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--admin-text-3); width: 88px; flex-shrink: 0; }
+.udp-info-val { font-size: 12.5px; color: var(--admin-text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.udp-mono { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--admin-text-3); }
+
+.udp-feed { display: flex; flex-direction: column; }
+.udp-feed-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--admin-border); }
+.udp-feed-row:last-child { border-bottom: none; }
+.udp-feed-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.udp-feed-text { flex: 1; font-size: 13px; color: var(--admin-text); line-height: 1.4; }
+.udp-feed-ts { font-size: 11px; color: var(--admin-text-3); flex-shrink: 0; white-space: nowrap; }
+
+.udp-tbl { margin-bottom: 16px; }
+.udp-tname { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+
+.udp-cf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.udp-cf-card { background: rgba(255,255,255,0.02); border: 1px solid var(--admin-border); border-radius: 10px; padding: 16px 12px; text-align: center; }
+.udp-cf-ic { color: var(--admin-accent); margin-bottom: 8px; display: flex; justify-content: center; }
+.udp-cf-val { font-size: 22px; font-weight: 700; color: var(--admin-text); margin-bottom: 4px; }
+.udp-cf-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--admin-text-3); }
+
+.udp-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+.udp-notes-field { margin-bottom: 4px; }
+.udp-hint { font-size: 11px; color: var(--admin-text-3); margin-top: 4px; display: block; }
+
+.udp-security { background: rgba(255,255,255,0.02); border: 1px solid var(--admin-border); border-radius: 10px; overflow: hidden; margin-bottom: 4px; }
+.udp-sec-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--admin-border); }
+.udp-sec-row:last-child { border-bottom: none; }
+.udp-sec-info { flex: 1; min-width: 0; }
+.udp-sec-label { font-size: 13px; font-weight: 500; color: var(--admin-text); margin-bottom: 2px; }
+.udp-sec-desc { font-size: 11.5px; color: var(--admin-text-3); }
+
+.udp-danger { border: 1px solid color-mix(in oklch, var(--admin-danger) 30%, transparent); border-radius: 10px; padding: 16px; background: color-mix(in oklch, var(--admin-danger) 5%, transparent); margin-bottom: 4px; }
+.udp-danger-title { font-size: 13px; font-weight: 700; color: var(--admin-danger); margin-bottom: 4px; }
+.udp-danger-desc { font-size: 12px; color: var(--admin-text-3); margin-bottom: 14px; }
+.udp-danger-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.udp-save-row { display: flex; gap: 8px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--admin-border); }
+
+.udp-skels { display: flex; flex-direction: column; gap: 8px; }
+.udp-skel-row { height: 40px; background: rgba(255,255,255,0.04); border-radius: 8px; animation: admSkel 1.5s infinite; }
+.udp-empty { text-align: center; padding: 24px 0; color: var(--admin-text-3); font-size: 13px; }
+
+.udp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 500; display: grid; place-items: center; padding: 20px; }
+.udp-email-modal { background: var(--admin-card); border: 1px solid var(--admin-border); border-radius: 16px; width: 100%; max-width: 520px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+.udp-email-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 20px 16px; border-bottom: 1px solid var(--admin-border); }
+.udp-email-head h3 { font-size: 16px; margin: 0 0 4px; }
+.udp-email-to { font-size: 12px; color: var(--admin-text-3); }
+.udp-email-tpls { padding: 12px 20px; border-bottom: 1px solid var(--admin-border); }
+.udp-email-tpl-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--admin-text-3); margin-bottom: 8px; }
+.udp-email-tpl-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.udp-email-tpl { padding: 5px 12px; border-radius: 99px; border: 1px solid var(--admin-border); background: rgba(255,255,255,0.04); color: var(--admin-text-2); font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+.udp-email-tpl:hover { border-color: var(--admin-accent); color: var(--admin-accent); }
+.udp-email-tpl.on { background: var(--admin-accent); color: #fff; border-color: var(--admin-accent); }
+.udp-email-fields { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.udp-email-foot { padding: 14px 20px; border-top: 1px solid var(--admin-border); display: flex; justify-content: flex-end; gap: 8px; }
+.udp-confirm-modal { background: var(--admin-card); border: 1px solid var(--admin-border); border-radius: 14px; padding: 24px; width: 100%; max-width: 380px; box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+.udp-confirm-title { font-size: 15px; font-weight: 700; color: var(--admin-text); margin-bottom: 10px; }
+.udp-confirm-body { font-size: 13px; color: var(--admin-text-2); margin: 0 0 20px; line-height: 1.55; }
+.udp-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
 /* ── Legacy admin-* backward-compat ── */
 .admin-layout { display: flex; min-height: 100vh; background: var(--admin-bg); }
 .admin-sidebar { width: 260px; min-height: 100vh; background: var(--admin-card); border-right: 1px solid var(--admin-border); display: flex; flex-direction: column; flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; z-index: 100; }
