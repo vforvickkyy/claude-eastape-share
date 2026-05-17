@@ -1,360 +1,380 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
+const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') || 'notifications@eastape.com'
-const FROM_NAME = 'Eastape'
-const APP_URL = 'https://studio.eastape.com'
-const LOGO_URL = 'https://zzevqgnhbintrpohunjr.supabase.co/storage/v1/object/public/Site%20Assets/logo.png'
+const FROM_EMAIL    = Deno.env.get('RESEND_FROM_EMAIL') || 'notifications@eastape.com'
+const FROM_NAME     = 'Eastape Studio'
+const APP_URL       = 'https://studio.eastape.com'
+const LOGO_URL      = 'https://zzevqgnhbintrpohunjr.supabase.co/storage/v1/object/public/Site%20Assets/Eastape%20Studio%20Orange.png'
 
-// Shared components
-const logo = `
-  <div style="text-align:center;margin-bottom:32px">
-    <img src="${LOGO_URL}" alt="Eastape" width="140"
-         style="display:block;margin:0 auto;max-width:140px;height:auto"/>
-  </div>
-`
+// ── Design tokens ─────────────────────────────────────────────────
+const BG      = '#08080a'
+const CARD    = '#111114'
+const SURFACE = '#0e0e10'
+const ACCENT  = '#E8943A'
+const T1      = '#ececee'
+const T2      = '#a4a4ac'
+const T3      = '#6f6f78'
+const T4      = '#4a4a52'
+const LINE    = 'rgba(255,255,255,0.07)'
+const LINE2   = 'rgba(255,255,255,0.11)'
+const FONT    = `"Inter", system-ui, -apple-system, sans-serif`
+const MONO    = `"JetBrains Mono", ui-monospace, "Courier New", monospace`
 
-const footer = `
-  <p class="ets-footer" style="color:#404050;font-size:11px;text-align:center;margin-top:24px;line-height:1.6">
-    © 2026 Eastape Films. All rights reserved.<br>
-    <a href="${APP_URL}" style="color:#505060;text-decoration:none">${APP_URL.replace('https://', '')}</a>
-  </p>
-`
+// ── Shared components ─────────────────────────────────────────────
+function eLogo() {
+  return `<div style="padding:36px 40px 0"><img src="${LOGO_URL}" alt="Eastape Studio" height="26" style="height:26px;width:auto;display:block;border:0;outline:0"></div>`
+}
+function eH(text: string) {
+  return `<h1 style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
+}
+function eP(text: string, muted = false) {
+  return `<p style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${muted ? T3 : T2};margin:0 0 20px;font-family:${FONT}">${text}</p>`
+}
+function eBtn(text: string, href: string) {
+  return `<a href="${href}" target="_blank" style="display:inline-block;padding:14px 36px;background:${ACCENT};color:#1a1408;font-weight:600;font-size:14px;font-family:${FONT};border-radius:8px;text-decoration:none;letter-spacing:-0.01em">${text}</a>`
+}
+function eDivider() {
+  return `<div style="height:1px;background:${LINE};margin:0 40px"></div>`
+}
+function eBox(content: string) {
+  return `<div style="background:${SURFACE};border:1px solid ${LINE};border-radius:8px;padding:16px 20px">${content}</div>`
+}
+function eBoxRows(rows: [string, string][]) {
+  return eBox(rows.map(([label, val], i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;${i < rows.length - 1 ? `border-bottom:1px solid ${LINE}` : ''}">
+      <span style="font-size:13px;color:${T3};font-family:${FONT}">${label}</span>
+      <span style="font-size:13px;color:${T1};font-family:${MONO};font-weight:500">${val}</span>
+    </div>`).join(''))
+}
+function eFooter() {
+  const lnk = `color:${T3};text-decoration:underline;text-underline-offset:2px;font-family:${FONT}`
+  return `<div style="padding:28px 20px 12px;text-align:center;font-size:12px;color:${T4};line-height:1.8;font-family:${FONT}">
+    <div style="margin-bottom:6px;color:${T3};font-weight:500;font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase">Eastape Studio</div>
+    <div>You're receiving this because you have an Eastape Studio account.</div>
+    <div style="margin-top:10px">
+      <a href="${APP_URL}" style="${lnk}">Unsubscribe</a>&nbsp;·&nbsp;
+      <a href="${APP_URL}/privacy" style="${lnk}">Privacy</a>&nbsp;·&nbsp;
+      <a href="${APP_URL}/help" style="${lnk}">Help</a>
+    </div>
+  </div>`
+}
+function eWrap(inner: string) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<style>:root{color-scheme:dark}body{margin:0;padding:0;background:${BG}!important}@media(prefers-color-scheme:light){body{background:${BG}!important}}</style>
+</head>
+<body style="margin:0;padding:0;background:${BG}">
+<div style="background:${BG};padding:40px 20px;font-family:${FONT};-webkit-font-smoothing:antialiased">
+<div style="max-width:600px;margin:0 auto">
+<div style="border-radius:12px;overflow:hidden;border:1px solid ${LINE2};background:${CARD}">
+<div style="height:3px;background:linear-gradient(90deg,${ACCENT} 0%,${ACCENT} 35%,transparent 100%)"></div>
+${inner}
+</div>
+${eFooter()}
+</div>
+</div>
+</body>
+</html>`
+}
 
-const wrapper = (content: string) => `
-  <!DOCTYPE html>
-  <html lang="en" style="color-scheme:dark">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="dark">
-    <meta name="supported-color-schemes" content="dark">
-    <style>
-      :root { color-scheme: dark; }
-      body { margin:0; padding:0; background:#0a0a0f !important; }
-      /* Force dark — override any email client light-mode injection */
-      @media (prefers-color-scheme: light) {
-        body, .ets-wrap { background:#0a0a0f !important; }
-        .ets-card { background:#13131a !important; border-color:#2a2a3a !important; }
-        .ets-footer { color:#404050 !important; }
-      }
-    </style>
-  </head>
-  <body style="margin:0;padding:0;background:#0a0a0f">
-  <div class="ets-wrap" style="background:#0a0a0f;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-  <div style="max-width:480px;margin:0 auto">
-    ${logo}
-    ${content}
-    ${footer}
-  </div>
-  </div>
-  </body>
-  </html>
-`
-
-const card = (content: string, borderColor = '#2a2a3a') => `
-  <div class="ets-card" style="background:#13131a;border:1px solid ${borderColor};border-radius:16px;padding:32px">
-    ${content}
-  </div>
-`
-
-const button = (text: string, url: string, color = '#7c3aed') => `
-  <a href="${url}"
-     style="display:block;background:linear-gradient(135deg,${color},${color}dd);
-            color:white;text-decoration:none;text-align:center;
-            padding:14px 24px;border-radius:12px;font-size:16px;
-            font-weight:600;margin-top:20px;margin-bottom:4px">
-    ${text}
-  </a>
-`
-
-const infoBox = (content: string) => `
-  <div style="background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;
-              padding:16px;margin:16px 0">
-    ${content}
-  </div>
-`
-
-const statusPill = (text: string, color: string) => `
-  <span style="background:${color}22;color:${color};padding:4px 14px;
-               border-radius:999px;font-size:13px;font-weight:600;
-               display:inline-block">
-    ${text}
-  </span>
-`
-
-// All email templates
+// ── Templates ─────────────────────────────────────────────────────
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
 
+  // ─── Welcome ──────────────────────────────────────────────────────
   welcome: (data) => ({
-    subject: `Welcome to Eastape, ${data.name}! 🎬`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">👋</div>
-      <h2 style="color:white;font-size:22px;font-weight:700;margin:0 0 8px">
-        Welcome, ${data.name}!
-      </h2>
-      <p style="color:#606070;font-size:15px;margin:0 0 20px;line-height:1.6">
-        Your Eastape account is ready. Start managing your projects,
-        sharing files, and collaborating with your team.
-      </p>
-      ${infoBox(`
-        <p style="color:#606070;font-size:13px;margin:0 0 10px">Get started:</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">🎬&nbsp; Create your first project</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">📁&nbsp; Upload files to Drive</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">👥&nbsp; Invite your team members</p>
-        <p style="color:#a0a0b0;font-size:13px;margin:4px 0">🎬&nbsp; Review and approve media</p>
-      `)}
-      ${button('Open Eastape →', APP_URL + '/dashboard')}
-    `))
+    subject: `Welcome to Eastape Studio${data.name ? `, ${data.name}` : ''}`,
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('Welcome to Eastape Studio')}
+        ${eP('Your creative workspace is ready. Everything you need to manage, organize, and collaborate on your projects — all in one place.')}
+        <div style="margin-bottom:28px">${eBtn('Get Started', APP_URL + '/dashboard')}</div>
+      </div>
+      ${eDivider()}
+      <div style="padding:24px 40px 36px">
+        <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:18px;font-weight:500;font-family:${FONT}">Quick start</div>
+        ${[
+          { n: 1, title: 'Upload',      desc: 'Drag and drop your files to get started' },
+          { n: 2, title: 'Organize',    desc: 'Create projects and keep everything structured' },
+          { n: 3, title: 'Collaborate', desc: 'Share with your team and gather feedback' },
+        ].map((s, i, arr) => `
+          <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:${i < arr.length - 1 ? '18px' : '0'}">
+            <div style="width:32px;height:32px;min-width:32px;border-radius:8px;background:${ACCENT}18;text-align:center;line-height:32px;color:${ACCENT};font-size:13px;font-weight:700;font-family:${MONO}">${s.n}</div>
+            <div>
+              <div style="font-size:14px;font-weight:600;color:${T1};margin-bottom:2px;font-family:${FONT}">${s.title}</div>
+              <div style="font-size:13px;color:${T3};line-height:1.5;font-family:${FONT}">${s.desc}</div>
+            </div>
+          </div>`).join('')}
+      </div>`)
   }),
 
+  // ─── OTP Verification ─────────────────────────────────────────────
+  otp: (data) => {
+    const code  = String(data.code || '------').slice(0, 6)
+    const boxes = code.split('').map(d =>
+      `<td style="padding:0 4px"><div style="width:46px;height:54px;border-radius:8px;background:${SURFACE};border:1px solid ${LINE2};text-align:center;line-height:54px;font-size:22px;font-weight:600;font-family:${MONO};color:${T1}">${d}</div></td>`
+    ).join('')
+    return {
+      subject: 'Your Eastape Studio verification code',
+      html: eWrap(`
+        ${eLogo()}
+        <div style="padding:28px 40px 36px">
+          ${eH('Verification code')}
+          ${eP('Use the code below to verify your identity. This code is valid for 10 minutes.')}
+          <table cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 28px"><tr>${boxes}</tr></table>
+          ${eP("If you didn't request this code, you can safely ignore this email. Someone may have entered your email address by mistake.", true)}
+        </div>`)
+    }
+  },
+
+  // ─── Password Reset ────────────────────────────────────────────────
+  passwordReset: (data) => ({
+    subject: 'Reset your Eastape Studio password',
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('Reset your password')}
+        ${eP('We received a request to reset the password for your account. Click the button below to choose a new password.')}
+        <div style="margin-bottom:24px">${eBtn('Reset Password', data.resetUrl || data.reset_url || APP_URL + '/auth/reset')}</div>
+        ${eBox(`<div style="font-size:13px;color:${T3};line-height:1.65;font-family:${FONT}">This link expires in <span style="color:${T2};font-weight:500">30 minutes</span>. If you didn't request this, no action is needed — your password will remain unchanged.</div>`)}
+      </div>`)
+  }),
+
+  // ─── Security Alert / New Sign-in ─────────────────────────────────
+  securityAlert: (data) => ({
+    subject: 'New sign-in detected on your Eastape Studio account',
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('New sign-in detected')}
+        ${eP('We noticed a sign-in to your account from a new device or location.')}
+        <div style="margin-bottom:24px">${eBoxRows([
+          ['Device',     data.device   || 'Unknown device'],
+          ['Location',   data.location || 'Unknown location'],
+          ['Time',       data.time     || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })],
+          ['IP address', data.ip       || '—'],
+        ])}</div>
+        <div style="margin-bottom:24px">${eBtn('Secure Account', APP_URL + '/settings/security')}</div>
+        ${eP("If this was you, no action is needed. If you don't recognize this activity, reset your password immediately.", true)}
+      </div>`)
+  }),
+
+  // ─── Account Deactivation ─────────────────────────────────────────
+  accountDeactivation: (data) => ({
+    subject: 'Your Eastape Studio account has been deactivated',
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('Account deactivated')}
+        ${eP('Your Eastape Studio account has been deactivated as requested. Your data will be retained for 30 days before permanent deletion.')}
+        <div style="margin-bottom:24px">${eBox(`<div style="font-size:13px;color:${T3};line-height:1.65;font-family:${FONT}">During this period, you can reactivate your account and restore all your data by clicking the button below.</div>`)}</div>
+        <div style="margin-bottom:24px">${eBtn('Reactivate Account', data.reactivateUrl || data.reactivate_url || APP_URL + '/reactivate')}</div>
+        ${eP(`Need help? Contact us at <a href="mailto:support@eastape.com" style="color:${ACCENT};text-decoration:none">support@eastape.com</a>`, true)}
+      </div>`)
+  }),
+
+  // ─── Payment Receipt ──────────────────────────────────────────────
+  paymentReceipt: (data) => ({
+    subject: `Payment confirmed — ${data.amount || '$0.00'}`,
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('Payment confirmed')}
+        ${eP("Your payment has been processed successfully. Here's a summary of your transaction.")}
+        <div style="text-align:center;padding:20px 0 24px;border-top:1px solid ${LINE};border-bottom:1px solid ${LINE};margin-bottom:20px">
+          <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;font-family:${FONT}">Amount paid</div>
+          <div style="font-size:36px;font-weight:700;color:${T1};font-family:${MONO};letter-spacing:-0.03em">${data.amount || '$0.00'}</div>
+        </div>
+        ${eBoxRows([
+          ['Plan',           data.plan          || 'Pro Monthly'],
+          ['Billing date',   data.billingDate   || data.billing_date   || new Date().toLocaleDateString('en-US', { dateStyle: 'long' })],
+          ['Invoice',        data.invoiceId     || data.invoice_id     || '—'],
+          ['Payment method', data.paymentMethod || data.payment_method || '—'],
+        ])}
+        <div style="margin-top:24px;text-align:center">${eBtn('View Full Invoice', data.invoiceUrl || data.invoice_url || APP_URL + '/billing')}</div>
+      </div>`)
+  }),
+
+  // ─── Base / Admin custom email ────────────────────────────────────
+  custom: (data) => ({
+    subject: data.subject || 'Message from Eastape Studio',
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH((data.subject || 'Message from Eastape Studio').replace(/</g, '&lt;').replace(/>/g, '&gt;'))}
+        <div style="font-size:15px;line-height:1.65;color:${T2};font-family:${FONT};margin-bottom:${data.ctaText && data.ctaUrl ? '24px' : '0'}">
+          ${(data.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}
+        </div>
+        ${data.ctaText && data.ctaUrl ? eBtn(data.ctaText, data.ctaUrl) : ''}
+      </div>`)
+  }),
+
+  // ─── Notification templates (updated to new design) ───────────────
   teamInvite: (data) => ({
     subject: `${data.inviterName} invited you to ${data.projectName}`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">👥</div>
-      <h2 style="color:white;font-size:22px;font-weight:700;margin:0 0 8px">
-        You've been invited!
-      </h2>
-      <p style="color:#606070;font-size:15px;margin:0 0 16px;line-height:1.6">
-        <strong style="color:#a0a0b0">${data.inviterName}</strong>
-        invited you to collaborate on a project:
-      </p>
-      ${infoBox(`
-        <p style="color:white;font-size:18px;font-weight:700;margin:0 0 6px">
-          ${data.projectIcon || '🎬'}&nbsp;${data.projectName}
-        </p>
-        <p style="color:#7c3aed;font-size:13px;margin:0 0 4px">
-          Your role: <strong>${data.role}</strong>
-        </p>
-        ${data.clientName ? `<p style="color:#606070;font-size:12px;margin:4px 0 0">Client: ${data.clientName}</p>` : ''}
-      `)}
-      ${button('Accept Invitation →', data.acceptUrl || APP_URL + '/projects')}
-      <p style="color:#404050;font-size:12px;text-align:center;margin-top:12px">
-        This invitation expires in 7 days
-      </p>
-    `))
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH("You've been invited!")}
+        ${eP(`<strong style="color:${T1}">${data.inviterName}</strong> invited you to collaborate on a project:`)}
+        <div style="margin-bottom:24px">${eBox(`
+          <div style="font-size:18px;font-weight:700;color:${T1};margin-bottom:4px;font-family:${FONT}">${data.projectIcon || '🎬'}&nbsp;${data.projectName}</div>
+          <div style="font-size:13px;color:${ACCENT};margin-bottom:4px;font-family:${FONT}">Your role: <strong>${data.role}</strong></div>
+          ${data.clientName ? `<div style="font-size:12px;color:${T3};font-family:${FONT}">Client: ${data.clientName}</div>` : ''}
+        `)}</div>
+        ${eBtn('Accept Invitation', data.acceptUrl || APP_URL + '/projects')}
+        <p style="font-size:12px;color:${T4};margin-top:12px;font-family:${FONT}">This invitation expires in 7 days</p>
+      </div>`)
   }),
 
   commentAdded: (data) => ({
     subject: `${data.commenterName} commented on ${data.fileName}`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">💬</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
-        New Comment
-      </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
-        <strong style="color:#a0a0b0">${data.commenterName}</strong>
-        commented on
-        <strong style="color:#a0a0b0">${data.fileName}</strong>
-        ${data.timestamp ? `<br>at timestamp <span style="color:#7c3aed;font-weight:600">${data.timestamp}</span>` : ''}
-      </p>
-      <div style="background:#0a0a0f;border-left:3px solid #7c3aed;
-                  padding:16px;border-radius:0 8px 8px 0;margin-bottom:4px">
-        <p style="color:white;font-size:15px;line-height:1.6;margin:0;font-style:italic">
-          "${data.commentBody}"
-        </p>
-      </div>
-      ${button('View & Reply →', data.viewUrl || APP_URL)}
-    `))
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('New comment')}
+        ${eP(`<strong style="color:${T1}">${data.commenterName}</strong> commented on <strong style="color:${T1}">${data.fileName}</strong>${data.timestamp ? ` at <span style="color:${ACCENT};font-weight:600;font-family:${MONO}">${data.timestamp}</span>` : ''}`)}
+        <div style="background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
+          <div style="font-size:15px;line-height:1.6;color:${T1};font-style:italic;font-family:${FONT}">"${data.commentBody}"</div>
+        </div>
+        ${eBtn('View & Reply', data.viewUrl || APP_URL)}
+      </div>`)
   }),
 
   mentionedInComment: (data) => ({
     subject: `${data.mentionerName} mentioned you in a comment`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">🔔</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
-        You were mentioned
-      </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
-        <strong style="color:#a0a0b0">${data.mentionerName}</strong>
-        mentioned you in a comment on
-        <strong style="color:#a0a0b0">${data.fileName}</strong>
-      </p>
-      <div style="background:#0a0a0f;border-left:3px solid #a78bfa;
-                  padding:16px;border-radius:0 8px 8px 0;margin-bottom:4px">
-        <p style="color:white;font-size:15px;line-height:1.6;margin:0;font-style:italic">
-          "${data.commentBody}"
-        </p>
-      </div>
-      ${button('View Comment →', data.viewUrl || APP_URL)}
-    `))
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('You were mentioned')}
+        ${eP(`<strong style="color:${T1}">${data.mentionerName}</strong> mentioned you in a comment on <strong style="color:${T1}">${data.fileName}</strong>`)}
+        <div style="background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
+          <div style="font-size:15px;line-height:1.6;color:${T1};font-style:italic;font-family:${FONT}">"${data.commentBody}"</div>
+        </div>
+        ${eBtn('View Comment', data.viewUrl || APP_URL)}
+      </div>`)
   }),
 
-  statusChanged: (data) => ({
-    subject: `${data.fileName} marked as ${data.newStatus}`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">🔄</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
-        Status Updated
-      </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
-        <strong style="color:#a0a0b0">${data.changedBy}</strong>
-        updated the status of
-        <strong style="color:#a0a0b0">${data.fileName}</strong>
-      </p>
-      ${infoBox(`
-        <p style="color:#606070;font-size:12px;margin:0 0 10px;text-transform:uppercase;
-                  letter-spacing:1px;font-weight:600">Status change</p>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          ${statusPill(data.oldStatus, '#606070')}
-          <span style="color:#404050;font-size:16px">→</span>
-          ${statusPill(data.newStatus,
-            data.newStatus === 'Approved' ? '#10b981' :
-            data.newStatus === 'Revision' ? '#ef4444' : '#f59e0b'
-          )}
-        </div>
-        ${data.projectName ? `<p style="color:#606070;font-size:12px;margin:10px 0 0">Project: ${data.projectName}</p>` : ''}
-      `)}
-      ${button('View File →', data.viewUrl || APP_URL)}
-    `))
-  }),
+  statusChanged: (data) => {
+    const statusColor = (s: string) =>
+      s === 'Approved' ? '#4ade80' : s === 'Revision' ? '#f87171' : '#fbbf24'
+    return {
+      subject: `${data.fileName} marked as ${data.newStatus}`,
+      html: eWrap(`
+        ${eLogo()}
+        <div style="padding:28px 40px 36px">
+          ${eH('Status updated')}
+          ${eP(`<strong style="color:${T1}">${data.changedBy}</strong> updated the status of <strong style="color:${T1}">${data.fileName}</strong>`)}
+          <div style="margin-bottom:24px">${eBox(`
+            <div style="font-size:11px;color:${T4};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:10px;font-family:${FONT}">Status change</div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span style="background:${T4}22;color:${T3};padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;font-family:${FONT}">${data.oldStatus}</span>
+              <span style="color:${T4};font-size:14px">→</span>
+              <span style="background:${statusColor(data.newStatus)}22;color:${statusColor(data.newStatus)};padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;font-family:${FONT}">${data.newStatus}</span>
+            </div>
+            ${data.projectName ? `<div style="font-size:12px;color:${T3};margin-top:10px;font-family:${FONT}">Project: ${data.projectName}</div>` : ''}
+          `)}</div>
+          ${eBtn('View File', data.viewUrl || APP_URL)}
+        </div>`)
+    }
+  },
 
   fileUploaded: (data) => ({
     subject: `New file uploaded to ${data.projectName}`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">📁</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
-        New File Uploaded
-      </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
-        <strong style="color:#a0a0b0">${data.uploaderName}</strong>
-        uploaded a new file to
-        <strong style="color:#a0a0b0">${data.projectName}</strong>
-      </p>
-      ${infoBox(`
-        <p style="color:white;font-size:15px;font-weight:600;margin:0 0 4px">
-          📄&nbsp;${data.fileName}
-        </p>
-        ${data.fileSize ? `<p style="color:#606070;font-size:13px;margin:0">${data.fileSize}</p>` : ''}
-      `)}
-      ${button('View Project →', data.projectUrl || APP_URL)}
-    `))
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('New file uploaded')}
+        ${eP(`<strong style="color:${T1}">${data.uploaderName}</strong> uploaded a new file to <strong style="color:${T1}">${data.projectName}</strong>`)}
+        <div style="margin-bottom:24px">${eBox(`
+          <div style="font-size:15px;font-weight:600;color:${T1};margin-bottom:4px;font-family:${FONT}">📄&nbsp;${data.fileName}</div>
+          ${data.fileSize ? `<div style="font-size:13px;color:${T3};font-family:${MONO}">${data.fileSize}</div>` : ''}
+        `)}</div>
+        ${eBtn('View Project', data.projectUrl || APP_URL)}
+      </div>`)
   }),
 
   shotAssigned: (data) => ({
     subject: `You've been assigned: ${data.shotName}`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">🎯</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
-        Shot Assigned to You
-      </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
-        <strong style="color:#a0a0b0">${data.assignedBy}</strong>
-        assigned you a shot in
-        <strong style="color:#a0a0b0">${data.projectName}</strong>
-      </p>
-      ${infoBox(`
-        <p style="color:white;font-size:16px;font-weight:700;margin:0 0 6px">
-          ${data.shotNumber ? `<span style="color:#606070;font-size:13px;font-weight:400">${data.shotNumber}&nbsp;</span>` : ''}
-          ${data.shotName}
-        </p>
-        ${data.dueDate ? `
-          <p style="color:#f59e0b;font-size:13px;margin:4px 0">
-            📅&nbsp;Due: ${data.dueDate}
-          </p>
-        ` : ''}
-        ${data.priority && data.priority !== 'normal' ? `
-          <p style="color:${data.priority === 'urgent' ? '#ef4444' : '#f59e0b'};
-                    font-size:13px;margin:4px 0;font-weight:600">
-            ⚡&nbsp;Priority: ${data.priority.toUpperCase()}
-          </p>
-        ` : ''}
-      `)}
-      ${button('View Shot →', data.projectUrl || APP_URL)}
-    `))
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('Shot assigned to you')}
+        ${eP(`<strong style="color:${T1}">${data.assignedBy}</strong> assigned you a shot in <strong style="color:${T1}">${data.projectName}</strong>`)}
+        <div style="margin-bottom:24px">${eBox(`
+          <div style="font-size:16px;font-weight:700;color:${T1};margin-bottom:6px;font-family:${FONT}">${data.shotNumber ? `<span style="color:${T3};font-size:13px;font-weight:400">${data.shotNumber}&nbsp;</span>` : ''}${data.shotName}</div>
+          ${data.dueDate ? `<div style="color:#fbbf24;font-size:13px;margin:4px 0;font-family:${FONT}">📅&nbsp;Due: ${data.dueDate}</div>` : ''}
+          ${data.priority && data.priority !== 'normal' ? `<div style="color:${data.priority === 'urgent' ? '#f87171' : '#fbbf24'};font-size:13px;font-weight:600;margin:4px 0;font-family:${FONT}">⚡&nbsp;Priority: ${data.priority.toUpperCase()}</div>` : ''}
+        `)}</div>
+        ${eBtn('View Shot', data.projectUrl || APP_URL)}
+      </div>`)
   }),
 
   deadlineReminder: (data) => ({
-    subject: `⚠️ ${data.projectName} deadline in ${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">⚠️</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 8px">
-        Deadline Approaching
-      </h2>
-      <p style="color:#606070;font-size:15px;margin:0 0 16px;line-height:1.6">
-        <strong style="color:#a0a0b0">${data.projectName}</strong>
-        is due in
-        <strong style="color:#f59e0b;font-size:17px">${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}</strong>
-      </p>
-      ${infoBox(`
-        <p style="color:#606070;font-size:11px;margin:0 0 6px;text-transform:uppercase;
-                  letter-spacing:1px;font-weight:600">Due Date</p>
-        <p style="color:white;font-size:16px;font-weight:700;margin:0">${data.dueDate}</p>
-        ${data.clientName ? `<p style="color:#606070;font-size:13px;margin:6px 0 0">Client: ${data.clientName}</p>` : ''}
-      `)}
-      ${button('Open Project →', data.projectUrl || APP_URL, '#f59e0b')}
-    `, '#f59e0b44'))
+    subject: `${data.projectName} deadline in ${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}`,
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('Deadline approaching')}
+        ${eP(`<strong style="color:${T1}">${data.projectName}</strong> is due in <strong style="color:#fbbf24;font-size:17px">${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}</strong>`)}
+        <div style="margin-bottom:24px">${eBox(`
+          <div style="font-size:11px;color:${T4};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px;font-family:${FONT}">Due date</div>
+          <div style="font-size:16px;font-weight:700;color:${T1};font-family:${FONT}">${data.dueDate}</div>
+          ${data.clientName ? `<div style="font-size:13px;color:${T3};margin-top:6px;font-family:${FONT}">Client: ${data.clientName}</div>` : ''}
+        `)}</div>
+        ${eBtn('Open Project', data.projectUrl || APP_URL)}
+      </div>`)
   }),
 
   shareLink: (data) => ({
     subject: `${data.sharedBy} shared "${data.fileName}" with you`,
-    html: wrapper(card(`
-      <div style="font-size:36px;margin-bottom:16px">🔗</div>
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 12px">
-        File Shared With You
-      </h2>
-      <p style="color:#606070;font-size:14px;margin:0 0 16px;line-height:1.5">
-        <strong style="color:#a0a0b0">${data.sharedBy}</strong>
-        shared a file with you:
-      </p>
-      ${infoBox(`
-        <p style="color:white;font-size:16px;font-weight:600;margin:0 0 4px">
-          📄&nbsp;${data.fileName}
-        </p>
-        ${data.message ? `
-          <div style="border-top:1px solid #2a2a3a;margin-top:12px;padding-top:12px">
-            <p style="color:#606070;font-size:12px;margin:0 0 4px">Message:</p>
-            <p style="color:#a0a0b0;font-size:14px;margin:0;font-style:italic">
-              "${data.message}"
-            </p>
-          </div>
-        ` : ''}
-      `)}
-      ${button('View Shared File →', data.shareUrl)}
-      ${data.expiresAt ? `
-        <p style="color:#404050;font-size:12px;text-align:center;margin-top:12px">
-          Link expires: ${data.expiresAt}
-        </p>
-      ` : ''}
-    `))
+    html: eWrap(`
+      ${eLogo()}
+      <div style="padding:28px 40px 36px">
+        ${eH('File shared with you')}
+        ${eP(`<strong style="color:${T1}">${data.sharedBy}</strong> shared a file with you:`)}
+        <div style="margin-bottom:24px">${eBox(`
+          <div style="font-size:16px;font-weight:600;color:${T1};margin-bottom:4px;font-family:${FONT}">📄&nbsp;${data.fileName}</div>
+          ${data.message ? `<div style="border-top:1px solid ${LINE};margin-top:12px;padding-top:12px"><div style="font-size:12px;color:${T3};margin-bottom:4px;font-family:${FONT}">Message:</div><div style="font-size:14px;color:${T2};font-style:italic;font-family:${FONT}">"${data.message}"</div></div>` : ''}
+        `)}</div>
+        ${eBtn('View Shared File', data.shareUrl || APP_URL)}
+        ${data.expiresAt ? `<p style="font-size:12px;color:${T4};text-align:center;margin-top:12px;font-family:${FONT}">Link expires: ${data.expiresAt}</p>` : ''}
+      </div>`)
   }),
-
-  custom: (data) => ({
-    subject: data.subject || 'Message from Eastape',
-    html: wrapper(card(`
-      <h2 style="color:white;font-size:20px;font-weight:700;margin:0 0 16px">
-        ${(data.subject || 'Message from Eastape').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-      </h2>
-      <div style="color:#a0a0b0;font-size:15px;line-height:1.7">
-        ${(data.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}
-      </div>
-      ${button('Open Eastape →', APP_URL + '/dashboard')}
-    `))
-  }),
-
 }
 
-// Helper to check user notification preferences
+// ── Aliases ───────────────────────────────────────────────────────
+templates.password_reset      = templates.passwordReset
+templates.security_alert      = templates.securityAlert
+templates.new_signin          = templates.securityAlert
+templates.newSignin           = templates.securityAlert
+templates.account_deactivation = templates.accountDeactivation
+templates.payment_receipt     = templates.paymentReceipt
+templates.invoice             = templates.paymentReceipt
+
+// ── Notification preference check ─────────────────────────────────
 async function shouldSendEmail(
   userId: string,
-  notificationType: string
+  notificationType: string,
 ): Promise<{ send: boolean; email: string }> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
   try {
-    const supabase = createClient(supabaseUrl, serviceKey)
-
-    // Get email from auth.users (profiles table has no email column)
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
     const { data: { user } } = await supabase.auth.admin.getUserById(userId)
     if (!user?.email) return { send: false, email: '' }
 
-    // Get notification preferences from profiles
     const { data: profile } = await supabase
       .from('profiles')
       .select('email_notifications')
@@ -362,18 +382,15 @@ async function shouldSendEmail(
       .single()
 
     const prefs = profile?.email_notifications || {}
-    const shouldSend = prefs[notificationType] !== false
-
-    return { send: shouldSend, email: user.email }
+    return { send: prefs[notificationType] !== false, email: user.email }
   } catch {
     return { send: false, email: '' }
   }
 }
 
+// ── Handler ───────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   try {
     const body = await req.json()
@@ -381,13 +398,12 @@ Deno.serve(async (req) => {
 
     let recipientEmail = to
 
-    // Check notification preferences if userId provided
     if (userId && notificationType) {
       const { send, email } = await shouldSendEmail(userId, notificationType)
       if (!send) {
         return new Response(
           JSON.stringify({ success: true, skipped: true, reason: 'User preference disabled' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...cors, 'Content-Type': 'application/json' } },
         )
       }
       if (!recipientEmail) recipientEmail = email
@@ -396,23 +412,23 @@ Deno.serve(async (req) => {
     if (!recipientEmail) {
       return new Response(
         JSON.stringify({ error: 'Missing recipient email' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } },
       )
     }
 
     if (!template || !templates[template]) {
       return new Response(
         JSON.stringify({ error: `Invalid or missing template: ${template}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } },
       )
     }
 
     const { subject, html } = templates[template](data || {})
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
+    const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -423,30 +439,27 @@ Deno.serve(async (req) => {
       }),
     })
 
-    const result = await resendResponse.json()
+    const result = await resendRes.json()
 
-    if (!resendResponse.ok) {
-      // Return the full Resend error so it's visible to callers
-      const resendMsg = result.message || result.error || result.name || JSON.stringify(result)
-      console.error(`Resend ${resendResponse.status}:`, resendMsg)
+    if (!resendRes.ok) {
+      const msg = result.message || result.error || result.name || JSON.stringify(result)
+      console.error(`Resend ${resendRes.status}:`, msg)
       return new Response(
-        JSON.stringify({ error: `Resend: ${resendMsg}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: `Resend: ${msg}` }),
+        { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } },
       )
     }
 
     console.log(`✅ Email sent: template=${template} to=${recipientEmail} id=${result.id}`)
-
     return new Response(
       JSON.stringify({ success: true, id: result.id }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...cors, 'Content-Type': 'application/json' } },
     )
-
   } catch (err) {
     console.error('send-email error:', err)
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   }
 })
