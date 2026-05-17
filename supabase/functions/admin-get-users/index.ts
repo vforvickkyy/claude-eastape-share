@@ -18,25 +18,42 @@ Deno.serve(async (req) => {
     })
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
-    const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-    if (!profile?.is_admin) return json({ error: 'Forbidden' }, 403)
+    const { data: adminProfile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+    if (!adminProfile?.is_admin) return json({ error: 'Forbidden' }, 403)
 
     const url = new URL(req.url)
-    const page = parseInt(url.searchParams.get('page') || '1')
-    const limit = parseInt(url.searchParams.get('limit') || '20')
+    const page   = parseInt(url.searchParams.get('page')   || '1')
+    const limit  = parseInt(url.searchParams.get('limit')  || '20')
     const search = url.searchParams.get('search') || ''
     const filter = url.searchParams.get('filter') || 'all'
-    const sort = url.searchParams.get('sort') || 'newest'
+    const sort   = url.searchParams.get('sort')   || 'newest'
     const offset = (page - 1) * limit
 
-    // ── 1. Query profiles (no nested join to avoid FK ambiguity) ──────────────
+    // ── 0. Plan-based filter: resolve user IDs upfront ───────────────────────
+    const knownFilters = ['all', 'suspended', 'admins']
+    let planFilterIds: string[] | null = null
+    if (!knownFilters.includes(filter)) {
+      const { data: planUsers } = await supabase
+        .from('user_plans')
+        .select('user_id, plans!inner(name)')
+        .eq('is_active', true)
+        .ilike('plans.name', filter)
+      planFilterIds = (planUsers || []).map((u: any) => u.user_id)
+      if (planFilterIds.length === 0) {
+        return json({ users: [], total: 0, page, limit, plan_counts: {} })
+      }
+    }
+
+    // ── 1. Query profiles ────────────────────────────────────────────────────
     let q = supabase
       .from('profiles')
       .select('id, email, full_name, avatar_url, is_admin, is_suspended, created_at', { count: 'exact' })
 
     if (search) q = q.or(`email.ilike.%${search}%,full_name.ilike.%${search}%`)
-    if (filter === 'suspended') q = q.eq('is_suspended', true)
-    if (filter === 'admins') q = q.eq('is_admin', true)
+    if (planFilterIds !== null)       q = q.in('id', planFilterIds)
+    else if (filter === 'suspended')  q = q.eq('is_suspended', true)
+    else if (filter === 'admins')     q = q.eq('is_admin', true)
+
     q = q.order('created_at', { ascending: sort === 'oldest' })
     q = q.range(offset, offset + limit - 1)
 
@@ -46,7 +63,7 @@ Deno.serve(async (req) => {
     const profileList = profiles || []
     const userIds = profileList.map((p: any) => p.id)
 
-    // ── 2. Fetch active plans for these users separately ─────────────────────
+    // ── 2. Fetch active plans for this page of users ─────────────────────────
     let planMap: Record<string, any> = {}
     if (userIds.length > 0) {
       const { data: userPlans } = await supabase
@@ -59,22 +76,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 3. Fetch auth metadata (last_sign_in_at, email_confirmed_at) ─────────
+    // ── 3. Plan distribution counts (for tab badges) ─────────────────────────
+    const { data: allPlanDist } = await supabase
+      .from('user_plans')
+      .select('plans(name)')
+      .eq('is_active', true)
+    const plan_counts: Record<string, number> = {}
+    for (const up of (allPlanDist || [])) {
+      const name = ((up as any).plans?.name || '').toLowerCase()
+      if (name) plan_counts[name] = (plan_counts[name] || 0) + 1
+    }
+
+    // ── 4. Auth metadata (last_sign_in_at) ───────────────────────────────────
     let authMap: Record<string, any> = {}
     try {
       const { data: { users: authUsers } } = await supabase.auth.admin.listUsers({ perPage: 1000 })
       authMap = Object.fromEntries((authUsers || []).map((u: any) => [u.id, u]))
     } catch (_) { /* non-fatal */ }
 
-    // ── 4. Merge ──────────────────────────────────────────────────────────────
+    // ── 5. Merge ─────────────────────────────────────────────────────────────
     const users = profileList.map((p: any) => ({
       ...p,
-      last_sign_in_at: authMap[p.id]?.last_sign_in_at || null,
+      last_sign_in_at:    authMap[p.id]?.last_sign_in_at    || null,
       email_confirmed_at: authMap[p.id]?.email_confirmed_at || null,
       plan: planMap[p.id] || null,
     }))
 
-    return json({ users, total: count || 0, page, limit })
+    return json({ users, total: count || 0, page, limit, plan_counts })
   } catch (err) {
     return json({ error: (err as Error).message }, 500)
   }

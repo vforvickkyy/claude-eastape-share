@@ -126,13 +126,15 @@ Deno.serve(async (req) => {
 
       if (errors.length > 0) return json({ error: errors.join('; ') }, 400)
 
-      await supabase.from('admin_audit_logs').insert({
-        admin_id: user.id,
-        action: 'admin_update_user',
-        target_type: 'user',
-        target_id: userId,
-        metadata: { fields: Object.keys(body) },
-      }).catch(() => {})
+      try {
+        await supabase.from('admin_audit_logs').insert({
+          admin_id: user.id,
+          action: 'admin_update_user',
+          target_type: 'user',
+          target_id: userId,
+          metadata: { fields: Object.keys(body) },
+        })
+      } catch { /* non-fatal */ }
 
       return json({ ok: true })
     }

@@ -1057,6 +1057,37 @@ function UserDetailDrawer({ user, planName, planId, plans, onClose, onChangePlan
   );
 }
 
+/* ── helpers ─────────────────────────────────────────────────── */
+function fmtBytes(b) {
+  if (!b) return "0 B";
+  if (b < 1024 ** 2) return (b / 1024).toFixed(0) + " KB";
+  if (b < 1024 ** 3) return (b / 1024 ** 2).toFixed(1) + " MB";
+  return (b / 1024 ** 3).toFixed(2) + " GB";
+}
+
+const PLAN_COLORS = {
+  pro:      { bg: "rgba(249,115,22,0.15)", color: "#f97316", dot: "#f97316" },
+  business: { bg: "rgba(168,85,247,0.15)", color: "#a855f7", dot: "#a855f7" },
+  free:     { bg: "rgba(100,116,139,0.15)", color: "#94a3b8", dot: "#94a3b8" },
+  trial:    { bg: "rgba(251,191,36,0.15)", color: "#fbbf24", dot: "#fbbf24" },
+};
+function PlanPill({ name }) {
+  const key = (name || "free").toLowerCase();
+  const c = PLAN_COLORS[key] || PLAN_COLORS.free;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "999px", background: c.bg, color: c.color, fontSize: "12px", fontWeight: 600, whiteSpace: "nowrap" }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
+      {name || "Free"}
+    </span>
+  );
+}
+
+function StatusPill({ user }) {
+  if (user.is_suspended) return <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "999px", background: "rgba(248,113,113,0.12)", color: "#f87171", fontSize: "12px", fontWeight: 600 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171" }} />Suspended</span>;
+  if (user.is_admin)     return <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "999px", background: "rgba(249,115,22,0.12)", color: "#f97316", fontSize: "12px", fontWeight: 600 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f97316" }} />Admin</span>;
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "999px", background: "rgba(74,222,128,0.1)", color: "#4ade80", fontSize: "12px", fontWeight: 600 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80" }} />Active</span>;
+}
+
 /* ── Main component ──────────────────────────────────────────── */
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -1065,13 +1096,14 @@ export default function AdminUsers() {
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [planTab, setPlanTab] = useState("all"); // "all"|"free"|"pro"|"business"|...
   const [sort, setSort] = useState("newest");
+  const [planCounts, setPlanCounts] = useState({});
 
   const [userPlans, setUserPlans] = useState({}); // { userId: { name, planId } }
+  const [storageMap, setStorageMap] = useState({}); // { userId: total_bytes }
   const [planList, setPlanList] = useState([]);
 
-  /* Modal states */
   const [showAddUser, setShowAddUser] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showChangePlan, setShowChangePlan] = useState(false);
@@ -1086,17 +1118,14 @@ export default function AdminUsers() {
   const [toast, setToast] = useState(null);
   const searchDebounce = useRef(null);
 
-  /* ── Debounce search ────────────────────────────────────────── */
+  /* ── Debounce search ─────────────────────────────────────────── */
   useEffect(() => {
     clearTimeout(searchDebounce.current);
-    searchDebounce.current = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
-    }, 300);
+    searchDebounce.current = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 300);
     return () => clearTimeout(searchDebounce.current);
   }, [search]);
 
-  /* ── Fetch plans ────────────────────────────────────────────── */
+  /* ── Fetch plans list ────────────────────────────────────────── */
   useEffect(() => {
     const { token } = getAuth();
     fetch(`${SUPABASE_URL}/rest/v1/plans?is_active=eq.true&select=id,name,price_monthly&order=price_monthly.asc`, {
@@ -1107,27 +1136,38 @@ export default function AdminUsers() {
       .catch(() => {});
   }, []);
 
-  /* ── Fetch users via edge function ──────────────────────────── */
+  /* ── Fetch storage stats (once per session) ──────────────────── */
+  useEffect(() => {
+    apiFetch("/admin-storage-stats")
+      .then((d) => {
+        if (Array.isArray(d.users)) {
+          const map = {};
+          d.users.forEach((u) => { map[u.id] = u.total_bytes || 0; });
+          setStorageMap(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  /* ── Fetch users ─────────────────────────────────────────────── */
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
+      const filterParam = planTab === "all" ? "all" : planTab;
       const data = await apiFetch(
-        `/admin-get-users?page=${page}&limit=${PER_PAGE}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}&sort=${sort}`
+        `/admin-get-users?page=${page}&limit=${PER_PAGE}&search=${encodeURIComponent(debouncedSearch)}&filter=${filterParam}&sort=${sort}`
       );
       setUsers(Array.isArray(data.users) ? data.users : []);
       setTotalCount(data.total || 0);
+      if (data.plan_counts) setPlanCounts(data.plan_counts);
 
-      /* Build plan map from embedded plan data if available */
+      // Build plan map — API returns user.plan as { id, name, storage_limit_gb }
       if (Array.isArray(data.users)) {
         const map = {};
         data.users.forEach((u) => {
-          if (u.plan_id || u.plan_name) {
-            map[u.id] = { name: u.plan_name || "Free", planId: u.plan_id || "" };
-          }
+          if (u.plan) map[u.id] = { name: u.plan.name, planId: u.plan.id };
         });
-        if (Object.keys(map).length > 0) {
-          setUserPlans((prev) => ({ ...prev, ...map }));
-        }
+        if (Object.keys(map).length > 0) setUserPlans((prev) => ({ ...prev, ...map }));
       }
     } catch (err) {
       console.error("Users fetch error:", err);
@@ -1135,37 +1175,15 @@ export default function AdminUsers() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, filter, sort]);
+  }, [page, debouncedSearch, planTab, sort]);
 
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
-
-  /* ── Refresh user plans map ─────────────────────────────────── */
-  async function refreshUserPlans() {
-    try {
-      const { token } = getAuth();
-      const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/user_plans?select=user_id,plan_id,plans(name,price_monthly)&is_active=eq.true`,
-        { headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY } }
-      );
-      const d = await r.json();
-      if (Array.isArray(d)) {
-        const map = {};
-        d.forEach((up) => { map[up.user_id] = { name: up.plans?.name || "Free", planId: up.plan_id }; });
-        setUserPlans(map);
-      }
-    } catch { /* ignore */ }
-  }
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PER_PAGE));
 
-  /* ── Toast helper ───────────────────────────────────────────── */
-  function showToast(message, type = "success") {
-    setToast({ message, type, id: Date.now() });
-  }
+  function showToast(message, type = "success") { setToast({ message, type, id: Date.now() }); }
 
-  /* ── Toggle suspend ─────────────────────────────────────────── */
+  /* ── Toggle suspend ──────────────────────────────────────────── */
   async function handleToggleSuspend(user) {
     try {
       const { token } = getAuth();
@@ -1175,119 +1193,121 @@ export default function AdminUsers() {
         headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ is_suspended: newVal }),
       });
-      if (!res.ok) throw new Error("Failed to update user");
-      const update = (u) => u.id === user.id ? { ...u, is_suspended: newVal } : u;
-      setUsers((prev) => prev.map(update));
+      if (!res.ok) throw new Error("Failed");
+      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, is_suspended: newVal } : u));
       if (selectedUser?.id === user.id) setSelectedUser((u) => ({ ...u, is_suspended: newVal }));
       await auditLog(newVal ? "suspend_user" : "unsuspend_user", user.id, { email: user.email });
       showToast(`User ${newVal ? "suspended" : "unsuspended"}`);
-    } catch {
-      showToast("Failed to update user", "error");
-    }
+    } catch { showToast("Failed to update user", "error"); }
   }
 
-  /* ── Send magic link ────────────────────────────────────────── */
   async function handleSendMagicLink(user) {
     try {
-      const data = await apiFetch("/admin-send-magic-link", {
-        method: "POST",
-        body: JSON.stringify({ email: user.email, user_id: user.id }),
-      });
+      const data = await apiFetch("/admin-send-magic-link", { method: "POST", body: JSON.stringify({ email: user.email, user_id: user.id }) });
       await auditLog("send_magic_link", user.id, { email: user.email });
       setMagicLinkData({ email: user.email, link: data.link || data.magic_link || data.action_link || "" });
       setShowMagicLink(true);
-    } catch (err) {
-      showToast("Failed to generate magic link: " + err.message, "error");
-    }
+    } catch (err) { showToast("Failed to generate magic link: " + err.message, "error"); }
   }
 
-  /* ── Export CSV ─────────────────────────────────────────────── */
   async function handleExportCSV() {
     try {
       const { token } = getAuth();
-      const res = await fetch(`${BASE_FN}/admin-export-users`, {
-        headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY },
-      });
+      const res = await fetch(`${BASE_FN}/admin-export-users`, { headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY } });
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `eastape-users-${new Date().toISOString().split("T")[0]}.csv`;
-      a.click();
+      const a = document.createElement("a"); a.href = url; a.download = `eastape-users-${new Date().toISOString().split("T")[0]}.csv`; a.click();
       URL.revokeObjectURL(url);
       showToast("CSV exported");
-    } catch (err) {
-      showToast("Export failed: " + err.message, "error");
-    }
+    } catch (err) { showToast("Export failed: " + err.message, "error"); }
   }
 
-  /* ── Helpers ─────────────────────────────────────────────────── */
   function openDetail(user) { setSelectedUser(user); setShowDetail(true); }
   function openChangePlan(user) { setActionUser(user); setShowChangePlan(true); }
   function openResetPw(user) { setActionUser(user); setShowResetPw(true); }
   function openDelete(user) { setActionUser(user); setShowDelete(true); }
 
-  function getUserStatus(user) {
-    if (user.is_admin) return "admin";
-    if (user.is_suspended) return "suspended";
-    return "active";
-  }
-
-  /* ── Pagination page numbers ─────────────────────────────────── */
+  /* ── Pagination builder ──────────────────────────────────────── */
   function buildPageNums() {
     if (totalPages <= 1) return [];
     const pages = [];
     for (let i = 1; i <= totalPages; i++) {
       if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) pages.push(i);
     }
-    const out = [];
-    let prev = null;
+    const out = []; let prev = null;
     for (const p of pages) {
       if (prev !== null && p - prev > 1) out.push("…");
-      out.push(p);
-      prev = p;
+      out.push(p); prev = p;
     }
     return out;
   }
   const pageNums = buildPageNums();
 
-  const selectStyle = {
-    background: "var(--bg)",
-    border: "1px solid var(--border)",
-    borderRadius: "8px",
-    padding: "7px 30px 7px 12px",
-    color: "var(--t1)",
-    fontSize: "13px",
-    outline: "none",
-    appearance: "none",
-    cursor: "pointer",
-  };
+  /* ── Plan tabs ───────────────────────────────────────────────── */
+  const uniquePlanNames = [...new Set(Object.values(planCounts).length > 0
+    ? Object.keys(planCounts)
+    : planList.map(p => p.name.toLowerCase())
+  )].filter(Boolean);
+
+  const tabs = [
+    { id: "all", label: "All", count: null },
+    ...uniquePlanNames.map(p => ({ id: p, label: p.charAt(0).toUpperCase() + p.slice(1), count: planCounts[p] || null })),
+  ];
+
+  const totalWithPlan = Object.values(planCounts).reduce((a, b) => a + b, 0);
 
   return (
     <div style={{ position: "relative" }}>
-      {/* ── Page header ──────────────────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "4px", gap: "12px", flexWrap: "wrap" }}>
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "20px", gap: "12px", flexWrap: "wrap" }}>
         <div>
           <div className="admin-page-title">All Users</div>
-          <div className="admin-page-sub">Manage registered users and their accounts.</div>
+          <div className="admin-page-sub">
+            {loading ? "Loading…" : `${totalCount.toLocaleString()} registered account${totalCount !== 1 ? "s" : ""} across all plans.`}
+          </div>
         </div>
-        <button
-          className="admin-action-btn primary"
-          onClick={() => setShowAddUser(true)}
-          style={{ flexShrink: 0, marginTop: "2px" }}
-        >
-          <Plus size={14} weight="bold" /> Add User
+        <button className="admin-action-btn primary" onClick={() => setShowAddUser(true)} style={{ flexShrink: 0 }}>
+          <Plus size={14} weight="bold" /> Invite User
         </button>
       </div>
 
       {/* ── Table card ───────────────────────────────────────────── */}
-      <div className="admin-table-wrap">
-        {/* Controls */}
-        <div className="admin-table-header" style={{ flexWrap: "wrap", gap: "10px" }}>
-          {/* Search */}
-          <div style={{ position: "relative", flex: "1 1 200px", maxWidth: "280px" }}>
-            <MagnifyingGlass size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }} />
+      <div className="admin-table-wrap" style={{ padding: 0 }}>
+
+        {/* ── Plan tabs ─────────────────────────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: "2px", padding: "14px 18px 0", borderBottom: "1px solid var(--border)", overflowX: "auto" }}>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setPlanTab(t.id); setPage(1); }}
+              style={{
+                padding: "7px 14px", borderRadius: "8px 8px 0 0", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: planTab === t.id ? 600 : 400,
+                background: planTab === t.id ? "var(--card)" : "none",
+                color: planTab === t.id ? "var(--t1)" : "var(--t3)",
+                borderBottom: planTab === t.id ? "2px solid var(--admin-accent)" : "2px solid transparent",
+                display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", transition: "all 0.15s",
+              }}
+            >
+              {t.label}
+              {t.count !== null && (
+                <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "999px", background: planTab === t.id ? "rgba(249,115,22,0.15)" : "var(--border)", color: planTab === t.id ? "var(--admin-accent)" : "var(--t3)", fontWeight: 600 }}>
+                  {t.count}
+                </span>
+              )}
+              {t.id === "all" && totalCount > 0 && (
+                <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "999px", background: planTab === "all" ? "rgba(249,115,22,0.15)" : "var(--border)", color: planTab === "all" ? "var(--admin-accent)" : "var(--t3)", fontWeight: 600 }}>
+                  {totalCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Controls ──────────────────────────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "14px 18px", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: "1 1 180px", maxWidth: "260px" }}>
+            <MagnifyingGlass size={13} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }} />
             <input
               className="admin-table-search"
               style={{ paddingLeft: "30px", width: "100%", boxSizing: "border-box" }}
@@ -1297,55 +1317,55 @@ export default function AdminUsers() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-
-          {/* Filter */}
           <div style={{ position: "relative" }}>
-            <select style={selectStyle} value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
-              <option value="all">All Users</option>
-              <option value="suspended">Suspended</option>
-              <option value="admins">Admins</option>
-            </select>
-            <CaretDown size={12} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }} />
-          </div>
-
-          {/* Sort */}
-          <div style={{ position: "relative" }}>
-            <select style={selectStyle} value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
+            <select
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 28px 7px 10px", color: "var(--t1)", fontSize: "13px", outline: "none", appearance: "none", cursor: "pointer" }}
+              value={sort}
+              onChange={(e) => { setSort(e.target.value); setPage(1); }}
+            >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
             </select>
-            <CaretDown size={12} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }} />
+            <CaretDown size={11} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }} />
           </div>
-
           <button className="admin-action-btn" onClick={handleExportCSV} style={{ marginLeft: "auto" }}>
-            <Export size={14} /> Export CSV
+            <Export size={13} /> Export
           </button>
         </div>
 
-        {/* Table */}
+        {/* ── Table ─────────────────────────────────────────────── */}
         <div style={{ overflowX: "auto" }}>
-          <table className="admin-table">
+          <table className="admin-table" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "30%" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "50px" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>User</th>
                 <th>Plan</th>
-                <th>Last Sign In</th>
+                <th>Storage</th>
+                <th>Last Active</th>
                 <th>Status</th>
-                <th style={{ width: "60px" }}></th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 8 }).map((_, ri) => (
-                  <tr key={ri} className="admin-table-skeleton">
-                    {[1, 2, 3, 4, 5].map((c) => (
-                      <td key={c}><span className="admin-table-skeleton-row" style={{ width: `${50 + Math.random() * 40}%` }} /></td>
+                  <tr key={ri}>
+                    {[1,2,3,4,5,6].map((c) => (
+                      <td key={c}><span className="admin-table-skeleton-row" style={{ width: `${45 + (ri * 7 + c * 11) % 40}%`, display: "block", height: "14px", borderRadius: "6px", background: "var(--border)", animation: "pulse 1.5s ease-in-out infinite" }} /></td>
                     ))}
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <div className="admin-empty">
                       <UserCircle size={32} style={{ color: "var(--t3)" }} />
                       <span>No users found.</span>
@@ -1355,21 +1375,35 @@ export default function AdminUsers() {
               ) : (
                 users.map((user) => {
                   const plan = userPlans[user.id];
+                  const planName = plan?.name || user.plan?.name || "Free";
+                  const storage = storageMap[user.id] || 0;
+                  const displayName = user.full_name || user.email?.split("@")[0] || "—";
                   return (
-                    <tr key={user.id}>
+                    <tr
+                      key={user.id}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => openDetail(user)}
+                    >
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <Avatar name={user.full_name || user.email} avatarUrl={user.avatar_url} size={32} />
-                          <div>
-                            <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--t1)" }}>{user.full_name || "—"}</div>
-                            <div style={{ fontSize: "11px", color: "var(--t3)" }}>{user.email}</div>
+                          <Avatar name={displayName} avatarUrl={user.avatar_url} size={34} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</div>
+                            <div style={{ fontSize: "11px", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
                           </div>
                         </div>
                       </td>
-                      <td><PlanBadge plan={plan?.name || user.plan_name || "Free"} /></td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <PlanPill name={planName} />
+                      </td>
+                      <td style={{ fontSize: "12px", color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>
+                        {storage > 0 ? fmtBytes(storage) : <span style={{ color: "var(--t3)" }}>—</span>}
+                      </td>
                       <td style={{ fontSize: "12px", color: "var(--t2)" }}>{formatRelative(user.last_sign_in_at)}</td>
-                      <td><StatusBadge status={getUserStatus(user)} /></td>
-                      <td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <StatusPill user={user} />
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right" }}>
                         <ActionMenu
                           user={user}
                           onViewDetails={() => openDetail(user)}
@@ -1388,49 +1422,37 @@ export default function AdminUsers() {
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* ── Pagination ────────────────────────────────────────── */}
         {!loading && users.length > 0 && (
           <div className="admin-pagination">
-            <span>
+            <span style={{ fontSize: "12px", color: "var(--t3)" }}>
               Showing {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, totalCount)} of {totalCount.toLocaleString()}
             </span>
             {totalPages > 1 && (
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <button className="admin-page-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Previous page">‹</button>
-                <div className="admin-page-btns">
-                  {pageNums.map((p, i) =>
-                    p === "…" ? (
-                      <span key={`e-${i}`} style={{ padding: "4px 6px", color: "var(--t3)", fontSize: "12px" }}>…</span>
-                    ) : (
-                      <button key={p} className={`admin-page-btn${p === page ? " active" : ""}`} onClick={() => setPage(p)}>{p}</button>
-                    )
-                  )}
-                </div>
-                <button className="admin-page-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label="Next page">›</button>
+                <button className="admin-page-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹</button>
+                {pageNums.map((p, i) =>
+                  p === "…" ? <span key={`e-${i}`} style={{ padding: "4px 6px", color: "var(--t3)", fontSize: "12px" }}>…</span>
+                  : <button key={p} className={`admin-page-btn${p === page ? " active" : ""}`} onClick={() => setPage(p)}>{p}</button>
+                )}
+                <button className="admin-page-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>›</button>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* ── Modals & Drawer ────────────────────────────────────────── */}
+      {/* ── Modals & Panel ───────────────────────────────────────── */}
       <AnimatePresence>
-        {/* Add User */}
         {showAddUser && (
-          <AddUserModal
-            plans={planList}
-            onClose={() => setShowAddUser(false)}
-            onSuccess={(msg) => { showToast(msg); loadUsers(); }}
-          />
+          <AddUserModal plans={planList} onClose={() => setShowAddUser(false)} onSuccess={(msg) => { showToast(msg); loadUsers(); }} />
         )}
-
-        {/* User Detail Drawer */}
         {showDetail && selectedUser && (
           <UserDetailPanel
             key="drawer"
             user={selectedUser}
-            planName={userPlans[selectedUser.id]?.name}
-            planId={userPlans[selectedUser.id]?.planId}
+            planName={userPlans[selectedUser.id]?.name || selectedUser.plan?.name}
+            planId={userPlans[selectedUser.id]?.planId || selectedUser.plan?.id}
             plans={planList}
             onClose={() => setShowDetail(false)}
             onChangePlan={() => openChangePlan(selectedUser)}
@@ -1439,44 +1461,26 @@ export default function AdminUsers() {
             onSuccess={showToast}
           />
         )}
-
-        {/* Change Plan */}
         {showChangePlan && actionUser && (
           <ChangePlanModal
             key="change-plan"
             user={actionUser}
-            currentPlanId={userPlans[actionUser.id]?.planId}
+            currentPlanId={userPlans[actionUser.id]?.planId || actionUser.plan?.id}
             plans={planList}
             onClose={() => { setShowChangePlan(false); setActionUser(null); }}
             onSuccess={(msg, { userId, planId, planName } = {}) => {
               showToast(msg);
               if (userId) setUserPlans((prev) => ({ ...prev, [userId]: { name: planName || "Free", planId: planId || "" } }));
-              refreshUserPlans();
+              loadUsers();
             }}
           />
         )}
-
-        {/* Magic Link */}
         {showMagicLink && (
-          <MagicLinkModal
-            key="magic-link"
-            email={magicLinkData.email}
-            link={magicLinkData.link}
-            onClose={() => setShowMagicLink(false)}
-          />
+          <MagicLinkModal key="magic-link" email={magicLinkData.email} link={magicLinkData.link} onClose={() => setShowMagicLink(false)} />
         )}
-
-        {/* Reset Password */}
         {showResetPw && actionUser && (
-          <ResetPasswordModal
-            key="reset-pw"
-            user={actionUser}
-            onClose={() => { setShowResetPw(false); setActionUser(null); }}
-            onSuccess={(msg) => showToast(msg)}
-          />
+          <ResetPasswordModal key="reset-pw" user={actionUser} onClose={() => { setShowResetPw(false); setActionUser(null); }} onSuccess={(msg) => showToast(msg)} />
         )}
-
-        {/* Delete */}
         {showDelete && actionUser && (
           <DeleteConfirmModal
             key="delete"
@@ -1485,21 +1489,15 @@ export default function AdminUsers() {
             onConfirm={(deletedId) => {
               setUsers((prev) => prev.filter((u) => u.id !== deletedId));
               setTotalCount((n) => Math.max(0, n - 1));
-              if (showDetail && selectedUser?.id === deletedId) {
-                setShowDetail(false);
-                setSelectedUser(null);
-              }
+              if (showDetail && selectedUser?.id === deletedId) { setShowDetail(false); setSelectedUser(null); }
               showToast("User deleted");
             }}
           />
         )}
       </AnimatePresence>
 
-      {/* Toast */}
       <AnimatePresence>
-        {toast && (
-          <Toast key={toast.id} message={toast.message} type={toast.type} onDone={() => setToast(null)} />
-        )}
+        {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
       </AnimatePresence>
     </div>
   );
