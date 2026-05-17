@@ -1,4 +1,3 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -371,7 +370,7 @@ async function shouldSendEmail(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -427,8 +426,13 @@ serve(async (req) => {
     const result = await resendResponse.json()
 
     if (!resendResponse.ok) {
-      console.error('Resend error:', result)
-      throw new Error(result.message || 'Resend API error')
+      // Return the full Resend error so it's visible to callers
+      const resendMsg = result.message || result.error || result.name || JSON.stringify(result)
+      console.error(`Resend ${resendResponse.status}:`, resendMsg)
+      return new Response(
+        JSON.stringify({ error: `Resend: ${resendMsg}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     console.log(`✅ Email sent: template=${template} to=${recipientEmail} id=${result.id}`)
@@ -441,7 +445,7 @@ serve(async (req) => {
   } catch (err) {
     console.error('send-email error:', err)
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: String(err) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

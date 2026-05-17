@@ -161,11 +161,12 @@ function EmailModal({ user, planName, onClose, onSuccess }) {
         headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ to: user.email, template: "custom", data: { subject, body } }),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to send email");
       onSuccess?.("Email sent to " + user.email);
       onClose();
-    } catch {
-      onSuccess?.("Failed to send email.");
+    } catch (e) {
+      onSuccess?.("Email error: " + (e.message || "Unknown error"));
     } finally {
       setSending(false);
     }

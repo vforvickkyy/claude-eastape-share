@@ -81,37 +81,50 @@ Deno.serve(async (req) => {
     // ── PATCH: update user profile ────────────────────────────────────────────
     if (req.method === 'PATCH') {
       const body = await req.json()
-      const profileUpdates: Record<string, unknown> = {}
+      const errors: string[] = []
 
-      if (body.full_name !== undefined) {
-        profileUpdates.full_name = body.full_name
-        // Sync to auth user_metadata so it shows in the app
-        await supabase.auth.admin.updateUserById(userId, {
-          user_metadata: { full_name: body.full_name }
-        })
-      }
+      // 1. Profile table updates (only columns that exist in profiles)
+      const profileUpdates: Record<string, unknown> = {}
+      if (body.full_name !== undefined)   profileUpdates.full_name   = body.full_name
+      if (body.is_admin !== undefined)     profileUpdates.is_admin     = body.is_admin
+      if (body.is_suspended !== undefined) profileUpdates.is_suspended = body.is_suspended
       if (body.username !== undefined && body.username !== '') {
-        profileUpdates.username = body.username.toLowerCase().trim()
+        profileUpdates.username = (body.username as string).toLowerCase().trim()
         profileUpdates.username_changed_at = new Date().toISOString()
       }
-      if (body.is_admin !== undefined) profileUpdates.is_admin = body.is_admin
-      if (body.is_suspended !== undefined) profileUpdates.is_suspended = body.is_suspended
 
       if (Object.keys(profileUpdates).length > 0) {
-        const { error: updateErr } = await supabase.from('profiles').update(profileUpdates).eq('id', userId)
-        if (updateErr) return json({ error: updateErr.message }, 400)
+        const { error: profileErr } = await supabase
+          .from('profiles').update(profileUpdates).eq('id', userId)
+        if (profileErr) errors.push('profile: ' + profileErr.message)
       }
 
-      // Plan change: deactivate current, insert new
-      if (body.plan_id) {
-        await supabase.from('user_plans').update({ is_active: false }).eq('user_id', userId)
-        await supabase.from('user_plans').insert({
-          user_id: userId,
-          plan_id: body.plan_id,
-          is_active: true,
-          started_at: new Date().toISOString(),
-        })
+      // 2. Sync full_name to auth user_metadata (best-effort, non-fatal)
+      if (body.full_name !== undefined) {
+        try {
+          await supabase.auth.admin.updateUserById(userId, {
+            user_metadata: { full_name: body.full_name }
+          })
+        } catch { /* non-fatal */ }
       }
+
+      // 3. Plan change: deactivate current, insert new
+      if (body.plan_id) {
+        const { error: planDeactivateErr } = await supabase
+          .from('user_plans').update({ is_active: false }).eq('user_id', userId)
+        if (planDeactivateErr) errors.push('plan deactivate: ' + planDeactivateErr.message)
+
+        const { error: planInsertErr } = await supabase
+          .from('user_plans').insert({
+            user_id: userId,
+            plan_id: body.plan_id,
+            is_active: true,
+            started_at: new Date().toISOString(),
+          })
+        if (planInsertErr) errors.push('plan insert: ' + planInsertErr.message)
+      }
+
+      if (errors.length > 0) return json({ error: errors.join('; ') }, 400)
 
       await supabase.from('admin_audit_logs').insert({
         admin_id: user.id,
