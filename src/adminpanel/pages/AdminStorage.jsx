@@ -7,15 +7,17 @@ import {
 import AdminStatsCard from "../components/AdminStatsCard.jsx";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
-function getAuth() {
-  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
-  return { token: s.access_token };
+function getToken() {
+  try {
+    const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+    const sd = s?.session ?? s;
+    return sd?.access_token || "";
+  } catch { return ""; }
 }
 async function apiFetch(path, opts = {}) {
-  const { token } = getAuth();
   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`, {
     ...opts,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) },
+    headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...(opts.headers || {}) },
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
