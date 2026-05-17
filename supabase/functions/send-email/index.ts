@@ -30,10 +30,10 @@ function eLogo() {
   return `<div style="padding:36px 40px 0;background-color:${CARD}"><img src="${LOGO_URL}" alt="Eastape Studio" height="26" style="height:26px;width:auto;display:block;border:0;outline:0"></div>`
 }
 function eH(text: string) {
-  return `<h1 style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};background-color:${CARD};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
+  return `<h1 class="eh" style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};background-color:${CARD};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
 }
 function eP(text: string, muted = false) {
-  return `<p style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${muted ? T3 : T2};background-color:${CARD};margin:0 0 20px;font-family:${FONT}">${text}</p>`
+  return `<p class="${muted ? 'epm' : 'ep'}" style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${muted ? T3 : T2};background-color:${CARD};margin:0 0 20px;font-family:${FONT}">${text}</p>`
 }
 function eBtn(text: string, href: string) {
   return `<a href="${href}" target="_blank" style="display:inline-block;padding:14px 36px;background:${ACCENT};color:#1a1408;font-weight:600;font-size:14px;font-family:${FONT};border-radius:8px;text-decoration:none;letter-spacing:-0.01em">${text}</a>`
@@ -77,11 +77,26 @@ function eWrap(inner: string) {
   :root { color-scheme: dark; }
   body { margin:0; padding:0; background-color:${BG}!important; }
   .edark { background-color:${BG}!important; }
-  /* Gmail app (Android/iOS) light-mode override */
   u + .body .edark { background-color:${BG}!important; }
   [data-ogsc] .edark { background-color:${BG}!important; }
-  /* Apple Mail / Outlook iOS */
   @media (prefers-color-scheme:light) { .edark { background-color:${BG}!important; } }
+
+  /* ── Prevent Gmail dark mode from overriding text colors ── */
+  .eh  { color:${T1}!important; background-color:${CARD}!important; }
+  .ep  { color:${T2}!important; background-color:${CARD}!important; }
+  .epm { color:${T3}!important; background-color:${CARD}!important; }
+  .ecard { background-color:${CARD}!important; }
+
+  /* [data-ogsc] = Gmail dark mode selector */
+  [data-ogsc] .eh  { color:${T1}!important; }
+  [data-ogsc] .ep  { color:${T2}!important; }
+  [data-ogsc] .epm { color:${T3}!important; }
+  [data-ogsc] .ecard { background-color:${CARD}!important; }
+
+  /* Prevent Gmail from applying CSS filters to invert content */
+  [data-ogsc] table, [data-ogsc] td, [data-ogsc] div, [data-ogsc] span, [data-ogsc] p, [data-ogsc] h1 {
+    -webkit-filter:none!important; filter:none!important;
+  }
 </style>
 </head>
 <body class="body" bgcolor="${BG}" style="margin:0;padding:0;background-color:${BG}">
@@ -116,13 +131,13 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `Welcome to Eastape Studio${data.name ? `, ${data.name}` : ''}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Welcome to Eastape Studio')}
         ${eP('Your creative workspace is ready. Everything you need to manage, organize, and collaborate on your projects — all in one place.')}
-        <div style="margin-bottom:28px">${eBtn('Get Started', APP_URL + '/dashboard')}</div>
+        <div class="ecard" style="margin-bottom:28px;background-color:${CARD}">${eBtn('Get Started', APP_URL + '/dashboard')}</div>
       </div>
       ${eDivider()}
-      <div style="padding:24px 40px 36px">
+      <div class="ecard" style="padding:24px 40px 36px;background-color:${CARD}">
         <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:18px;font-weight:500;font-family:${FONT}">Quick start</div>
         ${[
           { n: 1, title: 'Upload',      desc: 'Drag and drop your files to get started' },
@@ -149,7 +164,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       subject: 'Your Eastape Studio verification code',
       html: eWrap(`
         ${eLogo()}
-        <div style="padding:28px 40px 36px">
+        <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
           ${eH('Verification code')}
           ${eP('Use the code below to verify your identity. This code is valid for 10 minutes.')}
           <table cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 28px"><tr>${boxes}</tr></table>
@@ -163,10 +178,10 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: 'Reset your Eastape Studio password',
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Reset your password')}
         ${eP('We received a request to reset the password for your account. Click the button below to choose a new password.')}
-        <div style="margin-bottom:24px">${eBtn('Reset Password', data.resetUrl || data.reset_url || APP_URL + '/auth/reset')}</div>
+        <div class="ecard" style="margin-bottom:24px;background-color:${CARD}">${eBtn('Reset Password', data.resetUrl || data.reset_url || APP_URL + '/auth/reset')}</div>
         ${eBox(`<div style="font-size:13px;color:${T3};line-height:1.65;font-family:${FONT}">This link expires in <span style="color:${T2};font-weight:500">30 minutes</span>. If you didn't request this, no action is needed — your password will remain unchanged.</div>`)}
       </div>`)
   }),
@@ -176,7 +191,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: 'New sign-in detected on your Eastape Studio account',
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('New sign-in detected')}
         ${eP('We noticed a sign-in to your account from a new device or location.')}
         <div style="margin-bottom:24px">${eBoxRows([
@@ -185,7 +200,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           ['Time',       data.time     || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })],
           ['IP address', data.ip       || '—'],
         ])}</div>
-        <div style="margin-bottom:24px">${eBtn('Secure Account', APP_URL + '/settings/security')}</div>
+        <div class="ecard" style="margin-bottom:24px;background-color:${CARD}">${eBtn('Secure Account', APP_URL + '/settings/security')}</div>
         ${eP("If this was you, no action is needed. If you don't recognize this activity, reset your password immediately.", true)}
       </div>`)
   }),
@@ -195,11 +210,11 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: 'Your Eastape Studio account has been deactivated',
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Account deactivated')}
         ${eP('Your Eastape Studio account has been deactivated as requested. Your data will be retained for 30 days before permanent deletion.')}
         <div style="margin-bottom:24px">${eBox(`<div style="font-size:13px;color:${T3};line-height:1.65;font-family:${FONT}">During this period, you can reactivate your account and restore all your data by clicking the button below.</div>`)}</div>
-        <div style="margin-bottom:24px">${eBtn('Reactivate Account', data.reactivateUrl || data.reactivate_url || APP_URL + '/reactivate')}</div>
+        <div class="ecard" style="margin-bottom:24px;background-color:${CARD}">${eBtn('Reactivate Account', data.reactivateUrl || data.reactivate_url || APP_URL + '/reactivate')}</div>
         ${eP(`Need help? Contact us at <a href="mailto:support@eastape.com" style="color:${ACCENT};text-decoration:none">support@eastape.com</a>`, true)}
       </div>`)
   }),
@@ -209,12 +224,12 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `Payment confirmed — ${data.amount || '$0.00'}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Payment confirmed')}
         ${eP("Your payment has been processed successfully. Here's a summary of your transaction.")}
-        <div style="text-align:center;padding:20px 0 24px;border-top:1px solid ${LINE};border-bottom:1px solid ${LINE};margin-bottom:20px">
-          <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;font-family:${FONT}">Amount paid</div>
-          <div style="font-size:36px;font-weight:700;color:${T1};font-family:${MONO};letter-spacing:-0.03em">${data.amount || '$0.00'}</div>
+        <div class="ecard" style="text-align:center;padding:20px 0 24px;border-top:1px solid ${LINE};border-bottom:1px solid ${LINE};margin-bottom:20px;background-color:${CARD}">
+          <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;font-family:${FONT};background-color:${CARD}">Amount paid</div>
+          <div style="font-size:36px;font-weight:700;color:${T1};font-family:${MONO};letter-spacing:-0.03em;background-color:${CARD}">${data.amount || '$0.00'}</div>
         </div>
         ${eBoxRows([
           ['Plan',           data.plan          || 'Pro Monthly'],
@@ -231,7 +246,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: data.subject || 'Message from Eastape Studio',
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH((data.subject || 'Message from Eastape Studio').replace(/</g, '&lt;').replace(/>/g, '&gt;'))}
         <div style="font-size:15px;line-height:1.65;color:${T2};font-family:${FONT};margin-bottom:${data.ctaText && data.ctaUrl ? '24px' : '0'}">
           ${(data.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}
@@ -245,7 +260,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `${data.inviterName} invited you to ${data.projectName}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH("You've been invited!")}
         ${eP(`<strong style="color:${T1}">${data.inviterName}</strong> invited you to collaborate on a project:`)}
         <div style="margin-bottom:24px">${eBox(`
@@ -262,7 +277,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `${data.commenterName} commented on ${data.fileName}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('New comment')}
         ${eP(`<strong style="color:${T1}">${data.commenterName}</strong> commented on <strong style="color:${T1}">${data.fileName}</strong>${data.timestamp ? ` at <span style="color:${ACCENT};font-weight:600;font-family:${MONO}">${data.timestamp}</span>` : ''}`)}
         <div style="background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
@@ -276,7 +291,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `${data.mentionerName} mentioned you in a comment`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('You were mentioned')}
         ${eP(`<strong style="color:${T1}">${data.mentionerName}</strong> mentioned you in a comment on <strong style="color:${T1}">${data.fileName}</strong>`)}
         <div style="background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
@@ -293,7 +308,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       subject: `${data.fileName} marked as ${data.newStatus}`,
       html: eWrap(`
         ${eLogo()}
-        <div style="padding:28px 40px 36px">
+        <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
           ${eH('Status updated')}
           ${eP(`<strong style="color:${T1}">${data.changedBy}</strong> updated the status of <strong style="color:${T1}">${data.fileName}</strong>`)}
           <div style="margin-bottom:24px">${eBox(`
@@ -314,7 +329,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `New file uploaded to ${data.projectName}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('New file uploaded')}
         ${eP(`<strong style="color:${T1}">${data.uploaderName}</strong> uploaded a new file to <strong style="color:${T1}">${data.projectName}</strong>`)}
         <div style="margin-bottom:24px">${eBox(`
@@ -329,7 +344,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `You've been assigned: ${data.shotName}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Shot assigned to you')}
         ${eP(`<strong style="color:${T1}">${data.assignedBy}</strong> assigned you a shot in <strong style="color:${T1}">${data.projectName}</strong>`)}
         <div style="margin-bottom:24px">${eBox(`
@@ -345,7 +360,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `${data.projectName} deadline in ${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Deadline approaching')}
         ${eP(`<strong style="color:${T1}">${data.projectName}</strong> is due in <strong style="color:#fbbf24;font-size:17px">${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}</strong>`)}
         <div style="margin-bottom:24px">${eBox(`
@@ -361,7 +376,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     subject: `${data.sharedBy} shared "${data.fileName}" with you`,
     html: eWrap(`
       ${eLogo()}
-      <div style="padding:28px 40px 36px">
+      <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('File shared with you')}
         ${eP(`<strong style="color:${T1}">${data.sharedBy}</strong> shared a file with you:`)}
         <div style="margin-bottom:24px">${eBox(`
