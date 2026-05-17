@@ -27,13 +27,13 @@ const MONO    = `"JetBrains Mono", ui-monospace, "Courier New", monospace`
 
 // ── Shared components ─────────────────────────────────────────────
 function eLogo() {
-  return `<div style="padding:36px 40px 0"><img src="${LOGO_URL}" alt="Eastape Studio" height="26" style="height:26px;width:auto;display:block;border:0;outline:0"></div>`
+  return `<div style="padding:36px 40px 0;background-color:${CARD}"><img src="${LOGO_URL}" alt="Eastape Studio" height="26" style="height:26px;width:auto;display:block;border:0;outline:0"></div>`
 }
 function eH(text: string) {
-  return `<h1 style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
+  return `<h1 style="font-size:24px;font-weight:600;letter-spacing:-0.025em;color:${T1};background-color:${CARD};margin:0 0 12px;line-height:1.3;font-family:${FONT}">${text}</h1>`
 }
 function eP(text: string, muted = false) {
-  return `<p style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${muted ? T3 : T2};margin:0 0 20px;font-family:${FONT}">${text}</p>`
+  return `<p style="font-size:${muted ? 13 : 15}px;line-height:1.65;color:${muted ? T3 : T2};background-color:${CARD};margin:0 0 20px;font-family:${FONT}">${text}</p>`
 }
 function eBtn(text: string, href: string) {
   return `<a href="${href}" target="_blank" style="display:inline-block;padding:14px 36px;background:${ACCENT};color:#1a1408;font-weight:600;font-size:14px;font-family:${FONT};border-radius:8px;text-decoration:none;letter-spacing:-0.01em">${text}</a>`
@@ -53,7 +53,7 @@ function eBoxRows(rows: [string, string][]) {
 }
 function eFooter() {
   const lnk = `color:${T3};text-decoration:underline;text-underline-offset:2px;font-family:${FONT}`
-  return `<div style="padding:28px 20px 12px;text-align:center;font-size:12px;color:${T4};line-height:1.8;font-family:${FONT}">
+  return `<div style="padding:28px 20px 12px;text-align:center;font-size:12px;color:${T4};line-height:1.8;font-family:${FONT};background-color:${BG}">
     <div style="margin-bottom:6px;color:${T3};font-weight:500;font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase">Eastape Studio</div>
     <div>You're receiving this because you have an Eastape Studio account.</div>
     <div style="margin-top:10px">
@@ -93,7 +93,9 @@ function eWrap(inner: string) {
   <tr>
   <td bgcolor="${CARD}" style="background-color:${CARD};border-radius:12px;border:1px solid ${LINE2};overflow:hidden">
     <div style="height:3px;line-height:3px;font-size:0;background:linear-gradient(90deg,${ACCENT} 0%,${ACCENT} 35%,transparent 100%)">&nbsp;</div>
-    ${inner}
+    <div style="background-color:${CARD};color:${T2};font-family:${FONT}">
+      ${inner}
+    </div>
   </td>
   </tr>
   </table>
