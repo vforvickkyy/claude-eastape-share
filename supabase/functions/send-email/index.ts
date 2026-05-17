@@ -64,25 +64,44 @@ function eFooter() {
   </div>`
 }
 function eWrap(inner: string) {
+  // bgcolor attributes on <table>/<td> are respected by Gmail/iOS in light mode
+  // even when the client strips or overrides CSS background-color.
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark only">
 <meta name="supported-color-schemes" content="dark">
-<style>:root{color-scheme:dark}body{margin:0;padding:0;background:${BG}!important}@media(prefers-color-scheme:light){body{background:${BG}!important}}</style>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:0; background-color:${BG}!important; }
+  .edark { background-color:${BG}!important; }
+  /* Gmail app (Android/iOS) light-mode override */
+  u + .body .edark { background-color:${BG}!important; }
+  [data-ogsc] .edark { background-color:${BG}!important; }
+  /* Apple Mail / Outlook iOS */
+  @media (prefers-color-scheme:light) { .edark { background-color:${BG}!important; } }
+</style>
 </head>
-<body style="margin:0;padding:0;background:${BG}">
-<div style="background:${BG};padding:40px 20px;font-family:${FONT};-webkit-font-smoothing:antialiased">
-<div style="max-width:600px;margin:0 auto">
-<div style="border-radius:12px;overflow:hidden;border:1px solid ${LINE2};background:${CARD}">
-<div style="height:3px;background:linear-gradient(90deg,${ACCENT} 0%,${ACCENT} 35%,transparent 100%)"></div>
-${inner}
-</div>
-${eFooter()}
-</div>
-</div>
+<body class="body" bgcolor="${BG}" style="margin:0;padding:0;background-color:${BG}">
+<!--[if mso]><table width="100%" bgcolor="${BG}"><tr><td><![endif]-->
+<table class="edark" role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="${BG}" style="background-color:${BG};width:100%">
+<tr>
+<td class="edark" bgcolor="${BG}" style="background-color:${BG};padding:40px 20px;font-family:${FONT};-webkit-font-smoothing:antialiased">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="600" style="max-width:600px;width:100%;margin:0 auto">
+  <tr>
+  <td bgcolor="${CARD}" style="background-color:${CARD};border-radius:12px;border:1px solid ${LINE2};overflow:hidden">
+    <div style="height:3px;line-height:3px;font-size:0;background:linear-gradient(90deg,${ACCENT} 0%,${ACCENT} 35%,transparent 100%)">&nbsp;</div>
+    ${inner}
+  </td>
+  </tr>
+  </table>
+  ${eFooter()}
+</td>
+</tr>
+</table>
+<!--[if mso]></td></tr></table><![endif]-->
 </body>
 </html>`
 }
