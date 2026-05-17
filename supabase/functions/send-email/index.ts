@@ -43,13 +43,13 @@ function eDivider() {
   return `<div style="height:1px;background:${LINE};margin:0 40px"></div>`
 }
 function eBox(content: string) {
-  return `<div style="background:${SURFACE};border:1px solid ${LINE};border-radius:8px;padding:16px 20px">${content}</div>`
+  return `<div style="background-color:${SURFACE};background:${SURFACE};border:1px solid ${LINE};border-radius:8px;padding:16px 20px">${content}</div>`
 }
 function eBoxRows(rows: [string, string][]) {
   return eBox(rows.map(([label, val], i) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;${i < rows.length - 1 ? `border-bottom:1px solid ${LINE}` : ''}">
-      <span style="font-size:13px;color:${T3};font-family:${FONT}">${label}</span>
-      <span style="font-size:13px;color:${T1};font-family:${MONO};font-weight:500">${val}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;background-color:${SURFACE};${i < rows.length - 1 ? `border-bottom:1px solid ${LINE}` : ''}">
+      <span style="font-size:13px;color:${T3};-webkit-text-fill-color:${T3};font-family:${FONT}">${label}</span>
+      <span style="font-size:13px;color:${T1};-webkit-text-fill-color:${T1};font-family:${MONO};font-weight:500">${val}</span>
     </div>`).join(''))
 }
 function eFooter() {
@@ -148,17 +148,17 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       </div>
       ${eDivider()}
       <div class="ecard" style="padding:24px 40px 36px;background-color:${CARD}">
-        <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:18px;font-weight:500;font-family:${FONT}">Quick start</div>
+        <div style="font-size:10.5px;color:${T4};-webkit-text-fill-color:${T4};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:18px;font-weight:500;font-family:${FONT};background-color:${CARD}">Quick start</div>
         ${[
           { n: 1, title: 'Upload',      desc: 'Drag and drop your files to get started' },
           { n: 2, title: 'Organize',    desc: 'Create projects and keep everything structured' },
           { n: 3, title: 'Collaborate', desc: 'Share with your team and gather feedback' },
         ].map((s, i, arr) => `
-          <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:${i < arr.length - 1 ? '18px' : '0'}">
-            <div style="width:32px;height:32px;min-width:32px;border-radius:8px;background:${ACCENT}18;text-align:center;line-height:32px;color:${ACCENT};font-size:13px;font-weight:700;font-family:${MONO}">${s.n}</div>
-            <div>
-              <div style="font-size:14px;font-weight:600;color:${T1};margin-bottom:2px;font-family:${FONT}">${s.title}</div>
-              <div style="font-size:13px;color:${T3};line-height:1.5;font-family:${FONT}">${s.desc}</div>
+          <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:${i < arr.length - 1 ? '18px' : '0'};background-color:${CARD}">
+            <div style="width:32px;height:32px;min-width:32px;border-radius:8px;background:${ACCENT}18;text-align:center;line-height:32px;color:${ACCENT};-webkit-text-fill-color:${ACCENT};font-size:13px;font-weight:700;font-family:${MONO}">${s.n}</div>
+            <div style="background-color:${CARD}">
+              <div style="font-size:14px;font-weight:600;color:${T1};-webkit-text-fill-color:${T1};margin-bottom:2px;font-family:${FONT};background-color:${CARD}">${s.title}</div>
+              <div style="font-size:13px;color:${T3};-webkit-text-fill-color:${T3};line-height:1.5;font-family:${FONT};background-color:${CARD}">${s.desc}</div>
             </div>
           </div>`).join('')}
       </div>`)
@@ -168,7 +168,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
   otp: (data) => {
     const code  = String(data.code || '------').slice(0, 6)
     const boxes = code.split('').map(d =>
-      `<td style="padding:0 4px"><div style="width:46px;height:54px;border-radius:8px;background:${SURFACE};border:1px solid ${LINE2};text-align:center;line-height:54px;font-size:22px;font-weight:600;font-family:${MONO};color:${T1}">${d}</div></td>`
+      `<td style="padding:0 4px"><div style="width:46px;height:54px;border-radius:8px;background-color:${SURFACE};background:${SURFACE};border:1px solid ${LINE2};text-align:center;line-height:54px;font-size:22px;font-weight:600;font-family:${MONO};color:${T1};-webkit-text-fill-color:${T1}">${d}</div></td>`
     ).join('')
     return {
       subject: 'Your Eastape Studio verification code',
@@ -192,7 +192,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH('Reset your password')}
         ${eP('We received a request to reset the password for your account. Click the button below to choose a new password.')}
         <div class="ecard" style="margin-bottom:24px;background-color:${CARD}">${eBtn('Reset Password', data.resetUrl || data.reset_url || APP_URL + '/auth/reset')}</div>
-        ${eBox(`<div style="font-size:13px;color:${T3};line-height:1.65;font-family:${FONT}">This link expires in <span style="color:${T2};font-weight:500">30 minutes</span>. If you didn't request this, no action is needed — your password will remain unchanged.</div>`)}
+        ${eBox(`<div style="font-size:13px;color:${T3};-webkit-text-fill-color:${T3};line-height:1.65;font-family:${FONT};background-color:${SURFACE}">This link expires in <span style="color:${T2};-webkit-text-fill-color:${T2};font-weight:500">30 minutes</span>. If you didn't request this, no action is needed — your password will remain unchanged.</div>`)}
       </div>`)
   }),
 
@@ -204,7 +204,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('New sign-in detected')}
         ${eP('We noticed a sign-in to your account from a new device or location.')}
-        <div style="margin-bottom:24px">${eBoxRows([
+        <div style="margin-bottom:24px;background-color:${CARD}">${eBoxRows([
           ['Device',     data.device   || 'Unknown device'],
           ['Location',   data.location || 'Unknown location'],
           ['Time',       data.time     || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })],
@@ -223,7 +223,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('Account deactivated')}
         ${eP('Your Eastape Studio account has been deactivated as requested. Your data will be retained for 30 days before permanent deletion.')}
-        <div style="margin-bottom:24px">${eBox(`<div style="font-size:13px;color:${T3};line-height:1.65;font-family:${FONT}">During this period, you can reactivate your account and restore all your data by clicking the button below.</div>`)}</div>
+        <div style="margin-bottom:24px">${eBox(`<div style="font-size:13px;color:${T3};-webkit-text-fill-color:${T3};line-height:1.65;font-family:${FONT};background-color:${SURFACE}">During this period, you can reactivate your account and restore all your data by clicking the button below.</div>`)}</div>
         <div class="ecard" style="margin-bottom:24px;background-color:${CARD}">${eBtn('Reactivate Account', data.reactivateUrl || data.reactivate_url || APP_URL + '/reactivate')}</div>
         ${eP(`Need help? Contact us at <a href="mailto:support@eastape.com" style="color:${ACCENT};text-decoration:none">support@eastape.com</a>`, true)}
       </div>`)
@@ -238,8 +238,8 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH('Payment confirmed')}
         ${eP("Your payment has been processed successfully. Here's a summary of your transaction.")}
         <div class="ecard" style="text-align:center;padding:20px 0 24px;border-top:1px solid ${LINE};border-bottom:1px solid ${LINE};margin-bottom:20px;background-color:${CARD}">
-          <div style="font-size:10.5px;color:${T4};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;font-family:${FONT};background-color:${CARD}">Amount paid</div>
-          <div style="font-size:36px;font-weight:700;color:${T1};font-family:${MONO};letter-spacing:-0.03em;background-color:${CARD}">${data.amount || '$0.00'}</div>
+          <div style="font-size:10.5px;color:${T4};-webkit-text-fill-color:${T4};text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;font-family:${FONT};background-color:${CARD}">Amount paid</div>
+          <div style="font-size:36px;font-weight:700;color:${T1};-webkit-text-fill-color:${T1};font-family:${MONO};letter-spacing:-0.03em;background-color:${CARD}">${data.amount || '$0.00'}</div>
         </div>
         ${eBoxRows([
           ['Plan',           data.plan          || 'Pro Monthly'],
@@ -247,7 +247,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           ['Invoice',        data.invoiceId     || data.invoice_id     || '—'],
           ['Payment method', data.paymentMethod || data.payment_method || '—'],
         ])}
-        <div style="margin-top:24px;text-align:center">${eBtn('View Full Invoice', data.invoiceUrl || data.invoice_url || APP_URL + '/billing')}</div>
+        <div style="margin-top:24px;text-align:center;background-color:${CARD}">${eBtn('View Full Invoice', data.invoiceUrl || data.invoice_url || APP_URL + '/billing')}</div>
       </div>`)
   }),
 
@@ -274,12 +274,12 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH("You've been invited!")}
         ${eP(`<strong style="color:${T1}">${data.inviterName}</strong> invited you to collaborate on a project:`)}
         <div style="margin-bottom:24px">${eBox(`
-          <div style="font-size:18px;font-weight:700;color:${T1};margin-bottom:4px;font-family:${FONT}">${data.projectIcon || '🎬'}&nbsp;${data.projectName}</div>
-          <div style="font-size:13px;color:${ACCENT};margin-bottom:4px;font-family:${FONT}">Your role: <strong>${data.role}</strong></div>
-          ${data.clientName ? `<div style="font-size:12px;color:${T3};font-family:${FONT}">Client: ${data.clientName}</div>` : ''}
+          <div style="font-size:18px;font-weight:700;color:${T1};-webkit-text-fill-color:${T1};margin-bottom:4px;font-family:${FONT};background-color:${SURFACE}">${data.projectIcon || '🎬'}&nbsp;${data.projectName}</div>
+          <div style="font-size:13px;color:${ACCENT};-webkit-text-fill-color:${ACCENT};margin-bottom:4px;font-family:${FONT};background-color:${SURFACE}">Your role: <strong>${data.role}</strong></div>
+          ${data.clientName ? `<div style="font-size:12px;color:${T3};-webkit-text-fill-color:${T3};font-family:${FONT};background-color:${SURFACE}">Client: ${data.clientName}</div>` : ''}
         `)}</div>
         ${eBtn('Accept Invitation', data.acceptUrl || APP_URL + '/projects')}
-        <p style="font-size:12px;color:${T4};margin-top:12px;font-family:${FONT}">This invitation expires in 7 days</p>
+        <p style="font-size:12px;color:${T4};-webkit-text-fill-color:${T4};margin-top:12px;font-family:${FONT};background-color:${CARD}">This invitation expires in 7 days</p>
       </div>`)
   }),
 
@@ -290,8 +290,8 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('New comment')}
         ${eP(`<strong style="color:${T1}">${data.commenterName}</strong> commented on <strong style="color:${T1}">${data.fileName}</strong>${data.timestamp ? ` at <span style="color:${ACCENT};font-weight:600;font-family:${MONO}">${data.timestamp}</span>` : ''}`)}
-        <div style="background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
-          <div style="font-size:15px;line-height:1.6;color:${T1};font-style:italic;font-family:${FONT}">"${data.commentBody}"</div>
+        <div style="background-color:${SURFACE};background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
+          <div style="font-size:15px;line-height:1.6;color:${T1};-webkit-text-fill-color:${T1};font-style:italic;font-family:${FONT};background-color:${SURFACE}">"${data.commentBody}"</div>
         </div>
         ${eBtn('View & Reply', data.viewUrl || APP_URL)}
       </div>`)
@@ -304,8 +304,8 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       <div class="ecard" style="padding:28px 40px 36px;background-color:${CARD}">
         ${eH('You were mentioned')}
         ${eP(`<strong style="color:${T1}">${data.mentionerName}</strong> mentioned you in a comment on <strong style="color:${T1}">${data.fileName}</strong>`)}
-        <div style="background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
-          <div style="font-size:15px;line-height:1.6;color:${T1};font-style:italic;font-family:${FONT}">"${data.commentBody}"</div>
+        <div style="background-color:${SURFACE};background:${SURFACE};border-left:3px solid ${ACCENT};padding:16px 20px;border-radius:0 8px 8px 0;margin-bottom:24px">
+          <div style="font-size:15px;line-height:1.6;color:${T1};-webkit-text-fill-color:${T1};font-style:italic;font-family:${FONT};background-color:${SURFACE}">"${data.commentBody}"</div>
         </div>
         ${eBtn('View Comment', data.viewUrl || APP_URL)}
       </div>`)
@@ -322,13 +322,13 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           ${eH('Status updated')}
           ${eP(`<strong style="color:${T1}">${data.changedBy}</strong> updated the status of <strong style="color:${T1}">${data.fileName}</strong>`)}
           <div style="margin-bottom:24px">${eBox(`
-            <div style="font-size:11px;color:${T4};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:10px;font-family:${FONT}">Status change</div>
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-              <span style="background:${T4}22;color:${T3};padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;font-family:${FONT}">${data.oldStatus}</span>
-              <span style="color:${T4};font-size:14px">→</span>
-              <span style="background:${statusColor(data.newStatus)}22;color:${statusColor(data.newStatus)};padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;font-family:${FONT}">${data.newStatus}</span>
+            <div style="font-size:11px;color:${T4};-webkit-text-fill-color:${T4};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:10px;font-family:${FONT};background-color:${SURFACE}">Status change</div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background-color:${SURFACE}">
+              <span style="background:${T4}22;color:${T3};-webkit-text-fill-color:${T3};padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;font-family:${FONT}">${data.oldStatus}</span>
+              <span style="color:${T4};-webkit-text-fill-color:${T4};font-size:14px">→</span>
+              <span style="background:${statusColor(data.newStatus)}22;color:${statusColor(data.newStatus)};-webkit-text-fill-color:${statusColor(data.newStatus)};padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;font-family:${FONT}">${data.newStatus}</span>
             </div>
-            ${data.projectName ? `<div style="font-size:12px;color:${T3};margin-top:10px;font-family:${FONT}">Project: ${data.projectName}</div>` : ''}
+            ${data.projectName ? `<div style="font-size:12px;color:${T3};-webkit-text-fill-color:${T3};margin-top:10px;font-family:${FONT};background-color:${SURFACE}">Project: ${data.projectName}</div>` : ''}
           `)}</div>
           ${eBtn('View File', data.viewUrl || APP_URL)}
         </div>`)
@@ -343,8 +343,8 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH('New file uploaded')}
         ${eP(`<strong style="color:${T1}">${data.uploaderName}</strong> uploaded a new file to <strong style="color:${T1}">${data.projectName}</strong>`)}
         <div style="margin-bottom:24px">${eBox(`
-          <div style="font-size:15px;font-weight:600;color:${T1};margin-bottom:4px;font-family:${FONT}">📄&nbsp;${data.fileName}</div>
-          ${data.fileSize ? `<div style="font-size:13px;color:${T3};font-family:${MONO}">${data.fileSize}</div>` : ''}
+          <div style="font-size:15px;font-weight:600;color:${T1};-webkit-text-fill-color:${T1};margin-bottom:4px;font-family:${FONT};background-color:${SURFACE}">📄&nbsp;${data.fileName}</div>
+          ${data.fileSize ? `<div style="font-size:13px;color:${T3};-webkit-text-fill-color:${T3};font-family:${MONO};background-color:${SURFACE}">${data.fileSize}</div>` : ''}
         `)}</div>
         ${eBtn('View Project', data.projectUrl || APP_URL)}
       </div>`)
@@ -358,9 +358,9 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH('Shot assigned to you')}
         ${eP(`<strong style="color:${T1}">${data.assignedBy}</strong> assigned you a shot in <strong style="color:${T1}">${data.projectName}</strong>`)}
         <div style="margin-bottom:24px">${eBox(`
-          <div style="font-size:16px;font-weight:700;color:${T1};margin-bottom:6px;font-family:${FONT}">${data.shotNumber ? `<span style="color:${T3};font-size:13px;font-weight:400">${data.shotNumber}&nbsp;</span>` : ''}${data.shotName}</div>
-          ${data.dueDate ? `<div style="color:#fbbf24;font-size:13px;margin:4px 0;font-family:${FONT}">📅&nbsp;Due: ${data.dueDate}</div>` : ''}
-          ${data.priority && data.priority !== 'normal' ? `<div style="color:${data.priority === 'urgent' ? '#f87171' : '#fbbf24'};font-size:13px;font-weight:600;margin:4px 0;font-family:${FONT}">⚡&nbsp;Priority: ${data.priority.toUpperCase()}</div>` : ''}
+          <div style="font-size:16px;font-weight:700;color:${T1};-webkit-text-fill-color:${T1};margin-bottom:6px;font-family:${FONT};background-color:${SURFACE}">${data.shotNumber ? `<span style="color:${T3};-webkit-text-fill-color:${T3};font-size:13px;font-weight:400">${data.shotNumber}&nbsp;</span>` : ''}${data.shotName}</div>
+          ${data.dueDate ? `<div style="color:#fbbf24;-webkit-text-fill-color:#fbbf24;font-size:13px;margin:4px 0;font-family:${FONT};background-color:${SURFACE}">📅&nbsp;Due: ${data.dueDate}</div>` : ''}
+          ${data.priority && data.priority !== 'normal' ? `<div style="color:${data.priority === 'urgent' ? '#f87171' : '#fbbf24'};-webkit-text-fill-color:${data.priority === 'urgent' ? '#f87171' : '#fbbf24'};font-size:13px;font-weight:600;margin:4px 0;font-family:${FONT};background-color:${SURFACE}">⚡&nbsp;Priority: ${data.priority.toUpperCase()}</div>` : ''}
         `)}</div>
         ${eBtn('View Shot', data.projectUrl || APP_URL)}
       </div>`)
@@ -374,9 +374,9 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH('Deadline approaching')}
         ${eP(`<strong style="color:${T1}">${data.projectName}</strong> is due in <strong style="color:#fbbf24;font-size:17px">${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'}</strong>`)}
         <div style="margin-bottom:24px">${eBox(`
-          <div style="font-size:11px;color:${T4};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px;font-family:${FONT}">Due date</div>
-          <div style="font-size:16px;font-weight:700;color:${T1};font-family:${FONT}">${data.dueDate}</div>
-          ${data.clientName ? `<div style="font-size:13px;color:${T3};margin-top:6px;font-family:${FONT}">Client: ${data.clientName}</div>` : ''}
+          <div style="font-size:11px;color:${T4};-webkit-text-fill-color:${T4};text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px;font-family:${FONT};background-color:${SURFACE}">Due date</div>
+          <div style="font-size:16px;font-weight:700;color:${T1};-webkit-text-fill-color:${T1};font-family:${FONT};background-color:${SURFACE}">${data.dueDate}</div>
+          ${data.clientName ? `<div style="font-size:13px;color:${T3};-webkit-text-fill-color:${T3};margin-top:6px;font-family:${FONT};background-color:${SURFACE}">Client: ${data.clientName}</div>` : ''}
         `)}</div>
         ${eBtn('Open Project', data.projectUrl || APP_URL)}
       </div>`)
@@ -390,11 +390,11 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         ${eH('File shared with you')}
         ${eP(`<strong style="color:${T1}">${data.sharedBy}</strong> shared a file with you:`)}
         <div style="margin-bottom:24px">${eBox(`
-          <div style="font-size:16px;font-weight:600;color:${T1};margin-bottom:4px;font-family:${FONT}">📄&nbsp;${data.fileName}</div>
-          ${data.message ? `<div style="border-top:1px solid ${LINE};margin-top:12px;padding-top:12px"><div style="font-size:12px;color:${T3};margin-bottom:4px;font-family:${FONT}">Message:</div><div style="font-size:14px;color:${T2};font-style:italic;font-family:${FONT}">"${data.message}"</div></div>` : ''}
+          <div style="font-size:16px;font-weight:600;color:${T1};-webkit-text-fill-color:${T1};margin-bottom:4px;font-family:${FONT};background-color:${SURFACE}">📄&nbsp;${data.fileName}</div>
+          ${data.message ? `<div style="border-top:1px solid ${LINE};margin-top:12px;padding-top:12px;background-color:${SURFACE}"><div style="font-size:12px;color:${T3};-webkit-text-fill-color:${T3};margin-bottom:4px;font-family:${FONT};background-color:${SURFACE}">Message:</div><div style="font-size:14px;color:${T2};-webkit-text-fill-color:${T2};font-style:italic;font-family:${FONT};background-color:${SURFACE}">"${data.message}"</div></div>` : ''}
         `)}</div>
         ${eBtn('View Shared File', data.shareUrl || APP_URL)}
-        ${data.expiresAt ? `<p style="font-size:12px;color:${T4};text-align:center;margin-top:12px;font-family:${FONT}">Link expires: ${data.expiresAt}</p>` : ''}
+        ${data.expiresAt ? `<p style="font-size:12px;color:${T4};-webkit-text-fill-color:${T4};text-align:center;margin-top:12px;font-family:${FONT};background-color:${CARD}">Link expires: ${data.expiresAt}</p>` : ''}
       </div>`)
   }),
 }
