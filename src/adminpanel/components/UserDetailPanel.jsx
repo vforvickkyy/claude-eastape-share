@@ -15,12 +15,6 @@ function getToken() {
 function hdr(extra = {}) {
   return { Authorization: `Bearer ${getToken()}`, apikey: ANON, "Content-Type": "application/json", ...extra };
 }
-function cntHdr() {
-  return hdr({ Prefer: "count=exact", Range: "0-0" });
-}
-function getCount(res) {
-  return parseInt(res.headers.get("content-range")?.split("/")[1] || "0");
-}
 
 function fmtBytes(b) {
   if (!b) return "0 B";
@@ -315,7 +309,7 @@ export default function UserDetailPanel({
   // Overview stats
   const [stats, setStats] = useState({
     projects: null, driveFiles: null, projectFiles: null, projectMedia: null,
-    uploads30d: null,
+    uploads30d: null, storageBytes: null,
   });
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -350,49 +344,51 @@ export default function UserDetailPanel({
   const planType = displayPlan === "Pro" ? "accent" : displayPlan === "Business" ? "purple" : "muted";
   const limitGb = planData?.storage_limit_gb || PLAN_LIMITS_GB[displayPlan] || 2;
   const storageLimit = planLimitBytes(limitGb);
-  const storageUsed = profile?.storage_used || user?.storage_used || 0;
+  const storageUsed = stats.storageBytes ?? profile?.storage_used ?? user?.storage_used ?? 0;
   const storagePct = Math.min(100, Math.round((storageUsed / storageLimit) * 100));
   const storageColor = storagePct > 80 ? "var(--admin-danger)" : storagePct > 60 ? "var(--admin-warn)" : "var(--admin-accent)";
   const totalFiles = (stats.driveFiles || 0) + (stats.projectFiles || 0) + (stats.projectMedia || 0);
 
-  // Fetch profile + stats + plan on mount
+  // Fetch profile + stats + content via admin edge function (bypasses RLS)
   useEffect(() => {
     if (!user?.id) return;
     const uid = user.id;
-    const ago30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const authHdr = { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" };
 
-    // Extended profile
-    fetch(`${SB}/rest/v1/profiles?id=eq.${uid}&select=*`, { headers: hdr() })
-      .then(r => r.json())
-      .then(d => {
-        if (d?.[0]) {
-          setProfile(d[0]);
-          setForm(f => ({ ...f, username: d[0].username || "", phone: d[0].phone || "", notes: d[0].admin_notes || "" }));
-        }
-      })
-      .catch(() => {});
-
-    // Plan data for accurate storage limit
+    // Plan data for accurate storage limit (anon key is fine here — user_plans RLS allows admin)
     fetch(`${SB}/rest/v1/user_plans?user_id=eq.${uid}&is_active=eq.true&select=plans(name,storage_limit_gb)`, { headers: hdr() })
       .then(r => r.json())
       .then(d => { if (d?.[0]?.plans) setPlanData(d[0].plans); })
       .catch(() => {});
 
-    // File counts — drive_files, project_files, project_media (all use service-role-accessible tables)
-    const safeCnt = (url) =>
-      fetch(`${SB}/rest/v1/${url}`, { headers: cntHdr() })
-        .then(r => r.ok ? getCount(r) : 0)
-        .catch(() => 0);
-
-    Promise.all([
-      safeCnt(`projects?user_id=eq.${uid}&select=id`),
-      safeCnt(`drive_files?user_id=eq.${uid}&is_trashed=eq.false&select=id`),
-      safeCnt(`project_files?user_id=eq.${uid}&is_trashed=eq.false&select=id`),
-      safeCnt(`project_media?user_id=eq.${uid}&is_trashed=eq.false&select=id`),
-      safeCnt(`drive_files?user_id=eq.${uid}&is_trashed=eq.false&created_at=gte.${ago30}&select=id`),
-    ]).then(([projects, driveFiles, projectFiles, projectMedia, uploads30d]) => {
-      setStats({ projects, driveFiles, projectFiles, projectMedia, uploads30d });
-    }).finally(() => setLoadingStats(false));
+    // All detail via service-role edge function
+    fetch(`${SB}/functions/v1/admin-user-detail?user_id=${uid}`, { headers: authHdr })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) return;
+        if (d.username !== undefined) setForm(f => ({ ...f, username: d.username || "" }));
+        if (d.stats) {
+          setStats({
+            projects: d.stats.projects,
+            driveFiles: d.stats.drive_files,
+            projectFiles: d.stats.project_files,
+            projectMedia: d.stats.project_media,
+            uploads30d: d.stats.uploads_30d,
+            storageBytes: d.stats.storage_bytes,
+          });
+        }
+        if (d.projects) setProjects(d.projects);
+        if (d.drive_files || d.project_media) {
+          const allFiles = [
+            ...(d.drive_files || []).map(f => ({ ...f, _src: "drive" })),
+            ...(d.project_media || []).map(f => ({ ...f, _src: "media" })),
+          ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+          setRecentFiles(allFiles);
+        }
+        setContentLoaded(true);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingStats(false));
   }, [user?.id]);
 
   // Activity tab — filter by target_id + target_type (not target_user_id)
@@ -409,31 +405,7 @@ export default function UserDetailPanel({
       .finally(() => setLoadingActivity(false));
   }, [tab, user?.id, actLoaded]);
 
-  // Content tab — use drive_files + project_media (not media_assets/shares)
-  useEffect(() => {
-    if (tab !== "content" || contentLoaded || !user?.id) return;
-    setLoadingContent(true);
-    const uid = user.id;
-    const safeJson = (url) =>
-      fetch(`${SB}/rest/v1/${url}`, { headers: hdr() })
-        .then(r => r.ok ? r.json() : [])
-        .catch(() => []);
-
-    Promise.all([
-      safeJson(`projects?user_id=eq.${uid}&select=id,name,created_at,status&order=created_at.desc`),
-      safeJson(`drive_files?user_id=eq.${uid}&is_trashed=eq.false&select=id,name,file_size,created_at&order=created_at.desc&limit=10`),
-      safeJson(`project_media?user_id=eq.${uid}&is_trashed=eq.false&select=id,name,file_size,created_at&order=created_at.desc&limit=10`),
-    ]).then(([p, df, pm]) => {
-      setProjects(Array.isArray(p) ? p : []);
-      // Merge drive + project media files, sorted by date
-      const allFiles = [
-        ...(Array.isArray(df) ? df.map(f => ({ ...f, _src: "drive" })) : []),
-        ...(Array.isArray(pm) ? pm.map(f => ({ ...f, _src: "media" })) : []),
-      ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
-      setRecentFiles(allFiles);
-      setContentLoaded(true);
-    }).finally(() => setLoadingContent(false));
-  }, [tab, user?.id, contentLoaded]);
+  // Content data is loaded in the mount effect via admin-user-detail
 
   if (!user) return null;
 
@@ -462,38 +434,39 @@ export default function UserDetailPanel({
   async function handleSave() {
     setSaving(true);
     try {
-      await fetch(`${SB}/rest/v1/profiles?id=eq.${user.id}`, {
+      const updates = { full_name: form.displayName };
+      if (form.username) updates.username = form.username;
+      if ((form.role === "admin") !== !!user.is_admin) updates.is_admin = form.role === "admin";
+      if (form.plan && form.plan !== planId) updates.plan_id = form.plan;
+
+      const res = await fetch(`${SB}/functions/v1/admin-user-detail?user_id=${user.id}`, {
         method: "PATCH",
-        headers: hdr({ Prefer: "return=minimal" }),
-        body: JSON.stringify({ full_name: form.displayName, username: form.username || null, phone: form.phone || null, admin_notes: form.notes || null }),
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save.");
       setSaved(true);
       onSuccess?.("Profile saved.");
       setTimeout(() => setSaved(false), 2500);
-    } catch { onSuccess?.("Failed to save."); }
+    } catch (e) { onSuccess?.(e.message || "Failed to save."); }
     finally { setSaving(false); }
   }
 
   async function handlePasswordReset() {
     try {
-      await fetch(`${SB}/functions/v1/admin-actions`, {
+      const res = await fetch(`${SB}/functions/v1/admin-reset-password`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "password_reset", user_id: user.id, email: user.email }),
+        body: JSON.stringify({ email: user.email, user_id: user.id, mode: "link" }),
       });
-      onSuccess?.("Password reset email sent.");
+      if (!res.ok) throw new Error();
+      onSuccess?.("Password reset link generated and sent.");
     } catch { onSuccess?.("Failed to send reset."); }
   }
 
   async function handleRevokeSessions() {
-    try {
-      await fetch(`${SB}/functions/v1/admin-actions`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "revoke_sessions", user_id: user.id }),
-      });
-      onSuccess?.("All sessions revoked.");
-    } catch { onSuccess?.("Failed to revoke sessions."); }
+    onSuccess?.("Session revocation is managed via the Supabase dashboard.");
   }
 
   return (
@@ -550,7 +523,7 @@ export default function UserDetailPanel({
           <div className="udp-head-meta">
             <span><Clock size={11} /> Joined {fmtDate(user.created_at)}</span>
             <span><Eye size={11} /> Active {timeAgo(user.last_sign_in_at)}</span>
-            {profile?.last_ip && <span><Globe size={11} /> {profile.last_ip}</span>}
+            {user.last_ip && <span><Globe size={11} /> {user.last_ip}</span>}
           </div>
         </div>
 
@@ -612,9 +585,8 @@ export default function UserDetailPanel({
               {/* Account details */}
               <SecHead>Account Details</SecHead>
               <div className="udp-info">
-                {profile?.username && <InfoRow label="USERNAME" value={<span style={{ color: "var(--admin-accent)" }}>@{profile.username}</span>} />}
-                {profile?.phone    && <InfoRow label="PHONE"      value={profile.phone} />}
-                {(user.last_ip || profile?.last_ip) && <InfoRow label="IP ADDRESS" value={user.last_ip || profile?.last_ip} />}
+                {form.username && <InfoRow label="USERNAME" value={<span style={{ color: "var(--admin-accent)" }}>@{form.username}</span>} />}
+                {user.last_ip && <InfoRow label="IP ADDRESS" value={user.last_ip} />}
                 {user.user_agent   && <InfoRow label="BROWSER"    value={user.user_agent} />}
                 <InfoRow label="EMAIL" value={user.email} />
                 <InfoRow label="USER ID" value={<span className="udp-mono">{user.id}</span>} />
