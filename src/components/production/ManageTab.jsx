@@ -298,24 +298,33 @@ export default function ManageTab() {
       <React.Fragment key={scene.id}>
         <div
           className={`manage-sidebar-item ${isSelected ? 'active' : ''}`}
-          style={{ paddingLeft: 6 + depth * 14 }}
+          style={sideCollapsed
+            ? { paddingLeft: 0, justifyContent: 'center' }
+            : { paddingLeft: 6 + depth * 14 }
+          }
           onMouseEnter={() => setHoverSceneId(scene.id)}
           onMouseLeave={() => setHoverSceneId(null)}
           onClick={() => setSelectedSceneId(prev => prev === scene.id ? null : scene.id)}
         >
-          <button
-            className="manage-sidebar-expand-btn"
-            onClick={e => toggleExpand(scene.id, e)}
-            title={isExpanded ? 'Collapse' : 'Expand'}
-            style={{ visibility: hasChildren ? 'visible' : 'hidden' }}
-          >
-            {isExpanded
-              ? <CaretDown size={9} weight="bold" />
-              : <CaretRight size={9} weight="bold" />
-            }
-          </button>
+          {!sideCollapsed && (
+            <button
+              className="manage-sidebar-expand-btn"
+              onClick={e => toggleExpand(scene.id, e)}
+              title={isExpanded ? 'Collapse' : 'Expand'}
+              style={{ visibility: hasChildren ? 'visible' : 'hidden' }}
+            >
+              {isExpanded
+                ? <CaretDown size={9} weight="bold" />
+                : <CaretRight size={9} weight="bold" />
+              }
+            </button>
+          )}
 
-          <span className="manage-sidebar-color-dot" style={{ background: color, opacity: isSelected ? 1 : 0.55 }} />
+          <span
+            className="manage-sidebar-color-dot"
+            title={sideCollapsed ? scene.name : undefined}
+            style={{ background: color, opacity: isSelected ? 1 : 0.55, width: sideCollapsed ? 9 : 7, height: sideCollapsed ? 9 : 7 }}
+          />
 
           {!sideCollapsed && (
             <div className="manage-sidebar-text">
@@ -323,7 +332,7 @@ export default function ManageTab() {
             </div>
           )}
 
-          <span className="manage-sidebar-count">{count}</span>
+          {!sideCollapsed && <span className="manage-sidebar-count">{count}</span>}
 
           {canEdit && isHovered && !sideCollapsed && (
             <div className="manage-sidebar-actions">
@@ -382,16 +391,17 @@ export default function ManageTab() {
           {/* All Shots */}
           <div
             className={`manage-sidebar-item all-shots ${!selectedSceneId ? 'active' : ''}`}
+            style={sideCollapsed ? { justifyContent: 'center' } : undefined}
             onClick={() => setSelectedSceneId(null)}
             title="All Shots"
           >
-            <ListBullets size={13} weight="duotone" className="manage-sidebar-icon" />
+            <ListBullets size={sideCollapsed ? 15 : 13} weight="duotone" className="manage-sidebar-icon" />
             {!sideCollapsed && (
               <div className="manage-sidebar-text">
                 <span className="manage-sidebar-label">All Shots</span>
               </div>
             )}
-            <span className="manage-sidebar-count">{shots.length}</span>
+            {!sideCollapsed && <span className="manage-sidebar-count">{shots.length}</span>}
           </div>
 
           {/* Scene divider */}

@@ -5701,8 +5701,11 @@ body { overflow-x: hidden; }
   overflow: hidden;
   transition: width 0.2s var(--ease);
 }
-.manage-sidebar.collapsed { width: 48px; }
-.manage-sidebar.collapsed .manage-sidebar-count { margin-left: auto; }
+.manage-sidebar.collapsed { width: 44px; overflow-x: hidden; }
+.manage-sidebar.collapsed .manage-sidebar-nav { overflow-x: hidden; padding: 4px 4px 8px; }
+.manage-sidebar.collapsed .manage-sidebar-item { padding: 7px 0; justify-content: center; }
+.manage-sidebar.collapsed .manage-sidebar-count { display: none; }
+.manage-sidebar.collapsed .manage-sidebar-icon { opacity: 0.8; }
 .manage-sidebar-header {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--t4);
