@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
         if (!(await isOwner(projectId))) return json({ error: 'Forbidden' }, 403)
         const body = await req.json()
         const { data, error } = await supabase.from('production_scenes')
-          .insert({ project_id: projectId, name: body.name, description: body.description || null, position: body.position ?? 0 })
+          .insert({ project_id: projectId, name: body.name, description: body.description || null, position: body.position ?? 0, parent_id: body.parent_id || null })
           .select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ scene: data }, 201)
@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
           return json({ ok: true })
         }
         const body = await req.json()
-        const allowed = ['name', 'description', 'position']
+        const allowed = ['name', 'description', 'position', 'parent_id']
         const updates: Record<string, unknown> = {}
         for (const k of allowed) if (k in body) updates[k] = body[k]
         const { data, error } = await supabase.from('production_scenes').update(updates).eq('id', id).select().single()

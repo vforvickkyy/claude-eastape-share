@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ListBullets, SlidersHorizontal, SpinnerGap, Warning, Plus,
   FilmSlate, Funnel, DownloadSimple, Rows, SquaresFour,
-  CaretLeft, CaretRight,
+  CaretLeft, CaretRight, CaretDown, Trash, X,
 } from '@phosphor-icons/react'
 import { productionApi } from '../../lib/api'
 import { supabase } from '../../lib/supabaseClient'
@@ -17,6 +17,20 @@ const SCENE_COLORS = [
   '#6366f1','#3b82f6','#06b6d4','#10b981',
   '#84cc16','#f59e0b','#ef4444','#ec4899',
 ]
+
+function buildSceneTree(flatScenes) {
+  const map = {}
+  flatScenes.forEach(s => { map[s.id] = { ...s, children: [] } })
+  const roots = []
+  flatScenes.forEach(s => {
+    if (s.parent_id && map[s.parent_id]) {
+      map[s.parent_id].children.push(map[s.id])
+    } else {
+      roots.push(map[s.id])
+    }
+  })
+  return roots
+}
 
 export default function ManageTab() {
   const { id: projectId }              = useParams()
@@ -34,14 +48,31 @@ export default function ManageTab() {
   const [seeded,          setSeeded]          = useState(false)
   const [showColMgr,      setShowColMgr]      = useState(false)
   const [selectedSceneId, setSelectedSceneId] = useState(null)
-  const [addingScene,     setAddingScene]     = useState(false)
-  const [newSceneName,    setNewSceneName]    = useState('')
   const [viewMode,        setViewMode]        = useState(() => localStorage.getItem(`manage-view-${projectId}`) || 'list')
   const [sideCollapsed,   setSideCollapsed]   = useState(() => localStorage.getItem(`manage-side-${projectId}`) === '1')
-  const newSceneInputRef = useRef(null)
   const [hiddenCols, setHiddenCols] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`list-cols-${projectId}`)) || {} } catch { return {} }
   })
+
+  // Scene add state — parentId: null = top-level, string = child
+  const [addingSceneParent, setAddingSceneParent] = useState(undefined) // undefined = not adding
+  const [newSceneName,      setNewSceneName]      = useState('')
+  const newSceneInputRef = useRef(null)
+
+  // Delete confirmation
+  const [deletingScene, setDeletingScene] = useState(null)
+
+  // Tree expand state
+  const [expandedScenes, setExpandedScenes] = useState(new Set())
+  const [hoverSceneId,   setHoverSceneId]   = useState(null)
+
+  const sceneColorMap = useMemo(() => {
+    const map = {}
+    scenes.forEach((s, i) => { map[s.id] = SCENE_COLORS[i % SCENE_COLORS.length] })
+    return map
+  }, [scenes])
+
+  const sceneTree = useMemo(() => buildSceneTree(scenes), [scenes])
 
   function setView(v) {
     setViewMode(v)
@@ -51,6 +82,15 @@ export default function ManageTab() {
     setSideCollapsed(c => {
       localStorage.setItem(`manage-side-${projectId}`, c ? '0' : '1')
       return !c
+    })
+  }
+  function toggleExpand(sceneId, e) {
+    e?.stopPropagation()
+    setExpandedScenes(prev => {
+      const next = new Set(prev)
+      if (next.has(sceneId)) next.delete(sceneId)
+      else next.add(sceneId)
+      return next
     })
   }
 
@@ -79,7 +119,6 @@ export default function ManageTab() {
       setColumns(colRes.columns      || [])
       setShots(shotsRes.shots        || [])
       setTeamMembers(membersRes.members || [])
-      // Prefer DB-persisted column visibility over localStorage
       const dbHidden = shotsRes.hidden_builtin_cols
       if (dbHidden && typeof dbHidden === 'object') {
         setHiddenCols(dbHidden)
@@ -93,7 +132,6 @@ export default function ManageTab() {
 
   useEffect(() => { load() }, [load])
 
-  // Supabase Realtime — live sync production_shots across all users
   useEffect(() => {
     const channel = supabase
       .channel(`production-shots-${projectId}`)
@@ -104,7 +142,7 @@ export default function ManageTab() {
         filter: `project_id=eq.${projectId}`,
       }, payload => {
         if (payload.eventType === 'INSERT') {
-          load() // Reload to get computed fields (thumbnails, assignee info)
+          load()
         } else if (payload.eventType === 'UPDATE') {
           setShots(prev => prev.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s))
         } else if (payload.eventType === 'DELETE') {
@@ -147,33 +185,53 @@ export default function ManageTab() {
     setShots(prev => prev.filter(s => s.id !== id))
   }
 
-  async function createScene(name) {
-    const res = await productionApi.createScene(projectId, { name, position: scenes.length })
+  async function createScene(name, parentId = null) {
+    const res = await productionApi.createScene(projectId, { name, parent_id: parentId, position: scenes.length })
     const newScene = res.scene
     setScenes(prev => [...prev, newScene])
+    if (parentId) setExpandedScenes(prev => new Set([...prev, parentId]))
     setSelectedSceneId(newScene.id)
     return newScene
   }
 
-  function startAddScene() {
-    setAddingScene(true)
+  function startAddScene(parentId = null) {
+    setAddingSceneParent(parentId)
     setNewSceneName('')
+    if (parentId) setExpandedScenes(prev => new Set([...prev, parentId]))
     setTimeout(() => newSceneInputRef.current?.focus(), 50)
   }
 
   async function commitAddScene(e) {
     e?.preventDefault()
     const name = newSceneName.trim()
-    setAddingScene(false)
+    const parentId = addingSceneParent
+    setAddingSceneParent(undefined)
     setNewSceneName('')
     if (name) {
-      try { await createScene(name) } catch {}
+      try { await createScene(name, parentId) } catch {}
     }
   }
 
   function cancelAddScene() {
-    setAddingScene(false)
+    setAddingSceneParent(undefined)
     setNewSceneName('')
+  }
+
+  async function confirmDeleteScene() {
+    if (!deletingScene) return
+    const id = deletingScene.id
+    setDeletingScene(null)
+    try {
+      await productionApi.deleteScene(id)
+      // Remove the scene and reassign its children to the parent
+      setScenes(prev => {
+        const deleted = prev.find(s => s.id === id)
+        return prev
+          .filter(s => s.id !== id)
+          .map(s => s.parent_id === id ? { ...s, parent_id: deleted?.parent_id || null } : s)
+      })
+      if (selectedSceneId === id) setSelectedSceneId(null)
+    } catch {}
   }
 
   // ── Loading ──────────────────────────────────────────────────────────
@@ -192,7 +250,6 @@ export default function ManageTab() {
     </div>
   )
 
-  // ── Empty / first-time seed ──────────────────────────────────────────
   const isEmpty = statuses.length === 0 && !seeded
   if (isEmpty) return (
     <div className="manage-empty">
@@ -212,10 +269,6 @@ export default function ManageTab() {
     ? shots.filter(s => s.scene_id === selectedSceneId)
     : shots
 
-  const activeSceneName = selectedSceneId
-    ? scenes.find(s => s.id === selectedSceneId)?.name
-    : 'All Shots'
-
   const sharedProps = {
     projectId, statuses, scenes, columns,
     shots: filteredShots,
@@ -232,8 +285,90 @@ export default function ManageTab() {
     onManageColumns: () => setShowColMgr(true),
   }
 
+  function renderSceneItem(scene, depth = 0) {
+    const color = sceneColorMap[scene.id] || '#6366f1'
+    const count = shots.filter(s => s.scene_id === scene.id).length
+    const hasChildren = scene.children?.length > 0
+    const isExpanded = expandedScenes.has(scene.id)
+    const isSelected = selectedSceneId === scene.id
+    const isHovered = hoverSceneId === scene.id
+    const isAddingChild = addingSceneParent === scene.id
+
+    return (
+      <React.Fragment key={scene.id}>
+        <div
+          className={`manage-sidebar-item ${isSelected ? 'active' : ''}`}
+          style={{ paddingLeft: 6 + depth * 14 }}
+          onMouseEnter={() => setHoverSceneId(scene.id)}
+          onMouseLeave={() => setHoverSceneId(null)}
+          onClick={() => setSelectedSceneId(prev => prev === scene.id ? null : scene.id)}
+        >
+          <button
+            className="manage-sidebar-expand-btn"
+            onClick={e => toggleExpand(scene.id, e)}
+            title={isExpanded ? 'Collapse' : 'Expand'}
+            style={{ visibility: hasChildren ? 'visible' : 'hidden' }}
+          >
+            {isExpanded
+              ? <CaretDown size={9} weight="bold" />
+              : <CaretRight size={9} weight="bold" />
+            }
+          </button>
+
+          <span className="manage-sidebar-color-dot" style={{ background: color, opacity: isSelected ? 1 : 0.55 }} />
+
+          {!sideCollapsed && (
+            <div className="manage-sidebar-text">
+              <span className="manage-sidebar-label">{scene.name}</span>
+            </div>
+          )}
+
+          <span className="manage-sidebar-count">{count}</span>
+
+          {canEdit && isHovered && !sideCollapsed && (
+            <div className="manage-sidebar-actions">
+              <button
+                className="manage-sidebar-action-btn"
+                onClick={e => { e.stopPropagation(); startAddScene(scene.id) }}
+                title="Add sub-scene"
+              >
+                <Plus size={10} weight="bold" />
+              </button>
+              <button
+                className="manage-sidebar-action-btn danger"
+                onClick={e => { e.stopPropagation(); setDeletingScene(scene) }}
+                title="Delete scene"
+              >
+                <Trash size={10} weight="bold" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Inline child input */}
+        {isAddingChild && !sideCollapsed && (
+          <form onSubmit={commitAddScene} className="manage-sidebar-inline-input" style={{ paddingLeft: 6 + (depth + 1) * 14 + 8 }}>
+            <input
+              ref={newSceneInputRef}
+              value={newSceneName}
+              onChange={e => setNewSceneName(e.target.value)}
+              onBlur={commitAddScene}
+              onKeyDown={e => { if (e.key === 'Escape') cancelAddScene() }}
+              placeholder="Sub-scene name…"
+              className="manage-sidebar-input"
+            />
+          </form>
+        )}
+
+        {/* Children */}
+        {hasChildren && isExpanded && scene.children.map(child => renderSceneItem(child, depth + 1))}
+      </React.Fragment>
+    )
+  }
+
   return (
     <div className="manage-tab">
+
       {/* ── Scene Sidebar ────────────────────────────────── */}
       <div className={`manage-sidebar ${sideCollapsed ? 'collapsed' : ''}`}>
         <div className="manage-sidebar-header">
@@ -244,8 +379,9 @@ export default function ManageTab() {
         </div>
 
         <nav className="manage-sidebar-nav">
-          <button
-            className={`manage-sidebar-item ${!selectedSceneId ? 'active' : ''}`}
+          {/* All Shots */}
+          <div
+            className={`manage-sidebar-item all-shots ${!selectedSceneId ? 'active' : ''}`}
             onClick={() => setSelectedSceneId(null)}
             title="All Shots"
           >
@@ -256,57 +392,37 @@ export default function ManageTab() {
               </div>
             )}
             <span className="manage-sidebar-count">{shots.length}</span>
-          </button>
+          </div>
 
-          {scenes.map((scene, idx) => {
-            const color = SCENE_COLORS[idx % SCENE_COLORS.length]
-            const count = shots.filter(s => s.scene_id === scene.id).length
-            return (
-              <button
-                key={scene.id}
-                className={`manage-sidebar-item ${selectedSceneId === scene.id ? 'active' : ''}`}
-                onClick={() => setSelectedSceneId(scene.id)}
-                title={scene.name}
-              >
-                <FilmSlate size={13} weight="duotone" className="manage-sidebar-icon" style={{ color }} />
-                {!sideCollapsed && (
-                  <div className="manage-sidebar-text">
-                    <span className="manage-sidebar-label">{scene.name}</span>
-                    <span className="manage-sidebar-sub">
-                      {scene.location ? scene.location.toUpperCase() : '—'}
-                    </span>
-                  </div>
-                )}
-                <span className="manage-sidebar-count">{count}</span>
-              </button>
-            )
-          })}
+          {/* Scene divider */}
+          {scenes.length > 0 && !sideCollapsed && (
+            <div className="manage-sidebar-divider" />
+          )}
+
+          {/* Scene tree */}
+          {sceneTree.map(scene => renderSceneItem(scene, 0))}
+
+          {/* Top-level add input */}
+          {addingSceneParent === null && !sideCollapsed && (
+            <form onSubmit={commitAddScene} className="manage-sidebar-inline-input" style={{ paddingLeft: 8 }}>
+              <input
+                ref={newSceneInputRef}
+                value={newSceneName}
+                onChange={e => setNewSceneName(e.target.value)}
+                onBlur={commitAddScene}
+                onKeyDown={e => { if (e.key === 'Escape') cancelAddScene() }}
+                placeholder="Scene name…"
+                className="manage-sidebar-input"
+              />
+            </form>
+          )}
         </nav>
 
         {canEdit && !sideCollapsed && (
           <div className="manage-sidebar-footer">
-            {addingScene ? (
-              <form onSubmit={commitAddScene} style={{ padding: '4px 8px' }}>
-                <input
-                  ref={newSceneInputRef}
-                  value={newSceneName}
-                  onChange={e => setNewSceneName(e.target.value)}
-                  onBlur={commitAddScene}
-                  onKeyDown={e => { if (e.key === 'Escape') cancelAddScene() }}
-                  placeholder="Scene name…"
-                  style={{
-                    width: '100%', background: 'rgba(255,255,255,0.07)',
-                    border: '1px solid var(--accent-soft)', borderRadius: 6,
-                    color: 'var(--text)', fontSize: 12, padding: '5px 8px', outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </form>
-            ) : (
-              <button className="manage-sidebar-add" onClick={startAddScene}>
-                <Plus size={12} weight="bold" /> New Scene
-              </button>
-            )}
+            <button className="manage-sidebar-add" onClick={() => startAddScene(null)}>
+              <Plus size={12} weight="bold" /> New Scene
+            </button>
           </div>
         )}
       </div>
@@ -327,7 +443,6 @@ export default function ManageTab() {
             })}
           </div>
           <div className="manage-toolbar-right">
-            {/* View toggle */}
             <div className="manage-view-toggle">
               <button
                 className={`manage-view-btn ${viewMode === 'list' ? 'active' : ''}`}
@@ -385,6 +500,30 @@ export default function ManageTab() {
           onClose={() => setShowColMgr(false)}
           onSaved={cols => setColumns(cols)}
         />
+      )}
+
+      {/* ── Delete Confirmation ───────────────────────────── */}
+      {deletingScene && (
+        <div className="manage-delete-overlay" onClick={() => setDeletingScene(null)}>
+          <div className="manage-delete-dialog" onClick={e => e.stopPropagation()}>
+            <div className="manage-delete-dialog-header">
+              <span>Delete scene?</span>
+              <button className="manage-delete-close" onClick={() => setDeletingScene(null)}>
+                <X size={14} weight="bold" />
+              </button>
+            </div>
+            <p className="manage-delete-dialog-body">
+              <strong>"{deletingScene.name}"</strong> will be permanently removed.
+              {shots.filter(s => s.scene_id === deletingScene.id).length > 0 && (
+                <> The {shots.filter(s => s.scene_id === deletingScene.id).length} shots inside will be unlinked from this scene.</>
+              )}
+            </p>
+            <div className="manage-delete-dialog-actions">
+              <button className="btn-ghost" onClick={() => setDeletingScene(null)}>Cancel</button>
+              <button className="btn-danger" onClick={confirmDeleteScene}>Delete</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
