@@ -253,7 +253,7 @@ Deno.serve(async (req) => {
         const { id, name } = body
         if (!id || !name) return json({ error: 'id and name required' }, 400)
         const { data, error } = await supabase.from('drive_folders')
-          .update({ name, updated_at: new Date().toISOString() })
+          .update({ name })
           .eq('id', id).eq('user_id', user.id).select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ folder: data })
@@ -283,7 +283,7 @@ Deno.serve(async (req) => {
         }
         if (parent_id && await isDescendant(parent_id, id)) return json({ error: 'Cannot move folder into itself' }, 400)
         const { data, error } = await supabase.from('drive_folders')
-          .update({ parent_id: parent_id || null, updated_at: new Date().toISOString() })
+          .update({ parent_id: parent_id || null })
           .eq('id', id).eq('user_id', user.id).select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ folder: data })

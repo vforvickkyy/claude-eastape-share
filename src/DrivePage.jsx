@@ -1336,7 +1336,7 @@ function BulkBar({ selected, onDeselect, onDownload, onMove, onTrash }) {
 function NewFolderInput({ inputRef, value, onChange, onSave, onCancel, isCard = false }) {
   if (isCard) {
     return (
-      <div style={{ background: 'var(--accent-tint)', border: '1px solid var(--accent-soft)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 72 }}>
+      <div style={{ background: 'var(--accent-tint)', border: '1px solid var(--accent-soft)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, height: 72, overflow: 'hidden' }}>
         <FolderSimple size={28} weight="duotone" color="#fbbf24" />
         <input
           ref={inputRef}
@@ -1345,7 +1345,7 @@ function NewFolderInput({ inputRef, value, onChange, onSave, onCancel, isCard = 
           placeholder="Folder name"
           onKeyDown={e => { if (e.key === 'Enter') onSave(value); if (e.key === 'Escape') onCancel() }}
           onBlur={() => setTimeout(onCancel, 150)}
-          style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', flex: 1, fontWeight: 600 }}
+          style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', flex: 1, minWidth: 0, fontWeight: 600 }}
         />
       </div>
     )
@@ -1546,7 +1546,7 @@ function GridView({ files, folders, uploadingItems = [], selected, onToggleSelec
                       {isRenaming ? (
                         <RenameInput inputRef={renameInputRef} value={renameVal} onChange={onRenameChange} onSave={onRenameSave} onCancel={onRenameCancel} />
                       ) : (
-                        <span className="drive-folder-name">{folder.name}</span>
+                        <span className="drive-folder-name" title={folder.name}>{folder.name}</span>
                       )}
                     </div>
                     <button
