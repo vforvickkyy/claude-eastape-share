@@ -590,10 +590,10 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
           </div>
 
           {/* Modal body */}
-          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+          <div className="sp-body" onClick={e => e.stopPropagation()}>
 
             {/* Player area */}
-            <div className="sp-player-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isVideo(activeFile) && activeFile._source === 'media' ? 0 : 16, overflow: 'hidden' }}>
+            <div className="sp-player-area" style={{ alignItems: 'center', justifyContent: 'center', padding: isVideo(activeFile) && activeFile._source === 'media' ? 0 : 16, overflow: 'hidden' }}>
               {isVideo(activeFile) && activeFile._source === 'media' ? (
                 <div key={activeFile.id} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 320, background: '#000' }}>
                   <CloudflareVideoPlayer
@@ -601,6 +601,7 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
                     cloudflareUid={activeFile.cloudflare_uid}
                     cloudflareStatus={activeFile.cloudflare_status}
                     fallbackUrl={activeFile.downloadUrl}
+                    poster={activeFile.thumbnailUrl || undefined}
                   />
                 </div>
               ) : isVideo(activeFile) && activeFile.downloadUrl ? (
@@ -634,7 +635,7 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
 
             {/* Comments sidebar */}
             {canCommentOn(activeFile) && (
-              <div className="sp-sidebar" style={{ width: 300, borderLeft: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', background: '#0f0f18', flexShrink: 0 }}>
+              <div className="sp-sidebar" style={{ borderLeft: '1px solid rgba(255,255,255,0.07)', background: '#0f0f18' }}>
                 <div className="sp-sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   <span style={{ fontWeight: 600, fontSize: 13, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <ChatDots size={14} /> Comments

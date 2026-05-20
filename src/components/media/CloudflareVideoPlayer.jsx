@@ -30,6 +30,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
   cloudflareUid,
   cloudflareStatus: initialStatus,
   fallbackUrl,
+  poster,
   startTime,
   comments = [],
   onStatusChange,
@@ -118,6 +119,9 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     loadQualityLevels().then(() => {
       if (!videoRef.current) return
 
+      const posterSrc = poster
+        || `https://videodelivery.net/${cloudflareUid}/thumbnails/thumbnail.jpg?time=0s&width=1280`
+
       const player = videojs(videoRef.current, {
         controls:       false,
         controlBar:     false,
@@ -127,6 +131,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
         loop:           true,
         muted:          false,
         playbackRates:  SPEEDS,
+        poster:         posterSrc,
         sources:        [{ src, type: 'application/x-mpegURL' }],
       })
 
@@ -356,6 +361,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
           ref={videoRef}
           className="video-js"
           playsInline
+          poster={poster || (cloudflareUid ? `https://videodelivery.net/${cloudflareUid}/thumbnails/thumbnail.jpg?time=0s&width=1280` : undefined)}
         />
       </div>
 

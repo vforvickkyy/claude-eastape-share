@@ -298,6 +298,7 @@ export default function MediaSharePage() {
                   cloudflareUid={asset.cloudflare_uid}
                   cloudflareStatus={asset.cloudflare_status}
                   fallbackUrl={asset.videoUrl}
+                  poster={asset.thumbnailUrl || undefined}
                   onTimeUpdate={setCurrentTime}
                 />
               ) : asset?.videoUrl ? (

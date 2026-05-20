@@ -12,19 +12,21 @@ import {
 import ConfirmModal from "../components/ConfirmModal";
 
 /* ── Auth helpers ─────────────────────────────────────────── */
-function getAuth() {
-  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
-  return { token: s.access_token, userId: s.user?.id };
+function getToken() {
+  try {
+    const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
+    const sd = s?.session ?? s;
+    return sd?.access_token || "";
+  } catch { return ""; }
 }
 
 async function apiFetch(path, opts = {}) {
-  const { token } = getAuth();
   const res = await fetch(
     `${import.meta.env.VITE_SUPABASE_URL}/functions/v1${path}`,
     {
       ...opts,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${getToken()}`,
         "Content-Type": "application/json",
         ...(opts.headers || {}),
       },
@@ -37,9 +39,8 @@ async function apiFetch(path, opts = {}) {
 
 /* ── For non-setting REST calls (clear links etc) ─────────── */
 function getRestHeaders() {
-  const s = JSON.parse(localStorage.getItem("ets_auth") || "{}");
   return {
-    Authorization: `Bearer ${s.access_token}`,
+    Authorization: `Bearer ${getToken()}`,
     apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
     "Content-Type": "application/json",
     Prefer: "return=representation",

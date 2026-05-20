@@ -35,17 +35,20 @@ export default function App() {
   useEffect(() => {
     const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
     const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-    const session = JSON.parse(localStorage.getItem('ets_auth') || '{}')
+    const raw = JSON.parse(localStorage.getItem('ets_auth') || '{}')
+    const sessionData = raw?.session ?? raw
+    const token = sessionData?.access_token || ''
+    const userId = sessionData?.user?.id || ''
 
     Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/platform_settings?key=eq.maintenance_mode&select=value`, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token || ''}` }
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
       }).then(r => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/platform_settings?key=eq.maintenance_message&select=value`, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token || ''}` }
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
       }).then(r => r.json()),
-      session.user?.id ? fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${session.user.id}&select=is_admin`, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` }
+      userId ? fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=is_admin`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
       }).then(r => r.json()) : Promise.resolve([])
     ]).then(([modeData, msgData, profileData]) => {
       const mode = modeData?.[0]?.value === 'true'

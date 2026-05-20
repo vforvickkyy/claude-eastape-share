@@ -7617,20 +7617,21 @@ body { overflow-x: hidden; }
 
 /* ── Share page responsive ── */
 @media (max-width: 768px) {
-  .sp-body { flex-direction: column; }
+  .sp-body { flex-direction: column; overflow-y: auto; }
 
   .sp-sidebar {
     width: 100%;
-    max-height: 40vh;
+    flex: none;
+    max-height: 42vh;
     border-left: none;
     border-top: 1px solid var(--line);
+    overflow-y: auto;
   }
 
-  .sp-player-area { flex: none; height: 50vh; }
+  /* Player fills remaining space above comments; if no sidebar, flex:1 takes full height */
+  .sp-player-area { flex: 1; min-height: 44vh; height: auto; }
 
-  .sp-topbar-name {
-    max-width: 120px;
-  }
+  .sp-topbar-name { max-width: 120px; }
 
   .sp-meta-pill { display: none; }
 }
