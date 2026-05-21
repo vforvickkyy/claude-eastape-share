@@ -238,7 +238,7 @@ function PDFPage({ pageData, allShots, statuses, scenes, customCols, teamMembers
             }
           </div>
         )}
-        {colMap.name     && <div style={{ fontWeight: 500, color: T.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shot.title || '—'}</div>}
+        {colMap.name     && <div style={{ fontWeight: 500, color: T.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shot.title ? shot.title.replace(/\.[^.]+$/, '') : '—'}</div>}
         {colMap.status   && <div><StatusPill shot={shot} /></div>}
         {colMap.assigned && <MemberCell shot={shot} />}
         {colMap.scene    && <div style={{ fontFamily: T.mono, fontSize: compact ? 10 : 11, color: T.t3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc?.name || '—'}</div>}

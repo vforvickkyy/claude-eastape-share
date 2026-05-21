@@ -19,6 +19,12 @@ const COL_COLORS = [
 
 const AVATAR_COLORS = ['#6366f1','#3b82f6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#8b5cf6']
 
+function stripExt(name) {
+  if (!name) return name
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(0, dot) : name
+}
+
 function optionColor(str) {
   if (!str) return AVATAR_COLORS[0]
   let h = 0
@@ -680,7 +686,7 @@ export default function ShotListView({
                 )}
                 {linkedId && <LinkIcon size={12} style={{ color: '#7c3aed', flexShrink: 0 }} />}
                 <span style={{ fontSize: 13, color: '#e8e8ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {shot.title}
+                  {stripExt(shot.title)}
                 </span>
               </div>
             )}

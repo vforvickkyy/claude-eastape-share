@@ -392,9 +392,12 @@ export default function ProjectFilesPage() {
   }
 
   async function handleFolderDelete(folder) {
-    if (!confirm(`Delete folder "${folder.name}" and all its contents?`)) return;
-    await projectFoldersApi.delete(folder.id).catch(() => {});
+    if (!confirm(`Delete folder "${folder.name}" and all its contents? This will permanently remove all files from storage.`)) return;
+    try {
+      await projectFoldersApi.delete(folder.id);
+    } catch {}
     setFolders(prev => prev.filter(f => f.id !== folder.id));
+    load();
   }
 
   async function handleDownload(item) {
