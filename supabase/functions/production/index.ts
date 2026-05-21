@@ -408,7 +408,10 @@ Deno.serve(async (req) => {
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
       const [{ data: projRow }, { data: members }] = await Promise.all([
         supabase.from('projects').select('user_id').eq('id', projectId).single(),
-        supabase.from('project_members').select('user_id, role').eq('project_id', projectId).eq('accepted', true),
+        supabase.from('project_members')
+          .select('id, user_id, role, display_name, invited_email, is_manual')
+          .eq('project_id', projectId)
+          .eq('accepted', true),
       ])
       const allUserIds = [...new Set([projRow?.user_id, ...(members || []).map((m: any) => m.user_id)].filter(Boolean))]
       const { data: profilesData } = allUserIds.length > 0
@@ -421,12 +424,22 @@ Deno.serve(async (req) => {
         const ownerInMembers = (members || []).some((m: any) => m.user_id === projRow.user_id)
         if (!ownerInMembers) {
           const p = profileMap[projRow.user_id]
-          result.push({ user_id: projRow.user_id, role: 'owner', full_name: p?.full_name || null, username: p?.username || null, avatar_url: p?.avatar_url || null })
+          result.push({ id: null, user_id: projRow.user_id, role: 'owner', full_name: p?.full_name || null, username: p?.username || null, avatar_url: p?.avatar_url || null, display_name: null, invited_email: null, is_manual: false })
         }
       }
       for (const m of (members || [])) {
-        const p = profileMap[(m as any).user_id]
-        result.push({ user_id: (m as any).user_id, role: (m as any).role, full_name: p?.full_name || null, username: p?.username || null, avatar_url: p?.avatar_url || null })
+        const p = m.user_id ? profileMap[m.user_id] : null
+        result.push({
+          id:            (m as any).id,
+          user_id:       (m as any).user_id,
+          role:          (m as any).role,
+          full_name:     p?.full_name     || null,
+          username:      p?.username      || null,
+          avatar_url:    p?.avatar_url    || null,
+          display_name:  (m as any).display_name  || null,
+          invited_email: (m as any).invited_email || null,
+          is_manual:     (m as any).is_manual     || false,
+        })
       }
       return json({ members: result })
     }

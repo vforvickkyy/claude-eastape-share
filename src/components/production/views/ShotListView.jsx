@@ -283,12 +283,12 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
   }
 
   if (col.type === 'team') {
-    // Name: profiles (real users) → display_name (manual) → email prefix → Unknown
-    const memberName   = m => m?.profiles?.full_name || m?.profiles?.username || m?.display_name || m?.invited_email?.split('@')[0] || 'Unknown'
-    const memberAvatar = m => m?.profiles?.avatar_url || null
+    // Name: full_name (real users) → display_name (manual) → email prefix → Unknown
+    const memberName   = m => m?.full_name || m?.username || m?.display_name || m?.invited_email?.split('@')[0] || 'Unknown'
+    const memberAvatar = m => m?.avatar_url || null
     const avatarBg     = name => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length]
     // Find by member id (new) or user_id (backward compat for existing data)
-    const member   = teamMembers.find(m => m.id === val || (m.user_id && m.user_id === val))
+    const member   = teamMembers.find(m => m.id === val || m.user_id === val)
     const name     = memberName(member)
     const initials = name !== 'Unknown' ? name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
     const isActive = m => m.id === val || (m.user_id && m.user_id === val)
@@ -322,8 +322,8 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
                 const ini = n !== 'Unknown' ? n.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
                 const active = isActive(m)
                 return (
-                  <button key={m.id}
-                    onClick={() => { saveCustom(m.id); setTeamOpen(false) }}
+                  <button key={m.id || m.user_id}
+                    onClick={() => { saveCustom(m.id || m.user_id); setTeamOpen(false) }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: active ? 'rgba(99,102,241,0.15)' : 'none', border: 'none', color: active ? '#a5b4fc' : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}
