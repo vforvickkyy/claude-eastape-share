@@ -73,7 +73,7 @@ function paginate(shots, scenes, cfg) {
   const pageH   = getPageH(pageSize, orientation, EXPORT_W)
 
   let topH = tblHdr + ftH
-  if (includeHeader)           topH += 76
+  if (includeHeader)           topH += 108
   if (titleText || subtitleText) topH += 64
   if (includeSummary)          topH += 44
 
@@ -247,35 +247,51 @@ function PDFPage({ pageData, allShots, statuses, scenes, customCols, teamMembers
     )
   })
 
-  // Page border overlay
-  const bdrMap = { thin: `1px solid ${T.bdr2}`, medium: `2px solid ${T.bdr2}`, none: 'none' }
-  const outerBdr = bdrMap[pageBorderStyle] || 'none'
+  const bdrW   = pageBorderStyle === 'medium' ? 2 : 1
+  const bdrClr = dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.2)'
 
   return (
     <div style={{
       width: pw, height: ph, background: T.bg, fontFamily: T.font, color: T.t1,
       WebkitFontSmoothing: 'antialiased', display: 'flex', flexDirection: 'column',
-      overflow: 'hidden', boxSizing: 'border-box',
-      border: outerBdr, position: 'relative',
+      overflow: 'hidden', boxSizing: 'border-box', position: 'relative',
     }}>
+      {/* Border overlay — inset box-shadow so overflow:hidden can't clip it */}
+      {pageBorderStyle !== 'none' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 9, pointerEvents: 'none', boxShadow: `inset 0 0 0 ${bdrW}px ${bdrClr}` }} />
+      )}
+
       {/* Project header — first page only */}
       {pageData.isFirst && includeHeader && (
-        <div style={{ padding: '15px 22px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', alignItems: 'center', gap: 16, background: T.headBg, flexShrink: 0 }}>
-          <div style={{ flex: 1 }}>
-            {clientName && <div style={{ fontFamily: T.mono, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.t4, marginBottom: 3 }}>{clientName}</div>}
-            <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.015em', color: T.t1, marginBottom: 4 }}>{projectName || 'Untitled Project'}</div>
-            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: T.t3 }}>
-              {mediaCount > 0 && <span>{mediaCount} media</span>}
-              {mediaCount > 0 && memberCount > 0 && <span style={{ color: T.t4 }}>·</span>}
-              {memberCount > 0 && <span>{memberCount} members</span>}
+        <div style={{ background: T.headBg, borderBottom: `1px solid ${T.bdr}`, flexShrink: 0 }}>
+          {/* Accent bar */}
+          <div style={{ height: 3, background: T.acc }} />
+          <div style={{ padding: '18px 24px 16px', display: 'flex', alignItems: 'flex-start', gap: 20 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {clientName && (
+                <div style={{ fontFamily: T.mono, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: T.acc, marginBottom: 6, fontWeight: 600 }}>
+                  {clientName}
+                </div>
+              )}
+              <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', color: T.t1, lineHeight: 1.15, marginBottom: 7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {projectName || 'Untitled Project'}
+              </div>
+              <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.t3, alignItems: 'center' }}>
+                <span style={{ fontFamily: T.mono }}>Shot Report</span>
+                {mediaCount > 0 && <><span style={{ color: T.t4 }}>·</span><span>{mediaCount} media</span></>}
+                {memberCount > 0 && <><span style={{ color: T.t4 }}>·</span><span>{memberCount} members</span></>}
+              </div>
             </div>
+            {includeLogo && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, paddingTop: 2 }}>
+                <img src="/logo.png" alt="" crossOrigin="anonymous"
+                  style={{ height: 24, width: 'auto', maxWidth: 130, objectFit: 'contain', opacity: dark ? 0.9 : 0.75, filter: dark ? 'none' : 'brightness(0.15)' }}
+                  onError={e => { e.target.style.display = 'none' }}
+                />
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.t4, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Eastape Studio</div>
+              </div>
+            )}
           </div>
-          {includeLogo && (
-            <img src="/logo.svg" alt="" crossOrigin="anonymous"
-              style={{ height: 16, width: 'auto', opacity: dark ? 1 : 0.8, filter: dark ? 'none' : 'brightness(0.3)' }}
-              onError={e => { e.target.style.display = 'none' }}
-            />
-          )}
         </div>
       )}
 
