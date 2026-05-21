@@ -44,14 +44,14 @@ Deno.serve(async (req) => {
 
       // Manually enrich with profile data (no FK constraint exists)
       const userIds = (members || []).map((m: Record<string, unknown>) => m.user_id).filter(Boolean) as string[]
-      let profilesMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {}
+      let profilesMap: Record<string, { full_name: string | null; username: string | null; avatar_url: string | null }> = {}
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name, avatar_url')
+          .select('id, full_name, username, avatar_url')
           .in('id', userIds)
         if (profiles) {
-          for (const p of profiles) profilesMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url }
+          for (const p of profiles) profilesMap[p.id] = { full_name: p.full_name, username: p.username, avatar_url: p.avatar_url }
         }
       }
 

@@ -17,6 +17,15 @@ const COL_COLORS = [
   '#ef4444','#ec4899','#3b82f6','#84cc16',
 ]
 
+const AVATAR_COLORS = ['#6366f1','#3b82f6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#8b5cf6']
+
+function optionColor(str) {
+  if (!str) return AVATAR_COLORS[0]
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
 // ── Status Pill ───────────────────────────────────────────────────────
 function StatusPill({ shot, statuses, onUpdate }) {
   const [open, setOpen] = useState(false)
@@ -212,33 +221,54 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
 
   if (col.type === 'select') {
     const options = col.options || []
+    const vals = Array.isArray(val) ? val : (val ? [val] : [])
+    function toggleOption(opt) {
+      const next = vals.includes(opt) ? vals.filter(v => v !== opt) : [...vals, opt]
+      saveCustom(next.length ? next : null)
+    }
     return (
       <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle', position: 'relative' }} onClick={e => e.stopPropagation()}>
         <div ref={selectRef} style={{ position: 'relative' }}>
           <button
             onClick={() => { if (onShotUpdate) setSelectOpen(o => !o) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: onShotUpdate ? 'pointer' : 'default', padding: '2px 4px', borderRadius: 6, color: val ? '#d0d0f0' : 'var(--t4)', fontSize: 11 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', background: 'none', border: 'none', cursor: onShotUpdate ? 'pointer' : 'default', padding: '2px 4px', borderRadius: 6, fontSize: 11, maxWidth: w - 16 }}
           >
-            {val
-              ? <span style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '2px 8px' }}>{val}</span>
-              : <span>—</span>}
+            {vals.length > 0
+              ? vals.map(v => {
+                  const c = optionColor(v)
+                  return (
+                    <span key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: c + '22', border: `1px solid ${c}55`, borderRadius: 20, padding: '2px 7px', color: c, whiteSpace: 'nowrap', fontWeight: 500 }}>
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                      {v}
+                    </span>
+                  )
+                })
+              : <span style={{ color: 'var(--t4)' }}>—</span>}
           </button>
           {selectOpen && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 8, minWidth: 120, boxShadow: '0 8px 24px rgba(0,0,0,0.6)', padding: 4 }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--panel)', border: '1px solid var(--line-2)', borderRadius: 8, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,0.6)', padding: 4 }}>
               <button
                 onClick={() => { saveCustom(null); setSelectOpen(false) }}
                 style={{ display: 'block', width: '100%', background: 'none', border: 'none', color: 'var(--t4)', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}
               >— None</button>
-              {options.map(opt => (
-                <button key={opt}
-                  onClick={() => { saveCustom(opt); setSelectOpen(false) }}
-                  style={{ display: 'block', width: '100%', background: val === opt ? 'rgba(99,102,241,0.15)' : 'none', border: 'none', color: val === opt ? '#a5b4fc' : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
-                  onMouseEnter={e => { if (val !== opt) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                  onMouseLeave={e => { if (val !== opt) e.currentTarget.style.background = 'none' }}
-                >{opt}</button>
-              ))}
+              {options.map(opt => {
+                const c = optionColor(opt)
+                const selected = vals.includes(opt)
+                return (
+                  <button key={opt}
+                    onClick={() => toggleOption(opt)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: selected ? c + '18' : 'none', border: 'none', color: selected ? c : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
+                    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'none' }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                    <span style={{ flex: 1 }}>{opt}</span>
+                    {selected && <Check size={11} weight="bold" style={{ color: c, flexShrink: 0 }} />}
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
@@ -247,8 +277,11 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
   }
 
   if (col.type === 'team') {
-    const member = teamMembers.find(m => m.user_id === val)
-    const initials = member?.full_name ? member.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+    const memberName = m => m?.full_name || m?.username || 'Unknown'
+    const avatarBg   = name => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length]
+    const member     = teamMembers.find(m => m.user_id === val)
+    const name       = memberName(member)
+    const initials   = name !== 'Unknown' ? name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
     return (
       <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle' }} onClick={e => e.stopPropagation()}>
         <div ref={teamRef} style={{ position: 'relative' }}>
@@ -260,9 +293,9 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
               <>
                 {member.avatar_url
                   ? <img src={member.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
-                  : <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700, flexShrink: 0 }}>{initials}</div>
+                  : <div style={{ width: 18, height: 18, borderRadius: '50%', background: avatarBg(name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700, flexShrink: 0 }}>{initials}</div>
                 }
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#d0d0f0' }}>{member.full_name || 'Unknown'}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#d0d0f0' }}>{name}</span>
               </>
             ) : <span style={{ color: 'var(--t4)' }}>—</span>}
           </button>
@@ -275,7 +308,8 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}
               >— None</button>
               {teamMembers.map(m => {
-                const ini = m.full_name ? m.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+                const n   = memberName(m)
+                const ini = n !== 'Unknown' ? n.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
                 return (
                   <button key={m.user_id}
                     onClick={() => { saveCustom(m.user_id); setTeamOpen(false) }}
@@ -285,9 +319,9 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
                   >
                     {m.avatar_url
                       ? <img src={m.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} alt="" />
-                      : <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700 }}>{ini}</div>
+                      : <div style={{ width: 18, height: 18, borderRadius: '50%', background: avatarBg(n), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700 }}>{ini}</div>
                     }
-                    {m.full_name || 'Unknown'}
+                    {n}
                   </button>
                 )
               })}

@@ -412,7 +412,7 @@ Deno.serve(async (req) => {
       ])
       const allUserIds = [...new Set([projRow?.user_id, ...(members || []).map((m: any) => m.user_id)].filter(Boolean))]
       const { data: profilesData } = allUserIds.length > 0
-        ? await supabase.from('profiles').select('id, full_name, avatar_url').in('id', allUserIds)
+        ? await supabase.from('profiles').select('id, full_name, username, avatar_url').in('id', allUserIds)
         : { data: [] }
       const profileMap: Record<string, any> = {}
       ;(profilesData || []).forEach((p: any) => { profileMap[p.id] = p })
@@ -421,12 +421,12 @@ Deno.serve(async (req) => {
         const ownerInMembers = (members || []).some((m: any) => m.user_id === projRow.user_id)
         if (!ownerInMembers) {
           const p = profileMap[projRow.user_id]
-          result.push({ user_id: projRow.user_id, role: 'owner', full_name: p?.full_name || null, avatar_url: p?.avatar_url || null })
+          result.push({ user_id: projRow.user_id, role: 'owner', full_name: p?.full_name || null, username: p?.username || null, avatar_url: p?.avatar_url || null })
         }
       }
       for (const m of (members || [])) {
         const p = profileMap[(m as any).user_id]
-        result.push({ user_id: (m as any).user_id, role: (m as any).role, full_name: p?.full_name || null, avatar_url: p?.avatar_url || null })
+        result.push({ user_id: (m as any).user_id, role: (m as any).role, full_name: p?.full_name || null, username: p?.username || null, avatar_url: p?.avatar_url || null })
       }
       return json({ members: result })
     }

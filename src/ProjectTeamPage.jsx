@@ -164,9 +164,98 @@ function AddManualModal({ onAdd, onClose }) {
   )
 }
 
+// ── Edit member modal ─────────────────────────────────────────────────
+function EditMemberModal({ member, onSave, onClose }) {
+  const profile    = member.profiles || {}
+  const [name,     setName]     = useState(member.display_name || profile.full_name || '')
+  const [position, setPosition] = useState(member.position || '')
+  const [email,    setEmail]    = useState(member.invited_email || '')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+  const isManual = !!member.is_manual
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!name.trim()) { setError('Name is required'); return }
+    setSaving(true); setError('')
+    try {
+      const body = { display_name: name.trim() || null, position: position.trim() || null }
+      await onSave(member.id, body)
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Failed to save')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#0f0f1a', border: '1px solid #2a2a3a', borderRadius: 16, width: 420, boxShadow: '0 24px 80px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #1e1e2e' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IdentificationCard size={16} style={{ color: '#818cf8' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#e8e8ff' }}>Edit Member</div>
+              <div style={{ fontSize: 11, color: 'var(--t4)' }}>{isManual ? 'Manual member' : 'Platform user'}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', display: 'flex', padding: 4, borderRadius: 6 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ padding: 22 }}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 600 }}>Display Name {isManual && <span style={{ color: '#f87171' }}>*</span>}</label>
+            <input
+              autoFocus value={name} onChange={e => setName(e.target.value)}
+              placeholder="How they appear in the project"
+              style={{ width: '100%', background: '#16162a', border: '1px solid #2a2a3a', borderRadius: 8, color: '#e8e8ff', fontSize: 13, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }}
+              onFocus={e => e.target.style.borderColor = '#6366f1'}
+              onBlur={e => e.target.style.borderColor = '#2a2a3a'}
+            />
+          </div>
+
+          <div style={{ marginBottom: error ? 14 : 20 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 600 }}>Position / Role</label>
+            <input
+              value={position} onChange={e => setPosition(e.target.value)}
+              placeholder="e.g. Compositor, VFX Artist"
+              style={{ width: '100%', background: '#16162a', border: '1px solid #2a2a3a', borderRadius: 8, color: '#e8e8ff', fontSize: 13, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }}
+              onFocus={e => e.target.style.borderColor = '#6366f1'}
+              onBlur={e => e.target.style.borderColor = '#2a2a3a'}
+            />
+          </div>
+
+          {!isManual && email && (
+            <div style={{ marginBottom: 20, padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid #1e1e2e' }}>
+              <div style={{ fontSize: 11, color: 'var(--t4)', marginBottom: 2 }}>Email</div>
+              <div style={{ fontSize: 13, color: 'var(--t3)' }}>{email}</div>
+            </div>
+          )}
+
+          {error && <div style={{ fontSize: 12, color: '#f87171', marginBottom: 14, padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 6, border: '1px solid rgba(239,68,68,0.2)' }}>{error}</div>}
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--t3)', borderRadius: 8, padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} style={{ background: saving ? 'rgba(99,102,241,0.4)' : '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {saving ? <SpinnerGap size={13} className="spin" /> : <Check size={13} weight="bold" />}
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Member card ───────────────────────────────────────────────────────
 function MemberCard({ member, isOwner, onUpdate, onRemove }) {
   const [confirmDel, setConfirmDel] = useState(false)
+  const [editing,    setEditing]    = useState(false)
   const profile  = member.profiles || {}
   const name     = member.display_name || profile.full_name || member.invited_email || 'Unknown'
   const email    = member.invited_email || profile.email || ''
@@ -220,18 +309,37 @@ function MemberCard({ member, isOwner, onUpdate, onRemove }) {
               <button onClick={() => setConfirmDel(false)} style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}>No</button>
             </div>
           ) : (
-            <button
-              onClick={() => setConfirmDel(true)}
-              title="Remove member"
-              style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 5, display: 'flex', borderRadius: 6 }}
-              onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
-            >
-              <Trash size={14} />
-            </button>
+            <>
+              <button
+                onClick={() => setEditing(true)}
+                title="Edit member"
+                style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 5, display: 'flex', borderRadius: 6 }}
+                onMouseEnter={e => e.currentTarget.style.color = '#818cf8'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+              >
+                <PencilSimple size={14} />
+              </button>
+              <button
+                onClick={() => setConfirmDel(true)}
+                title="Remove member"
+                style={{ background: 'none', border: 'none', color: 'var(--t4)', cursor: 'pointer', padding: 5, display: 'flex', borderRadius: 6 }}
+                onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
+              >
+                <Trash size={14} />
+              </button>
+            </>
           )
         )}
       </div>
+
+      {editing && (
+        <EditMemberModal
+          member={member}
+          onSave={onUpdate}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </div>
   )
 }
