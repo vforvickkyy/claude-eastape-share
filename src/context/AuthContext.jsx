@@ -95,15 +95,14 @@ export function AuthProvider({ children }) {
           if (!cancelled) { setUnverifiedEmail(session.user?.email ?? null); setLoading(false); }
           return;
         }
+        // Session is valid — show app immediately using cached data; sync SDK in background
         if (!cancelled) setUser(session.user);
-        try {
-          await supabase.auth.setSession({
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          });
-        } catch {}
         if (!cancelled) setLoading(false);
         if (!cancelled) fetchProfile();
+        supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }).catch(() => {});
       } else {
         try {
           const { session: newSession } = await apiPost("/api/auth/refresh", { refreshToken: session.refresh_token });
