@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { X, DownloadSimple, Eye, CaretLeft, CaretRight, FilmSlate } from '@phosphor-icons/react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -331,9 +332,11 @@ export default function ExportPdfModal({
 }) {
   const defaultName = projectName ? `${projectName} — Shot Report` : 'Shot Report'
 
-  const [step,          setStep]          = useState(0)
-  const [exporting,     setExporting]     = useState(false)
+  const [step,           setStep]           = useState(0)
+  const [exporting,      setExporting]      = useState(false)
   const [previewPageIdx, setPreviewPageIdx] = useState(0)
+  const [capturePageData, setCapturePageData] = useState(null)
+  const captureRef = useRef(null)
 
   const [exportName,       setExportName]       = useState(defaultName)
   const [titleText,        setTitleText]        = useState('')
@@ -360,8 +363,6 @@ export default function ExportPdfModal({
     columns.forEach(c =>       { m['c_' + c.id]  = true   })
     return m
   })
-
-  const exportContainerRef = useRef(null)
 
   const filteredShots = shots.filter(s => {
     if (filterStatusId !== 'all' && s.status_id !== filterStatusId) return false
@@ -395,13 +396,14 @@ export default function ExportPdfModal({
       const [lw, lh] = orientation === 'landscape' ? [pw, ph] : [ph, pw]
       const pdf = new jsPDF({ orientation, unit: 'mm', format: [lw, lh] })
 
-      const container = exportContainerRef.current
-      if (!container) return
-      const divs = container.querySelectorAll('[data-pdf-page]')
+      for (let i = 0; i < pages.length; i++) {
+        // Render this page synchronously into the capture div
+        flushSync(() => setCapturePageData(pages[i]))
 
-      for (let i = 0; i < divs.length; i++) {
+        if (!captureRef.current) continue
         if (i > 0) pdf.addPage()
-        const canvas = await html2canvas(divs[i], {
+
+        const canvas = await html2canvas(captureRef.current, {
           scale: 2,
           useCORS: true,
           allowTaint: false,
@@ -418,6 +420,7 @@ export default function ExportPdfModal({
     } catch (err) {
       console.error('PDF export failed:', err)
     }
+    setCapturePageData(null)
     setExporting(false)
   }
 
@@ -465,15 +468,12 @@ export default function ExportPdfModal({
 
   return (
     <>
-      {/* ── Hidden export container (always mounted, off-screen) ── */}
-      <div
-        ref={exportContainerRef}
-        style={{ position: 'fixed', left: -99999, top: 0, zIndex: -1, pointerEvents: 'none' }}
-      >
-        {pages.map((pg, i) => (
-          <div key={i} data-pdf-page style={{ marginBottom: 8 }}>
+      {/* ── Single-page capture div — only mounted during export ── */}
+      {capturePageData && (
+        <div style={{ position: 'fixed', left: -99999, top: 0, zIndex: -1, pointerEvents: 'none' }}>
+          <div ref={captureRef}>
             <PDFPage
-              pageData={pg}
+              pageData={capturePageData}
               allShots={filteredShots}
               statuses={statuses}
               scenes={scenes}
@@ -485,8 +485,8 @@ export default function ExportPdfModal({
               ph={exportPageH}
             />
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* ── Modal overlay ── */}
       <div

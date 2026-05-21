@@ -457,7 +457,10 @@ export default function ShotListView({
   const [colWidths,    setColWidths]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(widthKey)) || {} } catch { return {} }
   })
-  const [sort,         setSort]         = useState({ col: null, dir: 'asc' })
+  const [sort,         setSort]         = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`manage-sort-${projectId}`)) || { col: 'title', dir: 'asc' } } catch { return { col: 'title', dir: 'asc' } }
+  })
+  const resizingRef = useRef(false)
   const [selectedShot, setSelectedShot] = useState(null)
   const [linkingShot,  setLinkingShot]  = useState(null)
   const [actionMenu,   setActionMenu]   = useState(null)
@@ -485,10 +488,14 @@ export default function ShotListView({
   }
 
   function handleSort(col) {
-    setSort(prev => prev.col === col
-      ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-      : { col, dir: 'asc' }
-    )
+    if (resizingRef.current) return
+    setSort(prev => {
+      const next = prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' }
+      localStorage.setItem(`manage-sort-${projectId}`, JSON.stringify(next))
+      return next
+    })
   }
 
   function sortShots(arr) {
@@ -506,9 +513,11 @@ export default function ShotListView({
 
   function onResizeDown(e, key, defaultW) {
     e.preventDefault(); e.stopPropagation()
+    resizingRef.current = false
     const startX = e.clientX
     const startW = colWidths[key] || defaultW
     function onMove(e2) {
+      if (Math.abs(e2.clientX - startX) > 2) resizingRef.current = true
       setColWidths(prev => ({ ...prev, [key]: Math.max(60, startW + e2.clientX - startX) }))
     }
     function onUp(e2) {
@@ -519,6 +528,8 @@ export default function ShotListView({
       })
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      // Reset after click event fires (click fires synchronously after mouseup)
+      setTimeout(() => { resizingRef.current = false }, 50)
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
