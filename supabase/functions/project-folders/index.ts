@@ -199,10 +199,15 @@ Deno.serve(async (req) => {
         await supabase.from('project_media').delete().in('id', mediaIds).catch(() => {})
       }
 
-      // Hard-delete project_files in these folders
-      if (folderIds.length > 0) {
-        await supabase.from('project_files').delete().in('folder_id', folderIds).catch(() => {})
-      }
+      // Clear all FK references to these folders before deleting them
+      await Promise.all([
+        // project_files in these folders
+        supabase.from('project_files').delete().in('folder_id', folderIds).catch(() => {}),
+        // share links pointing to these folders
+        supabase.from('share_links').delete().in('project_folder_id', folderIds).catch(() => {}),
+        // production scenes linked to these folders — null the link, keep the scene
+        supabase.from('production_scenes').update({ source_folder_id: null }).in('source_folder_id', folderIds).catch(() => {}),
+      ])
 
       // Delete all folders (descendants + root)
       const { error } = await supabase.from('project_folders').delete().in('id', folderIds)
