@@ -182,14 +182,19 @@ function PDFPage({ pageData, allShots, statuses, scenes, customCols, teamMembers
   const MemberCell = ({ shot }) => {
     const mc  = customCols.find(c => c.type === 'team')
     const uid = mc ? shot.custom_data?.[mc.name] : null
-    const m   = uid ? teamMembers.find(x => x.user_id === uid) : null
-    const nm  = m ? (m.full_name || m.username || 'Unknown') : null
+    const m   = uid ? teamMembers.find(x => x.id === uid || (x.user_id && x.user_id === uid)) : null
+    const nm  = m ? (m.profiles?.full_name || m.profiles?.username || m.display_name || m.invited_email?.split('@')[0] || 'Unknown') : null
+    const avatarUrl = m?.profiles?.avatar_url || null
     if (!nm) return <span style={{ color: T.t4, fontFamily: T.mono, fontSize: 10 }}>—</span>
+    const sz = compact ? 18 : 20
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.t2 }}>
-        <div style={{ width: compact ? 18 : 20, height: compact ? 18 : 20, borderRadius: '50%', flexShrink: 0, background: dark ? 'rgba(232,148,58,0.15)' : 'rgba(217,119,6,0.1)', border: `1px solid ${T.accBdr}`, display: 'grid', placeItems: 'center', fontSize: 8, fontWeight: 700, fontFamily: T.mono, color: T.acc }}>
-          {nm[0].toUpperCase()}
-        </div>
+        {avatarUrl
+          ? <img src={avatarUrl} crossOrigin="anonymous" style={{ width: sz, height: sz, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" onError={e => { e.target.style.display = 'none' }} />
+          : <div style={{ width: sz, height: sz, borderRadius: '50%', flexShrink: 0, background: dark ? 'rgba(232,148,58,0.15)' : 'rgba(217,119,6,0.1)', border: `1px solid ${T.accBdr}`, display: 'grid', placeItems: 'center', fontSize: 8, fontWeight: 700, fontFamily: T.mono, color: T.acc }}>
+              {nm[0].toUpperCase()}
+            </div>
+        }
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nm}</span>
       </div>
     )
@@ -208,8 +213,9 @@ function PDFPage({ pageData, allShots, statuses, scenes, customCols, teamMembers
       return <div style={{ display: 'flex', gap: 3 }}>{vals.map((v, i) => <span key={i} style={{ padding: '1px 6px', borderRadius: 999, fontSize: compact ? 9 : 10, background: dark ? 'rgba(163,163,163,0.1)' : '#f3f4f6', border: `1px solid ${dark ? 'rgba(163,163,163,0.2)' : '#e5e7eb'}`, color: T.t2, fontFamily: T.mono, whiteSpace: 'nowrap' }}>{v}</span>)}</div>
     }
     if (col.type === 'team') {
-      const m = teamMembers.find(x => x.user_id === val)
-      return <span style={{ color: T.t2, fontSize: compact ? 10 : 11 }}>{m ? (m.full_name || m.username || val) : val}</span>
+      const m  = teamMembers.find(x => x.id === val || (x.user_id && x.user_id === val))
+      const nm = m ? (m.profiles?.full_name || m.profiles?.username || m.display_name || m.invited_email?.split('@')[0]) : null
+      return <span style={{ color: T.t2, fontSize: compact ? 10 : 11 }}>{nm || val}</span>
     }
     return <span style={{ color: T.t2, fontSize: compact ? 10 : 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(val)}</span>
   }

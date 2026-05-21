@@ -283,11 +283,15 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
   }
 
   if (col.type === 'team') {
-    const memberName = m => m?.full_name || m?.username || 'Unknown'
-    const avatarBg   = name => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length]
-    const member     = teamMembers.find(m => m.user_id === val)
-    const name       = memberName(member)
-    const initials   = name !== 'Unknown' ? name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+    // Name: profiles (real users) → display_name (manual) → email prefix → Unknown
+    const memberName   = m => m?.profiles?.full_name || m?.profiles?.username || m?.display_name || m?.invited_email?.split('@')[0] || 'Unknown'
+    const memberAvatar = m => m?.profiles?.avatar_url || null
+    const avatarBg     = name => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length]
+    // Find by member id (new) or user_id (backward compat for existing data)
+    const member   = teamMembers.find(m => m.id === val || (m.user_id && m.user_id === val))
+    const name     = memberName(member)
+    const initials = name !== 'Unknown' ? name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+    const isActive = m => m.id === val || (m.user_id && m.user_id === val)
     return (
       <td style={{ width: w, minWidth: w, padding: '0 8px', verticalAlign: 'middle' }} onClick={e => e.stopPropagation()}>
         <div ref={teamRef} style={{ position: 'relative' }}>
@@ -297,8 +301,8 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
           >
             {member ? (
               <>
-                {member.avatar_url
-                  ? <img src={member.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
+                {memberAvatar(member)
+                  ? <img src={memberAvatar(member)} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} alt="" />
                   : <div style={{ width: 18, height: 18, borderRadius: '50%', background: avatarBg(name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700, flexShrink: 0 }}>{initials}</div>
                 }
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#d0d0f0' }}>{name}</span>
@@ -316,15 +320,16 @@ function CustomCell({ shot, col, colWidths, onShotUpdate, teamMembers = [] }) {
               {teamMembers.map(m => {
                 const n   = memberName(m)
                 const ini = n !== 'Unknown' ? n.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?'
+                const active = isActive(m)
                 return (
-                  <button key={m.user_id}
-                    onClick={() => { saveCustom(m.user_id); setTeamOpen(false) }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: val === m.user_id ? 'rgba(99,102,241,0.15)' : 'none', border: 'none', color: val === m.user_id ? '#a5b4fc' : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
-                    onMouseEnter={e => { if (val !== m.user_id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                    onMouseLeave={e => { if (val !== m.user_id) e.currentTarget.style.background = 'none' }}
+                  <button key={m.id}
+                    onClick={() => { saveCustom(m.id); setTeamOpen(false) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: active ? 'rgba(99,102,241,0.15)' : 'none', border: 'none', color: active ? '#a5b4fc' : '#d0d0f0', fontSize: 12, padding: '6px 10px', cursor: 'pointer', textAlign: 'left', borderRadius: 5 }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}
                   >
-                    {m.avatar_url
-                      ? <img src={m.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                    {memberAvatar(m)
+                      ? <img src={memberAvatar(m)} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} alt="" />
                       : <div style={{ width: 18, height: 18, borderRadius: '50%', background: avatarBg(n), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontWeight: 700 }}>{ini}</div>
                     }
                     {n}
