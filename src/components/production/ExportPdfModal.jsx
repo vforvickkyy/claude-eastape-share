@@ -371,6 +371,7 @@ export default function ExportPdfModal({
 
   const cfg = {
     theme: pdfTheme, density, thumbSize, groupByScene,
+    pageSize, orientation,
     includeHeader, includeSummary, includeTimestamp, includeLogo,
     exportName, projectName, clientName, mediaCount, memberCount,
     titleText, subtitleText, titleAlign,
