@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react'
-import { flushSync } from 'react-dom'
 import { X, DownloadSimple, Eye, CaretLeft, CaretRight, FilmSlate } from '@phosphor-icons/react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -389,16 +388,20 @@ export default function ExportPdfModal({
     setColMap(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
+  const wait = ms => new Promise(r => setTimeout(r, ms))
+
   async function handleExport() {
     setExporting(true)
+    await wait(50) // let React flush setExporting before we take control
+
     try {
       const [pw, ph] = PAGE_MM[pageSize]
       const [lw, lh] = orientation === 'landscape' ? [pw, ph] : [ph, pw]
       const pdf = new jsPDF({ orientation, unit: 'mm', format: [lw, lh] })
 
       for (let i = 0; i < pages.length; i++) {
-        // Render this page synchronously into the capture div
-        flushSync(() => setCapturePageData(pages[i]))
+        setCapturePageData(pages[i])
+        await wait(150) // wait for React to render the page into captureRef
 
         if (!captureRef.current) continue
         if (i > 0) pdf.addPage()
