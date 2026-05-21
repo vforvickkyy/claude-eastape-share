@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
         }
         // PUT
         const body = await req.json()
-        const allowed = ['name', 'type', 'options', 'position']
+        const allowed = ['name', 'color', 'type', 'options', 'position']
         const updates: Record<string, unknown> = {}
         for (const k of allowed) if (k in body) updates[k] = body[k]
         const { data, error } = await supabase.from('shot_columns').update(updates).eq('id', id).select().single()
@@ -182,7 +182,7 @@ Deno.serve(async (req) => {
       if (req.method === 'POST') {
         const body = await req.json()
         const { data, error } = await supabase.from('shot_columns')
-          .insert({ project_id: projectId, name: body.name, type: body.type || 'text', options: body.options || null, position: body.position ?? 0 })
+          .insert({ project_id: projectId, name: body.name, color: body.color || '#6366f1', type: body.type || 'text', options: body.options || null, position: body.position ?? 0 })
           .select().single()
         if (error) return json({ error: error.message }, 500)
         return json({ column: data }, 201)
@@ -407,19 +407,26 @@ Deno.serve(async (req) => {
       if (!projectId) return json({ error: 'project_id required' }, 400)
       if (!(await canAccess(projectId))) return json({ error: 'Forbidden' }, 403)
       const [{ data: projRow }, { data: members }] = await Promise.all([
-        supabase.from('projects').select('user_id, profiles:user_id(full_name, avatar_url)').eq('id', projectId).single(),
-        supabase.from('project_members').select('user_id, role, profiles:user_id(full_name, avatar_url)').eq('project_id', projectId).eq('accepted', true),
+        supabase.from('projects').select('user_id').eq('id', projectId).single(),
+        supabase.from('project_members').select('user_id, role').eq('project_id', projectId).eq('accepted', true),
       ])
+      const allUserIds = [...new Set([projRow?.user_id, ...(members || []).map((m: any) => m.user_id)].filter(Boolean))]
+      const { data: profilesData } = allUserIds.length > 0
+        ? await supabase.from('profiles').select('id, full_name, avatar_url').in('id', allUserIds)
+        : { data: [] }
+      const profileMap: Record<string, any> = {}
+      ;(profilesData || []).forEach((p: any) => { profileMap[p.id] = p })
       const result: any[] = []
-      // Add project owner first (if not already a project_member row)
       if (projRow?.user_id) {
         const ownerInMembers = (members || []).some((m: any) => m.user_id === projRow.user_id)
         if (!ownerInMembers) {
-          result.push({ user_id: projRow.user_id, role: 'owner', full_name: (projRow.profiles as any)?.full_name || null, avatar_url: (projRow.profiles as any)?.avatar_url || null })
+          const p = profileMap[projRow.user_id]
+          result.push({ user_id: projRow.user_id, role: 'owner', full_name: p?.full_name || null, avatar_url: p?.avatar_url || null })
         }
       }
       for (const m of (members || [])) {
-        result.push({ user_id: (m as any).user_id, role: (m as any).role, full_name: (m as any).profiles?.full_name || null, avatar_url: (m as any).profiles?.avatar_url || null })
+        const p = profileMap[(m as any).user_id]
+        result.push({ user_id: (m as any).user_id, role: (m as any).role, full_name: p?.full_name || null, avatar_url: p?.avatar_url || null })
       }
       return json({ members: result })
     }

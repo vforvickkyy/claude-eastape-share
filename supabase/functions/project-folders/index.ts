@@ -85,9 +85,15 @@ Deno.serve(async (req) => {
 
     if (req.method === 'DELETE') {
       if (!id) return json({ error: 'id required' }, 400)
-      const { data: folder } = await supabase.from('project_folders').select('user_id').eq('id', id).single()
+      const { data: folder } = await supabase.from('project_folders').select('user_id, project_id').eq('id', id).single()
       if (!folder) return json({ error: 'Not found' }, 404)
-      if (folder.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
+      if (folder.user_id !== user.id) {
+        const { data: project } = await supabase.from('projects').select('user_id').eq('id', folder.project_id).single()
+        if (project?.user_id !== user.id) {
+          const { data: member } = await supabase.from('project_members').select('role').eq('project_id', folder.project_id).eq('user_id', user.id).eq('accepted', true).single()
+          if (!member || member.role === 'viewer' || member.role === 'reviewer') return json({ error: 'Forbidden' }, 403)
+        }
+      }
       const { error } = await supabase.from('project_folders').delete().eq('id', id)
       if (error) return json({ error: error.message }, 500)
       return json({ ok: true })

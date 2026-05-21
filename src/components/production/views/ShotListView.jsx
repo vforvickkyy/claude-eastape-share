@@ -725,7 +725,7 @@ export default function ShotListView({
                 <ColHeader
                   key={col.id}
                   label={col.name}
-                  color={COL_COLORS[idx % COL_COLORS.length]}
+                  color={col.color || COL_COLORS[idx % COL_COLORS.length]}
                   sortKey={col.name}
                   width={colWidths[col.id] || col.width || 150}
                   widthKey={col.id}

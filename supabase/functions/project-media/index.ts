@@ -231,7 +231,13 @@ Deno.serve(async (req) => {
       if (!mediaId) return json({ error: 'id required' }, 400)
       const { data: media } = await supabase.from('project_media').select('user_id, project_id').eq('id', mediaId).single()
       if (!media) return json({ error: 'Not found' }, 404)
-      if (media.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
+      if (media.user_id !== user.id) {
+        const { data: project } = await supabase.from('projects').select('user_id').eq('id', media.project_id).single()
+        if (project?.user_id !== user.id) {
+          const { data: member } = await supabase.from('project_members').select('role').eq('project_id', media.project_id).eq('user_id', user.id).eq('accepted', true).single()
+          if (!member || member.role === 'viewer' || member.role === 'reviewer') return json({ error: 'Forbidden' }, 403)
+        }
+      }
 
       const hardDelete = url.searchParams.get('hard') === 'true'
       if (hardDelete) {

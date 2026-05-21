@@ -53,22 +53,40 @@ function ColRow({ col, isHidden, onHide, onShow, onDelete, onUpdate, isDragging,
   const [name,       setName]       = useState(col.name)
   const [color,      setColor]      = useState(col.color || '#6366f1')
   const [type,       setType]       = useState(col.type || 'text')
+  const [options,    setOptions]    = useState(col.options || [])
+  const [newOpt,     setNewOpt]     = useState('')
   const [saving,     setSaving]     = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
 
-  const orig  = useRef({ name: col.name, color: col.color || '#6366f1', type: col.type || 'text' })
+  const orig  = useRef({ name: col.name, color: col.color || '#6366f1', type: col.type || 'text', options: col.options || [] })
   const dirty = name !== orig.current.name || color !== orig.current.color || type !== orig.current.type
 
   async function save(overrides = {}) {
-    const n = overrides.name  ?? name
-    const c = overrides.color ?? color
-    const t = overrides.type  ?? type
+    const n = overrides.name    ?? name
+    const c = overrides.color   ?? color
+    const t = overrides.type    ?? type
+    const o = overrides.options ?? options
     if (!n.trim() || saving) return
     setSaving(true)
     try {
-      await onUpdate(col.id, { name: n.trim(), color: c, type: t })
-      orig.current = { name: n.trim(), color: c, type: t }
+      await onUpdate(col.id, { name: n.trim(), color: c, type: t, options: o })
+      orig.current = { name: n.trim(), color: c, type: t, options: o }
     } finally { setSaving(false) }
+  }
+
+  function addOption() {
+    const opt = newOpt.trim()
+    if (!opt || options.includes(opt)) return
+    const next = [...options, opt]
+    setOptions(next)
+    setNewOpt('')
+    save({ options: next })
+  }
+
+  function removeOption(opt) {
+    const next = options.filter(o => o !== opt)
+    setOptions(next)
+    save({ options: next })
   }
 
   if (confirmDel) return (
@@ -96,7 +114,6 @@ function ColRow({ col, isHidden, onHide, onShow, onDelete, onUpdate, isDragging,
       transition: 'border-color 0.15s, background 0.15s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px' }}>
-        {/* Drag handle */}
         <span style={{ color: 'var(--t4)', cursor: 'grab', display: 'flex', flexShrink: 0 }}>
           <DotsSixVertical size={15} weight="bold" />
         </span>
@@ -151,6 +168,39 @@ function ColRow({ col, isHidden, onHide, onShow, onDelete, onUpdate, isDragging,
           onMouseLeave={e => e.currentTarget.style.color = 'var(--t4)'}
         ><Trash size={13} /></button>
       </div>
+
+      {/* Select options editor */}
+      {type === 'select' && (
+        <div style={{ padding: '0 12px 10px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ fontSize: 10, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: 0.5, margin: '8px 0 6px' }}>Options</div>
+          {options.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+              {options.map(opt => (
+                <span key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 14, padding: '3px 6px 3px 10px', fontSize: 11.5, color: '#a5b4fc' }}>
+                  {opt}
+                  <button type="button" onClick={() => removeOption(opt)}
+                    style={{ background: 'none', border: 'none', color: '#a5b4fc', cursor: 'pointer', padding: 0, display: 'flex', opacity: 0.6, lineHeight: 0 }}
+                  ><X size={9} weight="bold" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              value={newOpt}
+              onChange={e => setNewOpt(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOption() } if (e.key === 'Escape') setNewOpt('') }}
+              placeholder="Add option…"
+              style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a3a', borderRadius: 6, color: '#e8e8ff', fontSize: 12, padding: '4px 8px', outline: 'none', transition: 'border-color 0.15s' }}
+              onFocus={e => e.currentTarget.style.borderColor = '#6366f1'}
+              onBlur={e => e.currentTarget.style.borderColor = '#2a2a3a'}
+            />
+            <button type="button" onClick={addOption} disabled={!newOpt.trim()}
+              style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: !newOpt.trim() ? 'default' : 'pointer', opacity: !newOpt.trim() ? 0.4 : 1, display: 'flex', alignItems: 'center' }}
+            ><Plus size={11} /></button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
