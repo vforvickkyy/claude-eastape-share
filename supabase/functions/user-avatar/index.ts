@@ -26,9 +26,12 @@ Deno.serve(async (req) => {
         const paths = list.map((f: { name: string }) => `${user.id}/${f.name}`)
         await supabase.storage.from('avatars').remove(paths)
       }
-      await supabase.auth.admin.updateUserById(user.id, {
-        user_metadata: { ...user.user_metadata, avatar_url: null },
-      })
+      await Promise.all([
+        supabase.auth.admin.updateUserById(user.id, {
+          user_metadata: { ...user.user_metadata, avatar_url: null },
+        }),
+        supabase.from('profiles').update({ avatar_url: null }).eq('id', user.id),
+      ])
       return json({ ok: true })
     }
 
@@ -52,9 +55,12 @@ Deno.serve(async (req) => {
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath)
 
-      await supabase.auth.admin.updateUserById(user.id, {
-        user_metadata: { ...user.user_metadata, avatar_url: publicUrl },
-      })
+      await Promise.all([
+        supabase.auth.admin.updateUserById(user.id, {
+          user_metadata: { ...user.user_metadata, avatar_url: publicUrl },
+        }),
+        supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id),
+      ])
 
       return json({ avatarUrl: publicUrl })
     }
