@@ -12,6 +12,7 @@ import { useProject } from '../../context/ProjectContext'
 import ShotListView from './views/ShotListView'
 import ShotCardView from './views/ShotCardView'
 import ColumnManager from './ColumnManager'
+import ExportPdfModal from './ExportPdfModal'
 
 const SCENE_COLORS = [
   '#6366f1','#3b82f6','#06b6d4','#10b981',
@@ -34,7 +35,7 @@ function buildSceneTree(flatScenes) {
 
 export default function ManageTab() {
   const { id: projectId }              = useParams()
-  const { canEdit, canDelete }         = useProject()
+  const { canEdit, canDelete, project, fileCounts } = useProject()
 
   const [statuses,        setStatuses]        = useState([])
   const [scenes,          setScenes]          = useState([])
@@ -47,6 +48,7 @@ export default function ManageTab() {
   const [seedError,       setSeedError]       = useState(null)
   const [seeded,          setSeeded]          = useState(false)
   const [showColMgr,      setShowColMgr]      = useState(false)
+  const [showExport,      setShowExport]      = useState(false)
   const [selectedSceneId, setSelectedSceneId] = useState(null)
   const [viewMode,        setViewMode]        = useState(() => localStorage.getItem(`manage-view-${projectId}`) || 'list')
   const [sideCollapsed,   setSideCollapsed]   = useState(() => localStorage.getItem(`manage-side-${projectId}`) === '1')
@@ -472,7 +474,7 @@ export default function ManageTab() {
             <button className="btn-ghost" disabled title="Filter (coming soon)">
               <Funnel size={13} weight="duotone" /> Filter
             </button>
-            <button className="btn-ghost" disabled title="Export CSV (coming soon)">
+            <button className="btn-ghost" onClick={() => setShowExport(true)}>
               <DownloadSimple size={13} weight="duotone" /> Export
             </button>
             {canEdit && viewMode === 'list' && (
@@ -509,6 +511,21 @@ export default function ManageTab() {
           onToggleHide={toggleHideCol}
           onClose={() => setShowColMgr(false)}
           onSaved={cols => setColumns(cols)}
+        />
+      )}
+
+      {showExport && (
+        <ExportPdfModal
+          onClose={() => setShowExport(false)}
+          shots={filteredShots}
+          scenes={scenes}
+          statuses={statuses}
+          columns={columns}
+          teamMembers={teamMembers}
+          projectName={project?.name || ''}
+          clientName={project?.client_name || ''}
+          mediaCount={fileCounts?.media_count || 0}
+          memberCount={fileCounts?.member_count || 0}
         />
       )}
 
