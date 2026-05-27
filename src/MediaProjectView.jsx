@@ -917,8 +917,11 @@ function AssetContextMenu({ asset, pos, copied, onClose, onOpen, onRename, onCop
 function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatusChange, onCopyLink, copied, onShare, onRename, onDownload, onMove }) {
   const [menuPos, setMenuPos] = useState(null); // {x, y} or null
 
-  const scrubUid = (asset.cloudflare_status === 'ready' && asset.cloudflare_uid) ? asset.cloudflare_uid : null;
+  const scrubUid = asset.cloudflare_uid || null;
   const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid, asset.duration);
+  const posterUrl = scrubUid
+    ? `https://videodelivery.net/${scrubUid}/thumbnails/thumbnail.jpg?time=0s&width=400`
+    : (asset.thumbnailUrl || null);
 
   function openMenu(x, y) { setMenuPos({ x, y }); }
   function closeMenu()     { setMenuPos(null); }
@@ -967,8 +970,8 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
           onMouseMove={onMouseMove}
           onMouseLeave={onMouseLeave}
         >
-          {asset.thumbnailUrl ? (
-            <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = 'none' }} />
+          {posterUrl ? (
+            <img src={posterUrl} alt={asset.name} onError={e => { e.target.style.display = 'none' }} />
           ) : asset.wasabi_status === "uploading" ? (
             <div className="media-asset-thumb-processing">
               <span className="spinner" /><span>Processing…</span>

@@ -21,8 +21,11 @@ const STATUS_COLORS = {
 };
 
 function MpvCardThumb({ asset, onClick }) {
-  const scrubUid = (asset.cloudflare_status === "ready" && asset.cloudflare_uid) ? asset.cloudflare_uid : null;
+  const scrubUid = asset.cloudflare_uid || null;
   const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid, asset.duration);
+  const posterUrl = scrubUid
+    ? `https://videodelivery.net/${scrubUid}/thumbnails/thumbnail.jpg?time=0s&width=400`
+    : (asset.thumbnailUrl || null);
 
   return (
     <div
@@ -33,9 +36,9 @@ function MpvCardThumb({ asset, onClick }) {
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
     >
-      {(asset.cloudflare_thumbnail_url || asset.thumbnailUrl) ? (
+      {posterUrl ? (
         <img
-          src={asset.cloudflare_thumbnail_url || asset.thumbnailUrl}
+          src={posterUrl}
           alt={asset.name}
           onError={e => { e.target.style.display = "none"; }}
         />

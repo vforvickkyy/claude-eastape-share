@@ -75,9 +75,13 @@ function sortItems(items, field, dir) {
 
 function UfileCardThumb({ item, onClick }) {
   const t = getType(item);
-  const scrubUid = (item._source === "media" && item.cloudflare_status === "ready" && item.cloudflare_uid)
-    ? item.cloudflare_uid : null;
+  // Don't gate on cloudflare_status — if UID exists, try scrub; onError handles silent failures
+  const scrubUid = (item._source === "media" && item.cloudflare_uid) ? item.cloudflare_uid : null;
   const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid, item.duration);
+  // Use time=0s poster so short videos (<2s) never get "timestamp exceeds duration"
+  const posterUrl = scrubUid
+    ? `https://videodelivery.net/${scrubUid}/thumbnails/thumbnail.jpg?time=0s&width=400`
+    : item.thumbnailUrl;
 
   return (
     <div
@@ -88,8 +92,8 @@ function UfileCardThumb({ item, onClick }) {
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
     >
-      {item.thumbnailUrl ? (
-        <img src={item.thumbnailUrl} alt={item.name} onError={e => { e.target.style.display = "none"; }} />
+      {posterUrl ? (
+        <img src={posterUrl} alt={item.name} onError={e => { e.target.style.display = "none"; }} />
       ) : (
         <div className="ufile-thumb-icon"><TypeIcon item={item} size={40} /></div>
       )}
