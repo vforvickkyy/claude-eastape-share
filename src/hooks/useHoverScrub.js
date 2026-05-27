@@ -1,60 +1,49 @@
 import { useState, useRef } from 'react'
 
-/**
- * Hover-scrub using Cloudflare Stream's per-frame thumbnail API.
- * As the cursor moves across the thumbnail, a different frame is shown.
- *
- * Key behavior: we update the src on an already-rendered <img> element.
- * The browser keeps displaying the previous frame until the next loads,
- * giving flicker-free scrubbing with no sprite-sheet parsing required.
- *
- * Usage:
- *   const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } =
- *     useHoverScrub(cloudflareUid, duration)
- *
- *   <div ref={thumbRef} onMouseEnter={onMouseEnter} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
- *     <img src={poster} />
- *     {frameUrl && <div className="scrub-overlay"><img className="scrub-frame-img" src={frameUrl} alt="" /></div>}
- *   </div>
- */
+// Number of frames to pre-fetch on hover. Each frame covers 1/FRAMES of the video.
+// All FRAMES requests fire in parallel on mouseenter and are served from cache on mousemove.
+const FRAMES = 12
+
 export default function useHoverScrub(cloudflareUid, duration) {
-  const [frameUrl,   setFrameUrl]   = useState(null)
-  const thumbRef     = useRef(null)
-  const lastUpdateMs = useRef(0)
-  const lastT        = useRef(-1)
+  const [frameUrl,    setFrameUrl]    = useState(null)
+  const thumbRef      = useRef(null)
+  const lastFrame     = useRef(-1)
+  const didPrefetch   = useRef(false)
 
   function cfThumb(t) {
     return `https://videodelivery.net/${cloudflareUid}/thumbnails/thumbnail.jpg?time=${t}s&width=320`
   }
 
+  // Returns the centre timestamp for frame bucket i (guaranteed < duration).
+  function frameTime(i, dur) {
+    return parseFloat(((dur * (i + 0.5)) / FRAMES).toFixed(1))
+  }
+
   function onMouseEnter() {
-    if (!cloudflareUid) return
-    // Preload the very first frame so there's no delay on first move
-    new Image().src = cfThumb(0.5)
+    if (!cloudflareUid || didPrefetch.current) return
+    didPrefetch.current = true
+    const dur = duration || 30
+    // Fire all FRAMES requests in parallel once — mousemove will hit the cache.
+    for (let i = 0; i < FRAMES; i++) {
+      new Image().src = cfThumb(frameTime(i, dur))
+    }
   }
 
   function onMouseMove(e) {
     if (!cloudflareUid) return
-
-    // Throttle to ~10 fps — enough for smooth feel, avoids hammering the CDN
-    const now = Date.now()
-    if (now - lastUpdateMs.current < 100) return
-
     const el = thumbRef.current
     if (!el) return
-    const rect = el.getBoundingClientRect()
-    const pct  = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / rect.width))
-    const t    = parseFloat((pct * (duration || 30)).toFixed(1))
-
-    if (t === lastT.current) return
-    lastT.current      = t
-    lastUpdateMs.current = now
-    setFrameUrl(cfThumb(t))
+    const rect  = el.getBoundingClientRect()
+    const pct   = Math.max(0, Math.min(0.9999, (e.clientX - rect.left) / rect.width))
+    const frame = Math.floor(pct * FRAMES)
+    if (frame === lastFrame.current) return
+    lastFrame.current = frame
+    setFrameUrl(cfThumb(frameTime(frame, duration || 30)))
   }
 
   function onMouseLeave() {
     setFrameUrl(null)
-    lastT.current = -1
+    lastFrame.current = -1
   }
 
   return { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave }
