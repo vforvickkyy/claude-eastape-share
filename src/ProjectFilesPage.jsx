@@ -15,6 +15,7 @@ import { projectMediaApi, projectFilesApi, projectFoldersApi, shareLinksApi, pro
 import { useUpload } from "./context/UploadContext";
 import ShareModal from "./components/drive/ShareModal";
 import { uploadMediaFile, ingestToCloudflare } from "./lib/mediaUpload";
+import useHoverScrub from "./hooks/useHoverScrub";
 
 const STATUS_COLORS = {
   in_review: { label: "In Review", class: "badge-review"    },
@@ -70,6 +71,50 @@ function sortItems(items, field, dir) {
     if (va > vb) return dir === "asc" ? 1 : -1;
     return 0;
   });
+}
+
+function UfileCardThumb({ item, onClick }) {
+  const t = getType(item);
+  const scrubUid = (item._source === "media" && item.cloudflare_status === "ready" && item.cloudflare_uid)
+    ? item.cloudflare_uid : null;
+  const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid, item.duration);
+
+  return (
+    <div
+      className="ufile-thumb"
+      ref={thumbRef}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+    >
+      {item.thumbnailUrl ? (
+        <img src={item.thumbnailUrl} alt={item.name} onError={e => { e.target.style.display = "none"; }} />
+      ) : (
+        <div className="ufile-thumb-icon"><TypeIcon item={item} size={40} /></div>
+      )}
+      {frameUrl && (
+        <div className="scrub-overlay">
+          <img className="scrub-frame-img" src={frameUrl} alt="" onError={e => { e.target.style.display = "none"; }} />
+        </div>
+      )}
+      {t === "video" && !frameUrl && (
+        <div className="ufile-play-overlay">
+          <div className="ufile-play-btn"><Play size={18} weight="fill" /></div>
+        </div>
+      )}
+      {item.duration && (
+        <span className="mpv-card-duration">
+          {Math.floor(item.duration / 60)}:{String(Math.round(item.duration % 60)).padStart(2, "0")}
+        </span>
+      )}
+      {item.status && STATUS_COLORS[item.status] && (
+        <span className={`media-status-badge ${STATUS_COLORS[item.status].class}`}>
+          {STATUS_COLORS[item.status].label}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function ProjectFilesPage() {
@@ -720,26 +765,7 @@ export default function ProjectFilesPage() {
                     onDragEnd={handleDragEnd}
                     onContextMenu={e => openCtxMenu(e, item, false)}
                   >
-                    <div className="ufile-thumb" onClick={() => canPreview ? openPreview(item) : handleDownload(item)}>
-                      {item.thumbnailUrl ? (
-                        <img src={item.thumbnailUrl} alt={item.name} onError={e => { e.target.style.display = "none"; }} />
-                      ) : (
-                        <div className="ufile-thumb-icon"><TypeIcon item={item} size={40} /></div>
-                      )}
-                      {t === "video" && (
-                        <div className="ufile-play-overlay">
-                          <div className="ufile-play-btn"><Play size={18} weight="fill" /></div>
-                        </div>
-                      )}
-                      {item.duration && (
-                        <span className="mpv-card-duration">
-                          {Math.floor(item.duration / 60)}:{String(Math.round(item.duration % 60)).padStart(2, "0")}
-                        </span>
-                      )}
-                      {status && (
-                        <span className={`media-status-badge ${status.class}`}>{status.label}</span>
-                      )}
-                    </div>
+                    <UfileCardThumb item={item} onClick={() => canPreview ? openPreview(item) : handleDownload(item)} />
                     <div className="ufile-footer">
                       <div className="ufile-footer-top">
                         <button className="ufile-select-btn" onClick={e => toggleSelect(item.id, e)}>
