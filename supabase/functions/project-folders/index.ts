@@ -192,10 +192,17 @@ Deno.serve(async (req) => {
         }
       }))
 
-      // Hard-delete media DB records (delete versions first to avoid FK issues)
+      // Hard-delete media DB records (clear all FK references first)
       if (media.length > 0) {
         const mediaIds = media.map((m: any) => m.id)
-        await supabase.from('project_media_versions').delete().in('media_id', mediaIds).catch(() => {})
+        await Promise.all([
+          supabase.from('project_media_versions').delete().in('media_id', mediaIds).catch(() => {}),
+          supabase.from('project_media_comments').delete().in('media_id', mediaIds).catch(() => {}),
+          supabase.from('share_links').delete().in('project_media_id', mediaIds).catch(() => {}),
+          supabase.from('shot_assets').delete().in('project_media_id', mediaIds).catch(() => {}),
+          supabase.from('production_shots').update({ thumbnail_media_id: null }).in('thumbnail_media_id', mediaIds).catch(() => {}),
+          supabase.from('production_shots').update({ source_media_id: null }).in('source_media_id', mediaIds).catch(() => {}),
+        ])
         await supabase.from('project_media').delete().in('id', mediaIds).catch(() => {})
       }
 

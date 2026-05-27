@@ -65,6 +65,27 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
   const [hoverX,    setHoverX]    = useState(null)
   const [hoverTime, setHoverTime] = useState(0)
 
+  // ── Fullscreen ────────────────────────────────────────────────────
+  function handleFullscreen() {
+    const container = containerRef.current
+    const video     = videoRef.current
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement)
+    if (isFs) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {})
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
+      return
+    }
+    if (container?.requestFullscreen) {
+      container.requestFullscreen().catch(() => {
+        if (video?.webkitEnterFullscreen) video.webkitEnterFullscreen()
+      })
+    } else if (container?.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen()
+    } else if (video?.webkitEnterFullscreen) {
+      video.webkitEnterFullscreen()
+    }
+  }
+
   // ── Ref API ──────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     seekTo:          (t) => { playerRef.current?.currentTime(t) },
@@ -77,11 +98,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
     setVolume:       (v) => { playerRef.current?.volume(v) },
     setMuted:        (b) => { playerRef.current?.muted(b) },
     setLoop:         (b) => { playerRef.current?.loop(b); setLoop(b) },
-    requestFullscreen: () => {
-      const el = containerRef.current
-      if (el?.requestFullscreen) el.requestFullscreen()
-      else if (el?.webkitRequestFullscreen) el.webkitRequestFullscreen()
-    },
+    requestFullscreen: handleFullscreen,
   }))
 
   // ── Poll for processing status ────────────────────────────────────
@@ -503,11 +520,7 @@ const CloudflareVideoPlayer = forwardRef(function CloudflareVideoPlayer({
             {/* Fullscreen */}
             <button
               className="vc-btn"
-              onClick={() => {
-                const el = containerRef.current
-                if (el?.requestFullscreen) el.requestFullscreen()
-                else if (el?.webkitRequestFullscreen) el.webkitRequestFullscreen()
-              }}
+              onClick={handleFullscreen}
               title="Fullscreen"
             >
               <FrameCorners size={14} />
