@@ -43,6 +43,7 @@ export default function MediaSharePage() {
   const [data,        setData]       = useState(null);
   const [password,    setPassword]   = useState("");
   const [pwError,     setPwError]    = useState("");
+  const [dlProgress,  setDlProgress] = useState(null); // null | { done, total }
   const [comments,    setComments]   = useState([]);
   const [newComment,  setNewComment] = useState("");
   const [guestName,   setGuestName]  = useState(() => localStorage.getItem('guestCommentName') || "");
@@ -198,19 +199,33 @@ export default function MediaSharePage() {
     const title = folder?.name || project?.name || "Shared Folder"
     const previewAsset = previewIdx != null ? folderAssets[previewIdx] : null
 
+    const downloadable = folderAssets.filter(a => a.wasabi_key && a.wasabi_status === 'ready')
+
     async function downloadAll() {
-      for (const a of folderAssets) {
-        if (!a.wasabi_key || a.wasabi_status !== 'ready') continue
+      if (dlProgress) return
+      setDlProgress({ done: 0, total: downloadable.length })
+      for (let i = 0; i < downloadable.length; i++) {
+        const a = downloadable[i]
         try {
           const res = await fetch(`${BASE}/download?asset_id=${a.id}&share_token=${token}&type=download`)
           const { url } = await res.json()
-          if (!url) continue
-          const el = document.createElement('a')
-          el.href = url; el.target = '_blank'; el.rel = 'noopener noreferrer'
-          document.body.appendChild(el); el.click(); document.body.removeChild(el)
-          await new Promise(r => setTimeout(r, 400))
+          if (url) {
+            // No target=_blank — browsers block multiple new tabs from async code.
+            // The signed URL has Content-Disposition:attachment so clicking it
+            // triggers a file download without navigating the current page.
+            const el = document.createElement('a')
+            el.href = url
+            el.download = a.name
+            el.style.display = 'none'
+            document.body.appendChild(el)
+            el.click()
+            document.body.removeChild(el)
+          }
         } catch {}
+        setDlProgress({ done: i + 1, total: downloadable.length })
+        if (i < downloadable.length - 1) await new Promise(r => setTimeout(r, 600))
       }
+      setDlProgress(null)
     }
 
     return (
@@ -219,8 +234,13 @@ export default function MediaSharePage() {
         <div style={{ position: 'relative', zIndex: 5, maxWidth: 960, margin: '0 auto', padding: '32px 24px 48px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <h1 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h1>
-            {dlOk && folderAssets.some(a => a.wasabi_status === 'ready') && (
-              <button className="sp-download-btn" onClick={downloadAll}><DownloadSimple size={14} /> Download all</button>
+            {dlOk && downloadable.length > 0 && (
+              <button className="sp-download-btn" onClick={downloadAll} disabled={!!dlProgress}>
+                {dlProgress
+                  ? <><span className="spinner" style={{ width: 12, height: 12 }} /> {dlProgress.done}/{dlProgress.total}</>
+                  : <><DownloadSimple size={14} /> Download all ({downloadable.length})</>
+                }
+              </button>
             )}
           </div>
           <p style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 28 }}>{folderAssets.length} file{folderAssets.length !== 1 ? 's' : ''}</p>
