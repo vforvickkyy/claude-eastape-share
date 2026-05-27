@@ -22,7 +22,7 @@ const STATUS_COLORS = {
 
 function MpvCardThumb({ asset, onClick }) {
   const scrubUid = (asset.cloudflare_status === "ready" && asset.cloudflare_uid) ? asset.cloudflare_uid : null;
-  const { scrubBg, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid);
+  const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid, asset.duration);
 
   return (
     <div
@@ -42,7 +42,7 @@ function MpvCardThumb({ asset, onClick }) {
       ) : (
         <div className="mpv-card-icon">{typeIcon(asset.type, asset.mime_type)}</div>
       )}
-      {scrubBg && <div className="scrub-overlay" style={scrubBg} />}
+      {frameUrl && <div className="scrub-overlay"><img className="scrub-frame-img" src={frameUrl} alt="" onError={e => { e.target.style.display = 'none' }} /></div>}
       {asset.duration && (
         <span className="mpv-card-duration">
           {Math.floor(asset.duration / 60)}:{String(Math.round(asset.duration % 60)).padStart(2, "0")}

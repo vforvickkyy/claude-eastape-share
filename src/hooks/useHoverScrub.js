@@ -1,99 +1,61 @@
 import { useState, useRef } from 'react'
 
-// Module-level cache so each video's VTT is only fetched once across all card instances
-const cache = new Map() // uid → SpriteData | 'loading' | null
-
-function parseSecs(str) {
-  const [h, m, s] = str.trim().split(':').map(Number)
-  return h * 3600 + m * 60 + s
-}
-
-async function loadSprite(uid) {
-  if (cache.has(uid)) return cache.get(uid)
-  cache.set(uid, 'loading')
-  try {
-    const res = await fetch(`https://videodelivery.net/${uid}/thumbnails/sprite.vtt`)
-    if (!res.ok) { cache.set(uid, null); return null }
-    const vtt = await res.text()
-
-    const frames = []
-    // Each cue: timestamp line, then URL line ending with #xywh=x,y,w,h
-    const re = /(\d+:\d+:\d+\.\d+) --> (\d+:\d+:\d+\.\d+)[^\r\n]*[\r\n]+[^\r\n]*#xywh=(\d+),(\d+),(\d+),(\d+)/g
-    let m
-    while ((m = re.exec(vtt)) !== null) {
-      frames.push({
-        start: parseSecs(m[1]),
-        end:   parseSecs(m[2]),
-        x: +m[3], y: +m[4], w: +m[5], h: +m[6],
-      })
-    }
-    if (!frames.length) { cache.set(uid, null); return null }
-
-    const totalW = Math.max(...frames.map(f => f.x + f.w))
-    const totalH = Math.max(...frames.map(f => f.y + f.h))
-    const data = {
-      spriteUrl: `https://videodelivery.net/${uid}/thumbnails/sprite.jpg`,
-      frames, totalW, totalH,
-    }
-    cache.set(uid, data)
-    return data
-  } catch {
-    cache.set(uid, null)
-    return null
-  }
-}
-
 /**
- * Attach to a video thumbnail to show sprite-sheet hover scrubbing.
- * Only activates when cloudflareUid is truthy (i.e. video is ready).
+ * Hover-scrub using Cloudflare Stream's per-frame thumbnail API.
+ * As the cursor moves across the thumbnail, a different frame is shown.
+ *
+ * Key behavior: we update the src on an already-rendered <img> element.
+ * The browser keeps displaying the previous frame until the next loads,
+ * giving flicker-free scrubbing with no sprite-sheet parsing required.
  *
  * Usage:
- *   const { scrubBg, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(uid)
+ *   const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } =
+ *     useHoverScrub(cloudflareUid, duration)
+ *
  *   <div ref={thumbRef} onMouseEnter={onMouseEnter} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
- *     <img src={thumbnail} />
- *     {scrubBg && <div className="scrub-overlay" style={scrubBg} />}
+ *     <img src={poster} />
+ *     {frameUrl && <div className="scrub-overlay"><img className="scrub-frame-img" src={frameUrl} alt="" /></div>}
  *   </div>
  */
-export default function useHoverScrub(cloudflareUid) {
-  const [scrubBg, setScrubBg] = useState(null)
-  const thumbRef = useRef(null)
+export default function useHoverScrub(cloudflareUid, duration) {
+  const [frameUrl,   setFrameUrl]   = useState(null)
+  const thumbRef     = useRef(null)
+  const lastUpdateMs = useRef(0)
+  const lastT        = useRef(-1)
+
+  function cfThumb(t) {
+    return `https://videodelivery.net/${cloudflareUid}/thumbnails/thumbnail.jpg?time=${t}s&width=320`
+  }
 
   function onMouseEnter() {
     if (!cloudflareUid) return
-    // Kick off fetch immediately so data is ready by the time the mouse moves
-    if (!cache.has(cloudflareUid)) loadSprite(cloudflareUid)
+    // Preload the very first frame so there's no delay on first move
+    new Image().src = cfThumb(0.5)
   }
 
   function onMouseMove(e) {
     if (!cloudflareUid) return
-    const data = cache.get(cloudflareUid)
-    if (!data || data === 'loading') return
+
+    // Throttle to ~10 fps — enough for smooth feel, avoids hammering the CDN
+    const now = Date.now()
+    if (now - lastUpdateMs.current < 100) return
 
     const el = thumbRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
-    const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const pct  = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / rect.width))
+    const t    = parseFloat((pct * (duration || 30)).toFixed(1))
 
-    // Map cursor position → time → frame
-    const totalDur = data.frames[data.frames.length - 1].end
-    const targetT  = pct * totalDur
-    let frame = data.frames.find(f => targetT >= f.start && targetT < f.end)
-    if (!frame) frame = data.frames[Math.min(Math.floor(pct * data.frames.length), data.frames.length - 1)]
-    if (!frame) return
-
-    // Scale sprite so one frame exactly fills the card width
-    const scale = rect.width / frame.w
-    setScrubBg({
-      backgroundImage:    `url(${data.spriteUrl})`,
-      backgroundPosition: `${-(frame.x * scale)}px ${-(frame.y * scale)}px`,
-      backgroundSize:     `${data.totalW * scale}px ${data.totalH * scale}px`,
-      backgroundRepeat:   'no-repeat',
-    })
+    if (t === lastT.current) return
+    lastT.current      = t
+    lastUpdateMs.current = now
+    setFrameUrl(cfThumb(t))
   }
 
   function onMouseLeave() {
-    setScrubBg(null)
+    setFrameUrl(null)
+    lastT.current = -1
   }
 
-  return { scrubBg, thumbRef, onMouseEnter, onMouseMove, onMouseLeave }
+  return { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave }
 }

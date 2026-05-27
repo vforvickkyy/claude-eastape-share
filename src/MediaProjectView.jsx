@@ -918,7 +918,7 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
   const [menuPos, setMenuPos] = useState(null); // {x, y} or null
 
   const scrubUid = (asset.cloudflare_status === 'ready' && asset.cloudflare_uid) ? asset.cloudflare_uid : null;
-  const { scrubBg, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid);
+  const { frameUrl, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid, asset.duration);
 
   function openMenu(x, y) { setMenuPos({ x, y }); }
   function closeMenu()     { setMenuPos(null); }
@@ -976,7 +976,7 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
           ) : (
             <AssetTypeIcon type={asset.type} size={36} />
           )}
-          {scrubBg && <div className="scrub-overlay" style={scrubBg} />}
+          {frameUrl && <div className="scrub-overlay"><img className="scrub-frame-img" src={frameUrl} alt="" onError={e => { e.target.style.display = 'none' }} /></div>}
           <span className={`media-status-badge ${status.class}`}>{status.label}</span>
           {asset.version > 1 && <span className="media-version-badge">v{asset.version}</span>}
           {asset.duration && <span className="media-duration-badge">{formatDuration(asset.duration)}</span>}
