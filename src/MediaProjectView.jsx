@@ -15,6 +15,7 @@ import UploadPanel from "./components/media/UploadPanel";
 import TeamPanel from "./components/media/TeamPanel";
 import ShareModal from "./components/media/ShareModal";
 import { userApiFetch, formatSize } from "./lib/userApi";
+import useHoverScrub from "./hooks/useHoverScrub";
 
 const STATUS_COLORS = {
   in_review: { label: "In Review", class: "badge-review"   },
@@ -916,6 +917,9 @@ function AssetContextMenu({ asset, pos, copied, onClose, onOpen, onRename, onCop
 function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatusChange, onCopyLink, copied, onShare, onRename, onDownload, onMove }) {
   const [menuPos, setMenuPos] = useState(null); // {x, y} or null
 
+  const scrubUid = (asset.cloudflare_status === 'ready' && asset.cloudflare_uid) ? asset.cloudflare_uid : null;
+  const { scrubBg, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid);
+
   function openMenu(x, y) { setMenuPos({ x, y }); }
   function closeMenu()     { setMenuPos(null); }
 
@@ -956,7 +960,13 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
         </div>
 
         {/* Thumbnail */}
-        <div className="media-asset-thumb">
+        <div
+          className="media-asset-thumb"
+          ref={thumbRef}
+          onMouseEnter={onMouseEnter}
+          onMouseMove={onMouseMove}
+          onMouseLeave={onMouseLeave}
+        >
           {asset.thumbnailUrl ? (
             <img src={asset.thumbnailUrl} alt={asset.name} onError={e => { e.target.style.display = 'none' }} />
           ) : asset.wasabi_status === "uploading" ? (
@@ -966,6 +976,7 @@ function AssetCard({ asset, index, selected, onSelect, onOpen, onDelete, onStatu
           ) : (
             <AssetTypeIcon type={asset.type} size={36} />
           )}
+          {scrubBg && <div className="scrub-overlay" style={scrubBg} />}
           <span className={`media-status-badge ${status.class}`}>{status.label}</span>
           {asset.version > 1 && <span className="media-version-badge">v{asset.version}</span>}
           {asset.duration && <span className="media-duration-badge">{formatDuration(asset.duration)}</span>}

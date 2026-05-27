@@ -12,12 +12,79 @@ import { useProject } from "./context/ProjectContext";
 import UploadPanel from "./components/media/UploadPanel";
 import ShareModal from "./components/media/ShareModal";
 import { projectMediaApi, projectFoldersApi, shareLinksApi, formatSize } from "./lib/api";
+import useHoverScrub from "./hooks/useHoverScrub";
 
 const STATUS_COLORS = {
   in_review: { label: "In Review", class: "badge-review"   },
   approved:  { label: "Approved",  class: "badge-approved" },
   revision:  { label: "Revision",  class: "badge-revision" },
 };
+
+function MpvCardThumb({ asset, onClick }) {
+  const scrubUid = (asset.cloudflare_status === "ready" && asset.cloudflare_uid) ? asset.cloudflare_uid : null;
+  const { scrubBg, thumbRef, onMouseEnter, onMouseMove, onMouseLeave } = useHoverScrub(scrubUid);
+
+  return (
+    <div
+      className="mpv-card-thumb"
+      ref={thumbRef}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+    >
+      {(asset.cloudflare_thumbnail_url || asset.thumbnailUrl) ? (
+        <img
+          src={asset.cloudflare_thumbnail_url || asset.thumbnailUrl}
+          alt={asset.name}
+          onError={e => { e.target.style.display = "none"; }}
+        />
+      ) : (
+        <div className="mpv-card-icon">{typeIcon(asset.type, asset.mime_type)}</div>
+      )}
+      {scrubBg && <div className="scrub-overlay" style={scrubBg} />}
+      {asset.duration && (
+        <span className="mpv-card-duration">
+          {Math.floor(asset.duration / 60)}:{String(Math.round(asset.duration % 60)).padStart(2, "0")}
+        </span>
+      )}
+      {asset.status && STATUS_COLORS[asset.status] && (
+        <span className={`media-status-badge ${STATUS_COLORS[asset.status].class}`}>
+          {STATUS_COLORS[asset.status].label}
+        </span>
+      )}
+      {(asset.cloudflare_status === "processing" || asset.cloudflare_status === "pending") && (
+        <span style={{
+          position: "absolute", top: 8, right: 8,
+          background: "rgba(124,58,237,0.9)", backdropFilter: "blur(8px)",
+          borderRadius: "999px", padding: "3px 10px",
+          fontSize: 11, fontWeight: 600, color: "white",
+          display: "flex", alignItems: "center", gap: 4,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%", background: "white",
+            animation: "cf-pulse 1.5s infinite",
+          }} />
+          Processing
+          <style>{`@keyframes cf-pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
+        </span>
+      )}
+      {asset.cloudflare_status === "error" && (
+        <span style={{
+          position: "absolute", top: 8, right: 8,
+          background: "rgba(239,68,68,0.9)", backdropFilter: "blur(8px)",
+          borderRadius: "999px", padding: "3px 10px",
+          fontSize: 11, fontWeight: 600, color: "white",
+        }}>
+          Stream Error
+        </span>
+      )}
+      {asset.wasabi_status === "processing" && (
+        <span className="mpv-card-processing">Processing…</span>
+      )}
+    </div>
+  );
+}
 
 function typeIcon(type, mime) {
   if (type === "video" || (mime || "").startsWith("video/")) return <VideoCamera size={18} weight="duotone" />;
@@ -259,59 +326,7 @@ export default function ProjectMediaPage() {
                   initial={{ opacity: 0, scale: 0.97 }}
                   animate={{ opacity: 1, scale: 1 }}
                 >
-                  <div
-                    className="mpv-card-thumb"
-                    onClick={() => navigate(`/projects/${projectId}/media/${asset.id}`)}
-                  >
-                    {(asset.cloudflare_thumbnail_url || asset.thumbnailUrl) ? (
-                      <img
-                        src={asset.cloudflare_thumbnail_url || asset.thumbnailUrl}
-                        alt={asset.name}
-                        onError={e => { e.target.style.display = "none"; }}
-                      />
-                    ) : (
-                      <div className="mpv-card-icon">{typeIcon(asset.type, asset.mime_type)}</div>
-                    )}
-                    {asset.duration && (
-                      <span className="mpv-card-duration">
-                        {Math.floor(asset.duration / 60)}:{String(Math.round(asset.duration % 60)).padStart(2, "0")}
-                      </span>
-                    )}
-                    {asset.status && STATUS_COLORS[asset.status] && (
-                      <span className={`media-status-badge ${STATUS_COLORS[asset.status].class}`}>
-                        {STATUS_COLORS[asset.status].label}
-                      </span>
-                    )}
-                    {(asset.cloudflare_status === "processing" || asset.cloudflare_status === "pending") && (
-                      <span style={{
-                        position: "absolute", top: 8, right: 8,
-                        background: "rgba(124,58,237,0.9)", backdropFilter: "blur(8px)",
-                        borderRadius: "999px", padding: "3px 10px",
-                        fontSize: 11, fontWeight: 600, color: "white",
-                        display: "flex", alignItems: "center", gap: 4,
-                      }}>
-                        <span style={{
-                          width: 6, height: 6, borderRadius: "50%", background: "white",
-                          animation: "cf-pulse 1.5s infinite",
-                        }} />
-                        Processing
-                        <style>{`@keyframes cf-pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
-                      </span>
-                    )}
-                    {asset.cloudflare_status === "error" && (
-                      <span style={{
-                        position: "absolute", top: 8, right: 8,
-                        background: "rgba(239,68,68,0.9)", backdropFilter: "blur(8px)",
-                        borderRadius: "999px", padding: "3px 10px",
-                        fontSize: 11, fontWeight: 600, color: "white",
-                      }}>
-                        Stream Error
-                      </span>
-                    )}
-                    {asset.wasabi_status === "processing" && (
-                      <span className="mpv-card-processing">Processing…</span>
-                    )}
-                  </div>
+                  <MpvCardThumb asset={asset} onClick={() => navigate(`/projects/${projectId}/media/${asset.id}`)} />
                   <div className="mpv-card-footer">
                     <button
                       className="mpv-card-select"
