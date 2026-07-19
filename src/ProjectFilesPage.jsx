@@ -60,6 +60,31 @@ function TypeIcon({ item, size = 18 }) {
   return <File size={size} weight="duotone" style={{ color: "var(--t3)" }} />;
 }
 
+// ── Drag-and-drop directory traversal (webkitGetAsEntry) ──────────────────
+function readAllEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    function readBatch() {
+      reader.readEntries(entries => {
+        if (!entries.length) { resolve(all); return; }
+        all.push(...entries);
+        readBatch();
+      }, reject);
+    }
+    readBatch();
+  });
+}
+
+async function traverseEntry(entry, path, out) {
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+    out.push({ file, relPath: path + entry.name });
+  } else if (entry.isDirectory) {
+    const entries = await readAllEntries(entry.createReader());
+    for (const child of entries) await traverseEntry(child, `${path}${entry.name}/`, out);
+  }
+}
+
 function sortItems(items, field, dir) {
   return [...items].sort((a, b) => {
     let va, vb;
@@ -124,7 +149,7 @@ function UfileCardThumb({ item, onClick }) {
 export default function ProjectFilesPage() {
   const { user } = useAuth();
   const { canEdit, canDelete, canDownload } = useProject();
-  const { addCustomUpload } = useUpload();
+  const { addCustomUploads } = useUpload();
   const navigate = useNavigate();
   const location = useLocation();
   const { id: projectId, folderId } = useParams();
@@ -172,7 +197,8 @@ export default function ProjectFilesPage() {
   const videoRef = useRef(null);
 
   // File input ref + CF ingest queue
-  const fileInputRef = useRef(null);
+  const fileInputRef   = useRef(null);
+  const folderInputRef = useRef(null);
   const cfQueue      = useRef([]);
   const cfRunning    = useRef(false);
 
@@ -208,44 +234,97 @@ export default function ProjectFilesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Upload files via Drive-style queue panel ─────────────────────────
-  const handleUploadFiles = useCallback((files) => {
-    async function runCfQueue() {
-      if (cfRunning.current) return;
-      cfRunning.current = true;
-      while (cfQueue.current.length > 0) {
-        const assetId = cfQueue.current.shift();
-        try { await ingestToCloudflare(assetId); } catch {}
-        if (cfQueue.current.length > 0) await new Promise(r => setTimeout(r, 800));
-      }
-      cfRunning.current = false;
+  // ── Upload files via Drive-style queue panel (one at a time) ──────────
+  const runCfQueue = useCallback(async () => {
+    if (cfRunning.current) return;
+    cfRunning.current = true;
+    while (cfQueue.current.length > 0) {
+      const assetId = cfQueue.current.shift();
+      try { await ingestToCloudflare(assetId); } catch {}
+      if (cfQueue.current.length > 0) await new Promise(r => setTimeout(r, 800));
     }
-    Array.from(files).forEach(file => {
-      addCustomUpload(file.name, file.size, async (onProgress) => {
-        const asset = await uploadMediaFile(file, projectId, folderId, onProgress);
-        load();
-        if (asset?.id) {
-          productionApi.syncMediaToManage(asset.id, projectId, folderId).catch(() => {});
-        }
-        if (file.type.startsWith("video/") && asset?.id) {
-          cfQueue.current.push(asset.id);
-          runCfQueue();
-        }
-      });
-    });
-  }, [addCustomUpload, projectId, folderId, load]);
+    cfRunning.current = false;
+  }, []);
 
-  // Window-level drag-and-drop (OS file drops only, not internal item drags)
+  const makeUploadEntry = useCallback((file, targetFolderId) => ({
+    name: file.name,
+    size: file.size,
+    uploadFn: async (onProgress) => {
+      const asset = await uploadMediaFile(file, projectId, targetFolderId, onProgress);
+      load();
+      if (asset?.id) {
+        productionApi.syncMediaToManage(asset.id, projectId, targetFolderId).catch(() => {});
+      }
+      if (file.type.startsWith("video/") && asset?.id) {
+        cfQueue.current.push(asset.id);
+        runCfQueue();
+      }
+    },
+  }), [projectId, load, runCfQueue]);
+
+  const handleUploadFiles = useCallback((files) => {
+    const entries = Array.from(files).map(file => makeUploadEntry(file, folderId));
+    addCustomUploads(entries);
+  }, [makeUploadEntry, folderId, addCustomUploads]);
+
+  // ── Folder upload: recreate directory structure, then queue files ─────
+  const uploadFileTree = useCallback(async (fileEntries) => {
+    if (!fileEntries.length) return;
+    const folderMap = new Map(); // relative dir path ("" = current folder) → folder id
+    folderMap.set("", folderId || null);
+
+    async function ensureFolder(dirPath) {
+      if (folderMap.has(dirPath)) return folderMap.get(dirPath);
+      const idx = dirPath.lastIndexOf("/");
+      const parentPath = idx === -1 ? "" : dirPath.slice(0, idx);
+      const name = idx === -1 ? dirPath : dirPath.slice(idx + 1);
+      const parentId = await ensureFolder(parentPath);
+      const res = await projectFoldersApi.create({ name, project_id: projectId, parent_id: parentId });
+      folderMap.set(dirPath, res.folder.id);
+      return res.folder.id;
+    }
+
+    const entries = [];
+    for (const { file, relPath } of fileEntries) {
+      const idx = relPath.lastIndexOf("/");
+      const dirPath = idx === -1 ? "" : relPath.slice(0, idx);
+      const targetFolderId = await ensureFolder(dirPath).catch(() => folderId || null);
+      entries.push(makeUploadEntry(file, targetFolderId));
+    }
+    addCustomUploads(entries);
+    load();
+  }, [folderId, projectId, makeUploadEntry, addCustomUploads, load]);
+
+  const handleFolderInputChange = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    uploadFileTree(files.map(f => ({ file: f, relPath: f.webkitRelativePath || f.name })));
+  }, [uploadFileTree]);
+
+  // Window-level drag-and-drop (OS file/folder drops only, not internal item drags)
   useEffect(() => {
     const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).some(t => t.toLowerCase() === "files");
     const dragCount = { n: 0 };
     function onEnter(e) { if (!hasFiles(e)) return; e.preventDefault(); dragCount.n++; setIsDragOver(true); }
     function onLeave(e) { if (!hasFiles(e)) return; e.preventDefault(); dragCount.n--; if (dragCount.n <= 0) { dragCount.n = 0; setIsDragOver(false); } }
     function onOver(e)  { if (hasFiles(e)) e.preventDefault(); }
-    function onDrop(e)  {
+    async function onDrop(e)  {
       if (!hasFiles(e)) return;
       e.preventDefault(); dragCount.n = 0; setIsDragOver(false);
-      if (canEdit && e.dataTransfer.files?.length) handleUploadFiles(e.dataTransfer.files);
+      if (!canEdit) return;
+
+      const items = Array.from(e.dataTransfer.items || []);
+      const entries = items.map(it => it.webkitGetAsEntry?.()).filter(Boolean);
+      const hasDir = entries.some(en => en.isDirectory);
+
+      if (hasDir && entries.length) {
+        const out = [];
+        for (const entry of entries) await traverseEntry(entry, "", out);
+        if (out.length) uploadFileTree(out);
+      } else if (e.dataTransfer.files?.length) {
+        handleUploadFiles(e.dataTransfer.files);
+      }
     }
     window.addEventListener("dragenter", onEnter);
     window.addEventListener("dragleave", onLeave);
@@ -257,7 +336,7 @@ export default function ProjectFilesPage() {
       window.removeEventListener("dragover",  onOver);
       window.removeEventListener("drop",      onDrop);
     };
-  }, [canEdit, handleUploadFiles]);
+  }, [canEdit, handleUploadFiles, uploadFileTree]);
 
   useEffect(() => {
     function close() { setCtxMenu(null); setStatusSub(false); setMoveSub(false); setShowSortMenu(false); setBgCtxMenu(null); }
@@ -606,6 +685,7 @@ export default function ProjectFilesPage() {
           <button className={`icon-btn ${view === "grid" ? "active" : ""}`} onClick={() => setView("grid")} title="Grid"><SquaresFour size={16} weight="duotone" /></button>
           <button className={`icon-btn ${view === "list" ? "active" : ""}`} onClick={() => setView("list")} title="List"><Rows size={16} weight="duotone" /></button>
           {canEdit && <button className="icon-btn" onClick={() => setShowNewFolder(true)} title="New Folder"><FolderSimplePlus size={17} weight="duotone" /></button>}
+          {canEdit && <button className="icon-btn" onClick={() => folderInputRef.current?.click()} title="Upload Folder"><FolderSimple size={17} weight="duotone" /></button>}
           {canEdit && (
             <button className="ufiles-upload-btn" onClick={() => fileInputRef.current?.click()}>
               <UploadSimple size={15} weight="bold" />
@@ -708,9 +788,14 @@ export default function ProjectFilesPage() {
               <UploadSimple size={48} weight="duotone" style={{ opacity: 0.2 }} />
               <p>{search || typeFilter !== "all" ? "No files match your filters." : "No files yet. Upload your first file."}</p>
               {!search && typeFilter === "all" && (
-                <button className="ufiles-upload-btn" onClick={() => fileInputRef.current?.click()}>
-                  <UploadSimple size={14} weight="bold" /> Upload Files
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="ufiles-upload-btn" onClick={() => fileInputRef.current?.click()}>
+                    <UploadSimple size={14} weight="bold" /> Upload Files
+                  </button>
+                  <button className="ufiles-upload-btn" onClick={() => folderInputRef.current?.click()}>
+                    <FolderSimple size={14} weight="bold" /> Upload Folder
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -1073,6 +1158,9 @@ export default function ProjectFilesPage() {
           <button onClick={() => { setBgCtxMenu(null); fileInputRef.current?.click(); }}>
             <UploadSimple size={13} /> Upload Files
           </button>
+          <button onClick={() => { setBgCtxMenu(null); folderInputRef.current?.click(); }}>
+            <FolderSimple size={13} /> Upload Folder
+          </button>
         </div>
       )}
 
@@ -1107,6 +1195,16 @@ export default function ProjectFilesPage() {
         multiple
         hidden
         onChange={e => { if (e.target.files?.length) handleUploadFiles(e.target.files); e.target.value = ""; }}
+      />
+
+      {/* Hidden folder input */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory=""
+        multiple
+        hidden
+        onChange={handleFolderInputChange}
       />
 
       {/* Preview modal */}

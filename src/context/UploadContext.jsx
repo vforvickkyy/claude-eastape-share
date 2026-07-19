@@ -278,13 +278,15 @@ export function UploadProvider({ children }) {
     }
   }
 
+  // runUpload synchronously bumps activeRef.current before its first await, so
+  // calling it directly here (not via setTimeout) keeps the counter accurate
+  // even when enqueueItems is called multiple times back-to-back — otherwise
+  // every call would see activeRef.current still at 0 and start immediately.
   function enqueueItems(items) {
     setUploads(prev => [...prev, ...items])
-    let starting = 0
     for (const item of items) {
-      if (activeRef.current + starting < 1) {
-        starting++
-        setTimeout(() => runUpload(item), 0)
+      if (activeRef.current < 1) {
+        runUpload(item)
       } else {
         queueRef.current.push(item)
       }
@@ -310,9 +312,17 @@ export function UploadProvider({ children }) {
    *  onItemComplete: called when this specific item finishes successfully
    */
   function addCustomUpload(name, size, uploadFn, onItemComplete) {
+    addCustomUploads([{ name, size, uploadFn, onItemComplete }])
+  }
+
+  /** Add multiple custom-upload items as a single batch, so they queue and
+   *  upload one at a time instead of all starting concurrently.
+   *  entries: [{ name, size, uploadFn, onItemComplete }]
+   */
+  function addCustomUploads(entries) {
     clearTimeout(autoHideTimer.current)
     setIsMinimized(false)
-    const item = {
+    const items = entries.map(({ name, size, uploadFn, onItemComplete }) => ({
       id: crypto.randomUUID(),
       name,
       size: size || 0,
@@ -323,8 +333,8 @@ export function UploadProvider({ children }) {
       error: null,
       uploadFn,
       onItemComplete,
-    }
-    enqueueItems([item])
+    }))
+    enqueueItems(items)
   }
 
   /** Main entry — call from DrivePage with file list + current folder files */
@@ -387,11 +397,9 @@ export function UploadProvider({ children }) {
       }
 
       // Queue items — URLs already in hand, no presign delay per file
-      let starting = 0
       for (const item of items) {
-        if (activeRef.current + starting < 1) {
-          starting++
-          setTimeout(() => runUpload(item), 0)
+        if (activeRef.current < 1) {
+          runUpload(item)
         } else {
           queueRef.current.push(item)
         }
@@ -467,6 +475,7 @@ export function UploadProvider({ children }) {
       isVisible: uploads.length > 0 || !!pendingDuplicates,
       addFiles,
       addCustomUpload,
+      addCustomUploads,
       cancelUpload,
       clearCompleted,
       dismissAll,
