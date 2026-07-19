@@ -156,22 +156,61 @@ Deno.serve(async (req) => {
       return json({ asset, allowDownload: link.allow_download ?? true, allowComments: link.allow_comments ?? false, comments })
     }
 
-    // ── Project-level share ───────────────────────────────────────────────────
+    // ── Project-level share (browse the real folder tree, root = project) ────
     if (link.project_id && !link.project_media_id) {
-      const { data: assets } = await supabase
-        .from('project_media')
-        .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, wasabi_status, duration, file_size, status, cloudflare_uid, cloudflare_status')
-        .eq('project_id', link.project_id)
-        .eq('is_trashed', false)
-        .order('created_at', { ascending: false })
-      const enriched = await Promise.all((assets || []).map(async (m: any) => {
+      const rootFolder = { id: null, name: link.projects?.name || 'Project' }
+
+      let listFolderId: string | null = null
+      let currentFolder: any = rootFolder
+
+      if (subFolderId) {
+        const { data: sf } = await supabase.from('project_folders').select('id, name, parent_id, project_id').eq('id', subFolderId).single()
+        if (!sf || sf.project_id !== link.project_id) return json({ error: 'Access denied' }, 403)
+        listFolderId = subFolderId
+        currentFolder = sf
+      }
+
+      const folderFilter = (q: any) => listFolderId ? q.eq('folder_id', listFolderId) : q.is('folder_id', null)
+      const parentFilter = (q: any) => listFolderId ? q.eq('parent_id', listFolderId) : q.is('parent_id', null)
+
+      const [mediaResult, filesResult, subfoldersResult] = await Promise.all([
+        folderFilter(supabase.from('project_media')
+          .select('id, name, type, mime_type, wasabi_key, wasabi_thumbnail_key, file_size, created_at, cloudflare_uid, cloudflare_status, duration')
+          .eq('project_id', link.project_id).eq('is_trashed', false)).order('name'),
+        folderFilter(supabase.from('project_files')
+          .select('id, name, mime_type, wasabi_key, thumbnail_key, file_size, created_at')
+          .eq('project_id', link.project_id)).order('name'),
+        parentFilter(supabase.from('project_folders')
+          .select('id, name, created_at')
+          .eq('project_id', link.project_id)).order('name'),
+      ])
+
+      const signedMedia = await Promise.all((mediaResult.data || []).map(async (m: any) => {
         const signed = await signMedia(m)
         return { ...signed, downloadUrl: signed.videoUrl, _source: 'media' }
       }))
+
+      const signedFiles = await Promise.all((filesResult.data || []).map(async (f: any) => {
+        let downloadUrl: string | null = null
+        let thumbnailUrl: string | null = null
+        if (f.wasabi_key && wKey) {
+          try { downloadUrl = await presignGet(wEndpoint, wBucket, f.wasabi_key, wKey, wSecret, wRegion, 14400, f.name) } catch {}
+        }
+        const thumbKey = f.thumbnail_key || (f.mime_type?.startsWith('image/') ? f.wasabi_key : null)
+        if (thumbKey && wKey) {
+          try { thumbnailUrl = await presignGet(wEndpoint, wBucket, thumbKey, wKey, wSecret, wRegion) } catch {}
+        }
+        return { ...f, downloadUrl, thumbnailUrl, _source: 'file' }
+      }))
+
+      const allFiles = [...signedMedia, ...signedFiles].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
       return json({
-        type: 'project',
-        project: link.projects,
-        assets: enriched,
+        type: 'project_folder',
+        rootFolder,
+        currentFolder,
+        subfolders: subfoldersResult.data || [],
+        files: allFiles,
         allowDownload: link.allow_download ?? true,
         allowComments: link.allow_comments ?? false,
       })
