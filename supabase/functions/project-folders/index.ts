@@ -198,24 +198,24 @@ Deno.serve(async (req) => {
       if (media.length > 0) {
         const mediaIds = media.map((m: any) => m.id)
         await Promise.all([
-          supabase.from('project_media_versions').delete().in('media_id', mediaIds).catch(() => {}),
-          supabase.from('project_media_comments').delete().in('media_id', mediaIds).catch(() => {}),
-          supabase.from('share_links').delete().in('project_media_id', mediaIds).catch(() => {}),
-          supabase.from('shot_assets').delete().in('project_media_id', mediaIds).catch(() => {}),
-          supabase.from('production_shots').update({ thumbnail_media_id: null }).in('thumbnail_media_id', mediaIds).catch(() => {}),
-          supabase.from('production_shots').update({ source_media_id: null }).in('source_media_id', mediaIds).catch(() => {}),
+          Promise.resolve(supabase.from('project_media_versions').delete().in('media_id', mediaIds)).catch(() => {}),
+          Promise.resolve(supabase.from('project_media_comments').delete().in('media_id', mediaIds)).catch(() => {}),
+          Promise.resolve(supabase.from('share_links').delete().in('project_media_id', mediaIds)).catch(() => {}),
+          Promise.resolve(supabase.from('shot_assets').delete().in('project_media_id', mediaIds)).catch(() => {}),
+          Promise.resolve(supabase.from('production_shots').update({ thumbnail_media_id: null }).in('thumbnail_media_id', mediaIds)).catch(() => {}),
+          Promise.resolve(supabase.from('production_shots').update({ source_media_id: null }).in('source_media_id', mediaIds)).catch(() => {}),
         ])
-        await supabase.from('project_media').delete().in('id', mediaIds).catch(() => {})
+        await Promise.resolve(supabase.from('project_media').delete().in('id', mediaIds)).catch(() => {})
       }
 
       // Clear all FK references to these folders before deleting them
       await Promise.all([
         // project_files in these folders
-        supabase.from('project_files').delete().in('folder_id', folderIds).catch(() => {}),
+        Promise.resolve(supabase.from('project_files').delete().in('folder_id', folderIds)).catch(() => {}),
         // share links pointing to these folders
-        supabase.from('share_links').delete().in('project_folder_id', folderIds).catch(() => {}),
+        Promise.resolve(supabase.from('share_links').delete().in('project_folder_id', folderIds)).catch(() => {}),
         // production scenes linked to these folders — null the link, keep the scene
-        supabase.from('production_scenes').update({ source_folder_id: null }).in('source_folder_id', folderIds).catch(() => {}),
+        Promise.resolve(supabase.from('production_scenes').update({ source_folder_id: null }).in('source_folder_id', folderIds)).catch(() => {}),
       ])
 
       // Delete all folders (descendants + root)
