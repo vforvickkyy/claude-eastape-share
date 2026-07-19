@@ -1,0 +1,2 @@
+[functions.share-join]
+verify_jwt = false

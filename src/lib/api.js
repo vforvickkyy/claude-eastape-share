@@ -284,6 +284,12 @@ export const shareLinksApi = {
     if (subFolderId) params.subfolder_id = subFolderId
     return get(`${BASE}/share-resolve`, params)
   },
+  resolveManage: (token, password) => {
+    const params = { token, resource: 'manage' }
+    if (password) params.password = password
+    return get(`${BASE}/share-resolve`, params)
+  },
+  join: (token) => post(`${BASE}/share-join`, { token }, true),
   // Drive-specific helpers
   listForDriveFile:     (driveFileId)            => get(`${BASE}/share-links`, { driveFileId }, true),
   listForDriveFolder:   (driveFolderId)          => get(`${BASE}/share-links`, { driveFolderId }, true),

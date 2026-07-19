@@ -5412,6 +5412,18 @@ body { overflow-x: hidden; }
 .input-with-icon { display: flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 0 12px; flex: 1; }
 .input-with-icon .input-field { border: none; background: none; padding: 9px 0; }
 
+.role-badge { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
+.role-badge-viewer   { background: rgba(96,165,250,0.14); color: #60a5fa; }
+.role-badge-reviewer { background: rgba(52,211,153,0.14); color: #34d399; }
+.role-badge-editor   { background: rgba(249,115,22,0.14); color: #f97316; }
+
+.sharing-role-select { display: flex; gap: 8px; flex-wrap: wrap; }
+.sharing-role-opt { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 160px; text-align: left; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; cursor: pointer; color: var(--t2); transition: border-color 0.15s, background 0.15s; }
+.sharing-role-opt:hover { border-color: var(--t4); }
+.sharing-role-opt.active { border-color: var(--accent); background: var(--accent-tint); color: var(--t1); }
+.sharing-role-opt-label { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.sharing-role-opt-desc { font-size: 11px; color: var(--t4); line-height: 1.4; }
+
 .project-settings-tab { display: flex; flex-direction: column; gap: 24px; max-width: 560px; }
 .settings-section { display: flex; flex-direction: column; gap: 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px; }
 .settings-section-title { font-size: 11px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: 0.07em; margin: 0 0 4px; }

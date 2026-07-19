@@ -9,11 +9,14 @@ import {
   DownloadSimple, FolderSimple, Lock, Warning, Clock,
   MusicNote, Rows, SquaresFour, CaretRight, House,
   ArrowLeft, Play, PaperPlaneTilt, Trash, X, ArrowLeft as BackArrow,
-  CaretLeft, CaretRight as CaretRightIcon, ChatDots,
+  CaretLeft, CaretRight as CaretRightIcon, ChatDots, Kanban, LockOpen,
 } from '@phosphor-icons/react'
 import FileTypeIcon from './components/drive/FileTypeIcon'
 import CloudflareVideoPlayer from './components/media/CloudflareVideoPlayer'
+import PublicManageBoard from './components/production/PublicManageBoard'
 import { shareLinksApi } from './lib/api'
+import { useAuth } from './context/AuthContext'
+import { requestShareAccess } from './ShareTokenBridge.jsx'
 
 const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -353,12 +356,60 @@ function ProjectFileTile({ file, allowDownload, onClick }) {
   )
 }
 
+// ── Elevated-access CTA (editor/reviewer share links) ──────────────────────────
+function EditAccessBanner({ token, role }) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [joining, setJoining] = useState(false)
+
+  async function unlock() {
+    if (!user) {
+      requestShareAccess(token)
+      navigate('/login')
+      return
+    }
+    setJoining(true)
+    try {
+      const res = await shareLinksApi.join(token)
+      if (res?.projectId) navigate(`/projects/${res.projectId}/files`)
+    } catch {
+      setJoining(false)
+    }
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 22px',
+      background: 'rgba(124,58,237,0.12)', borderBottom: '1px solid rgba(124,58,237,0.25)',
+    }}>
+      <LockOpen size={16} weight="duotone" style={{ color: '#a78bfa', flexShrink: 0 }} />
+      <p style={{ margin: 0, fontSize: 12.5, color: 'rgba(255,255,255,0.75)', flex: 1 }}>
+        This project is shared with <strong style={{ textTransform: 'capitalize' }}>{role}</strong> access.
+        {user ? ' Unlock the full editing experience.' : ' Log in to unlock the full editing experience.'}
+      </p>
+      {user ? (
+        <button className="btn-primary" style={{ fontSize: 12, height: 30, padding: '0 14px', flexShrink: 0 }} disabled={joining} onClick={unlock}>
+          {joining ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Unlock access'}
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button className="btn-ghost" style={{ fontSize: 12, height: 30, padding: '0 12px' }} onClick={unlock}>Log In</button>
+          <button className="btn-primary" style={{ fontSize: 12, height: 30, padding: '0 12px' }}
+            onClick={() => { requestShareAccess(token); navigate('/signup') }}>Sign Up</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Project folder share view ─────────────────────────────────────────────────
 function ProjectFolderView({ rootData, navData, navStack, navLoading, token, authPw, navigateInto, navigateTo }) {
-  const { rootFolder, allowDownload, allowComments } = rootData
+  const { rootFolder, allowDownload, allowComments, projectId, role } = rootData
   const current = navData || rootData
   const { subfolders = [], files = [] } = current
+  const isWholeProject = !!projectId
 
+  const [activeTab,   setActiveTab]   = useState('files')
   const [viewMode,    setViewMode]    = useState('grid')
   const [activeFile,  setActiveFile]  = useState(null)
   const [activeIdx,   setActiveIdx]   = useState(-1)
@@ -443,6 +494,10 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
       <div style={{ flex: 1, padding: '28px 16px 48px', display: 'flex', justifyContent: 'center' }}>
         <div style={{ ...card, maxWidth: 980, width: '100%', alignSelf: 'flex-start' }}>
 
+          {isWholeProject && (role === 'editor' || role === 'reviewer') && (
+            <EditAccessBanner token={token} role={role} />
+          )}
+
           {/* Folder header */}
           <div className="share-folder-header">
             <FolderSimple size={38} weight="duotone" color="#f59e0b" style={{ flexShrink: 0 }} />
@@ -454,8 +509,8 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
               </p>
             </div>
             <div className="share-folder-actions">
-              <ViewToggle view={viewMode} onChange={setViewMode} />
-              {allowDownload && files.length > 0 && (
+              {activeTab === 'files' && <ViewToggle view={viewMode} onChange={setViewMode} />}
+              {activeTab === 'files' && allowDownload && files.length > 0 && (
                 <button className="btn-ghost" style={{ fontSize: 12, height: 32, padding: '0 12px' }}
                   onClick={() => files.forEach((f, i) => f.downloadUrl && setTimeout(() => triggerDownload(f.downloadUrl, f.name), i * 200))}>
                   <DownloadSimple size={13} /> Download all
@@ -464,6 +519,29 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
             </div>
           </div>
 
+          {isWholeProject && (
+            <div style={{ display: 'flex', gap: 4, padding: '0 22px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              {[['files', 'Files', FolderSimple], ['manage', 'Manage', Kanban]].map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '10px 4px', marginRight: 18, fontSize: 13, fontWeight: 600,
+                    color: activeTab === key ? '#fff' : 'rgba(255,255,255,0.4)',
+                    borderBottom: `2px solid ${activeTab === key ? 'var(--accent)' : 'transparent'}`,
+                  }}
+                >
+                  <Icon size={14} weight={activeTab === key ? 'fill' : 'regular'} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'manage' ? (
+            <PublicManageBoard token={token} password={authPw} />
+          ) : (
+          <>
           {/* Breadcrumbs */}
           {navStack.length > 0 && (
             <div style={{ padding: '10px 22px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
@@ -543,6 +621,8 @@ function ProjectFolderView({ rootData, navData, navStack, navLoading, token, aut
               </>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
       <PageFooter />

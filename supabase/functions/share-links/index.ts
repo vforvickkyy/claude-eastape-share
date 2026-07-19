@@ -69,11 +69,13 @@ Deno.serve(async (req) => {
     // POST — create share link
     if (req.method === 'POST') {
       const body = await req.json()
-      const { project_media_id, project_file_id, project_id, drive_file_id, drive_folder_id, project_folder_id, allow_download, allow_comments, access_type, password, expires_at, recipient_email, share_message, file_name } = body
+      const { project_media_id, project_file_id, project_id, drive_file_id, drive_folder_id, project_folder_id, allow_download, allow_comments, access_type, role, password, expires_at, recipient_email, share_message, file_name } = body
 
       if (!project_media_id && !project_file_id && !project_id && !drive_file_id && !drive_folder_id && !project_folder_id) {
         return json({ error: 'One of project_media_id, project_file_id, project_id, drive_file_id, drive_folder_id, or project_folder_id required' }, 400)
       }
+
+      const ROLES = new Set(['viewer', 'reviewer', 'editor'])
 
       const { data: link, error } = await supabase.from('share_links').insert({
         created_by: user.id, project_media_id, project_file_id, project_id,
@@ -83,6 +85,7 @@ Deno.serve(async (req) => {
         allow_download: allow_download ?? true,
         allow_comments: allow_comments ?? false,
         access_type: access_type || 'anyone',
+        role: ROLES.has(role) ? role : 'viewer',
         password: password || null, expires_at: expires_at || null,
         short_token: makeShortToken(),
       }).select().single()
@@ -131,6 +134,10 @@ Deno.serve(async (req) => {
       const allowedFields = ['allow_download', 'allow_comments', 'password', 'expires_at', 'access_type']
       const updates: any = {}
       for (const key of allowedFields) if (body[key] !== undefined) updates[key] = body[key]
+      if (body.role !== undefined) {
+        const ROLES = new Set(['viewer', 'reviewer', 'editor'])
+        updates.role = ROLES.has(body.role) ? body.role : 'viewer'
+      }
 
       const { data: updated, error } = await supabase.from('share_links').update(updates).eq('id', linkId).select().single()
       if (error) return json({ error: error.message }, 500)

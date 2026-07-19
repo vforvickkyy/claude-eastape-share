@@ -6,6 +6,7 @@ import { ProjectProvider } from "./context/ProjectContext";
 import { UploadProvider } from "./context/UploadContext";
 import { ToastProvider } from "./components/ui/Toast";
 import UploadProgressPanel from "./components/drive/UploadProgressPanel";
+import ShareTokenBridge     from "./ShareTokenBridge.jsx";
 import LoginPage           from "./LoginPage.jsx";
 import SignupPage          from "./SignupPage.jsx";
 import OTPVerificationPage from "./OTPVerificationPage.jsx";
@@ -71,6 +72,7 @@ export default function App() {
       <UploadProvider>
         <ToastProvider>
         <UploadProgressPanel />
+        <ShareTokenBridge />
         <Routes>
           {/* ── Root = Master Dashboard ── */}
           <Route path="/"                         element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

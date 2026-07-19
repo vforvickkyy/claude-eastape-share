@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
     const password    = url.searchParams.get('password')
     const subFolderId = url.searchParams.get('subfolder_id')
     const mediaId     = url.searchParams.get('media_id')
+    const resource    = url.searchParams.get('resource')
     if (!token) return json({ error: 'Token required' }, 400)
 
     const { data: link, error } = await supabase
@@ -119,6 +120,89 @@ Deno.serve(async (req) => {
         .eq('media_id', mediaId)
         .order('created_at')
       return json({ comments: comments || [] })
+    }
+
+    // ── Read-only production board (whole-project share) ─────────────────────
+    if (resource === 'manage') {
+      if (!link.project_id) return json({ error: 'Not a project share' }, 400)
+      const pid = link.project_id
+
+      const [{ data: scenes }, { data: columns }, { data: statuses }, { data: shots }] = await Promise.all([
+        supabase.from('production_scenes').select('*').eq('project_id', pid).order('position'),
+        supabase.from('shot_columns').select('*').eq('project_id', pid).order('position'),
+        supabase.from('production_statuses').select('*').eq('project_id', pid).order('position'),
+        supabase.from('production_shots').select('*, production_scenes(*), production_statuses(*)').eq('project_id', pid).order('position'),
+      ])
+
+      // Batch fetch linked media (for thumbnails) + assignee profiles — mirrors production/index.ts's shots_with_media
+      const linkedIds = (shots || []).map((s: any) => s.thumbnail_media_id).filter(Boolean)
+      const mediaMap: Record<string, { name: string; cloudflare_uid: string | null; cloudflare_status: string | null }> = {}
+      if (linkedIds.length > 0) {
+        const { data: mediaRows } = await supabase.from('project_media').select('id, name, cloudflare_uid, cloudflare_status').in('id', linkedIds)
+        for (const m of (mediaRows || [])) mediaMap[m.id] = { name: m.name, cloudflare_uid: m.cloudflare_uid || null, cloudflare_status: m.cloudflare_status || null }
+      }
+
+      const assigneeIds = [...new Set((shots || []).map((s: any) => s.assigned_to).filter(Boolean))]
+      const profileMap: Record<string, { full_name: string; avatar_url: string | null }> = {}
+      if (assigneeIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', assigneeIds)
+        for (const p of (profiles || [])) profileMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url }
+      }
+
+      const shotsWithMedia = (shots || []).map((shot: any) => {
+        const mid = shot.thumbnail_media_id
+        const mediaInfo = mid ? mediaMap[mid] : null
+        const profile = shot.assigned_to ? profileMap[shot.assigned_to] : null
+        return {
+          ...shot,
+          linked_media_id:          mid && mediaInfo ? mid : null,
+          linked_media_name:        mid && mediaInfo ? mediaInfo.name : null,
+          linked_cloudflare_uid:    mediaInfo?.cloudflare_uid || null,
+          linked_cloudflare_status: mediaInfo?.cloudflare_status || null,
+          assigned_to_name:   profile?.full_name || null,
+          assigned_to_avatar: profile?.avatar_url || null,
+          custom_assignee:    shot.custom_assignee || null,
+        }
+      })
+
+      // Team members for 'team'-type custom columns (name/avatar only — no emails)
+      const [{ data: members }, { data: projOwner }] = await Promise.all([
+        supabase.from('project_members').select('id, user_id, role, display_name').eq('project_id', pid).eq('accepted', true),
+        supabase.from('projects').select('user_id').eq('id', pid).single(),
+      ])
+      const allProfileIds = [...new Set([projOwner?.user_id, ...(members || []).map((m: any) => m.user_id)].filter(Boolean))]
+      const { data: memberProfiles } = allProfileIds.length > 0
+        ? await supabase.from('profiles').select('id, full_name, avatar_url').in('id', allProfileIds)
+        : { data: [] }
+      const memberProfileMap: Record<string, any> = {}
+      ;(memberProfiles || []).forEach((p: any) => { memberProfileMap[p.id] = p })
+
+      const teamMembers: any[] = []
+      if (projOwner?.user_id) {
+        teamMembers.push({
+          id: null, user_id: projOwner.user_id, role: 'owner',
+          full_name: memberProfileMap[projOwner.user_id]?.full_name || null,
+          avatar_url: memberProfileMap[projOwner.user_id]?.avatar_url || null,
+          display_name: null,
+        })
+      }
+      for (const m of (members || [])) {
+        teamMembers.push({
+          id: m.id, user_id: m.user_id, role: m.role,
+          full_name:  m.user_id ? (memberProfileMap[m.user_id]?.full_name  || null) : null,
+          avatar_url: m.user_id ? (memberProfileMap[m.user_id]?.avatar_url || null) : null,
+          display_name: m.display_name || null,
+        })
+      }
+
+      return json({
+        scenes: scenes || [],
+        columns: columns || [],
+        statuses: statuses || [],
+        shots: shotsWithMedia,
+        teamMembers,
+        role: link.role || 'viewer',
+      })
     }
 
     const wEndpoint = (Deno.env.get('AWS_ENDPOINT') ?? Deno.env.get('WASABI_ENDPOINT') ?? '').replace(/\/$/, '') || 'https://s3.ap-southeast-1.wasabisys.com'
@@ -213,6 +297,8 @@ Deno.serve(async (req) => {
         files: allFiles,
         allowDownload: link.allow_download ?? true,
         allowComments: link.allow_comments ?? false,
+        projectId: link.project_id,
+        role: link.role || 'viewer',
       })
     }
 

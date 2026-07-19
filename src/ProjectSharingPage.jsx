@@ -1,8 +1,14 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { Plus, Copy, CheckCircle, Trash, LinkSimple, Eye, EyeSlash, Lock } from "@phosphor-icons/react";
+import { Plus, Copy, CheckCircle, Trash, LinkSimple, Eye, EyeSlash, Lock, ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { useProject } from "./context/ProjectContext";
 import { shareLinksApi } from "./lib/api";
+
+const ROLE_INFO = {
+  viewer:   { label: "Viewer",   icon: Eye,          desc: "Anyone with the link can view and comment. No login required.",                       className: "role-badge-viewer" },
+  reviewer: { label: "Reviewer", icon: ChatCircle,    desc: "Anyone can view and comment. Logging in with reviewer access unlocks review actions.", className: "role-badge-reviewer" },
+  editor:   { label: "Editor",   icon: PencilSimple,  desc: "Anyone can view and comment. Logging in with editor access unlocks full editing.",      className: "role-badge-editor" },
+};
 
 export default function ProjectSharingPage() {
   const { id: projectId } = useParams();
@@ -14,6 +20,7 @@ export default function ProjectSharingPage() {
   const [copied,    setCopied]    = useState(null);
 
   // New link form
+  const [role,           setRole]           = useState("viewer");
   const [allowDownload,  setAllowDownload]  = useState(true);
   const [allowComments,  setAllowComments]  = useState(true);
   const [password,       setPassword]       = useState("");
@@ -35,6 +42,7 @@ export default function ProjectSharingPage() {
     try {
       await shareLinksApi.create({
         project_id: projectId,
+        role,
         allow_download: allowDownload,
         allow_comments: allowComments,
         password: password || null,
@@ -79,7 +87,18 @@ export default function ProjectSharingPage() {
                 <LinkSimple size={16} weight="duotone" />
               </div>
               <div className="sharing-link-info">
-                <div className="sharing-link-url">{shareUrl(link)}</div>
+                <div className="sharing-link-url">
+                  {shareUrl(link)}
+                  {(() => {
+                    const info = ROLE_INFO[link.role] || ROLE_INFO.viewer;
+                    const RoleIcon = info.icon;
+                    return (
+                      <span className={`role-badge ${info.className}`} title={info.desc}>
+                        <RoleIcon size={11} weight="bold" /> {info.label}
+                      </span>
+                    );
+                  })()}
+                </div>
                 <div className="sharing-link-meta">
                   {link.allow_download && <span>Downloads ✓</span>}
                   {link.allow_comments && <span>Comments ✓</span>}
@@ -107,6 +126,25 @@ export default function ProjectSharingPage() {
         <div className="sharing-create-section">
           <h3 className="tab-section-title">Create Share Link</h3>
           <form onSubmit={handleCreate} className="sharing-create-form">
+            <div className="sharing-role-select">
+              {Object.entries(ROLE_INFO).map(([key, info]) => {
+                const RoleIcon = info.icon;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`sharing-role-opt ${role === key ? "active" : ""}`}
+                    onClick={() => setRole(key)}
+                  >
+                    <RoleIcon size={16} weight="duotone" />
+                    <div>
+                      <div className="sharing-role-opt-label">{info.label}</div>
+                      <div className="sharing-role-opt-desc">{info.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
             <div className="sharing-toggles">
               <label className="toggle-label">
                 <input type="checkbox" checked={allowDownload} onChange={e => setAllowDownload(e.target.checked)} />
