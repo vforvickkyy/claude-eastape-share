@@ -50,13 +50,19 @@ export default function ProjectSharingPage() {
       });
       setPassword(""); setExpiresAt("");
       load();
-    } catch {}
-    finally { setCreating(false); }
+    } catch (err) {
+      alert(err.message || "Failed to create share link.");
+    } finally { setCreating(false); }
   }
 
   async function handleDelete(id) {
     if (!confirm("Revoke this share link?")) return;
-    await shareLinksApi.delete(id).catch(() => {});
+    try {
+      await shareLinksApi.delete(id);
+    } catch (err) {
+      alert(err.message || "Failed to revoke share link.");
+      return;
+    }
     setLinks(ls => ls.filter(l => l.id !== id));
   }
 
