@@ -87,6 +87,15 @@ Deno.serve(async (req) => {
       return !!mem
     }
 
+    // Folder creator, project owner, or an accepted member with edit rights (not viewer/reviewer)
+    async function canEditFolder(folder: { user_id: string; project_id: string }): Promise<boolean> {
+      if (folder.user_id === user!.id) return true
+      const { data: project } = await supabase.from('projects').select('user_id').eq('id', folder.project_id).single()
+      if (project?.user_id === user!.id) return true
+      const { data: member } = await supabase.from('project_members').select('role').eq('project_id', folder.project_id).eq('user_id', user!.id).eq('accepted', true).single()
+      return !!member && member.role !== 'viewer' && member.role !== 'reviewer'
+    }
+
     if (req.method === 'GET') {
       if (id) {
         const { data, error } = await supabase.from('project_folders').select('*').eq('id', id).single()
@@ -125,7 +134,7 @@ Deno.serve(async (req) => {
       const { name, parent_id } = await req.json()
       const { data: folder } = await supabase.from('project_folders').select('project_id, user_id').eq('id', id).single()
       if (!folder) return json({ error: 'Not found' }, 404)
-      if (folder.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
+      if (!(await canEditFolder(folder))) return json({ error: 'Forbidden' }, 403)
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
       if (name) updates.name = name
@@ -142,14 +151,7 @@ Deno.serve(async (req) => {
       const { data: folder } = await supabase.from('project_folders').select('user_id, project_id').eq('id', id).single()
       if (!folder) return json({ error: 'Not found' }, 404)
 
-      // Auth: owner, project owner, or editor/manager member
-      if (folder.user_id !== user.id) {
-        const { data: project } = await supabase.from('projects').select('user_id').eq('id', folder.project_id).single()
-        if (project?.user_id !== user.id) {
-          const { data: member } = await supabase.from('project_members').select('role').eq('project_id', folder.project_id).eq('user_id', user.id).eq('accepted', true).single()
-          if (!member || member.role === 'viewer' || member.role === 'reviewer') return json({ error: 'Forbidden' }, 403)
-        }
-      }
+      if (!(await canEditFolder(folder))) return json({ error: 'Forbidden' }, 403)
 
       // Collect this folder + all descendants
       const { data: allFolders } = await supabase

@@ -444,7 +444,10 @@ export default function ProjectFilesPage() {
     if (!confirm(`Delete folder "${folder.name}" and all its contents? This will permanently remove all files from storage.`)) return;
     try {
       await projectFoldersApi.delete(folder.id);
-    } catch {}
+    } catch (err) {
+      alert(err.message || "Failed to delete folder.");
+      return;
+    }
     setFolders(prev => prev.filter(f => f.id !== folder.id));
     load();
   }
@@ -465,14 +468,22 @@ export default function ProjectFilesPage() {
     if (!name) { setRenameItem(null); return; }
     if (renameItem._type === "folder") {
       if (name !== renameItem.name) {
-        await projectFoldersApi.update(renameItem.id, { name }).catch(() => {});
-        setFolders(prev => prev.map(f => f.id === renameItem.id ? { ...f, name } : f));
+        try {
+          await projectFoldersApi.update(renameItem.id, { name });
+          setFolders(prev => prev.map(f => f.id === renameItem.id ? { ...f, name } : f));
+        } catch (err) {
+          alert(err.message || "Failed to rename folder.");
+        }
       }
     } else {
       if (name !== renameItem.name) {
-        if (renameItem._source === "media") await projectMediaApi.update(renameItem.id, { name }).catch(() => {});
-        else await projectFilesApi.update(renameItem.id, { name }).catch(() => {});
-        setItems(prev => prev.map(i => i.id === renameItem.id ? { ...i, name } : i));
+        try {
+          if (renameItem._source === "media") await projectMediaApi.update(renameItem.id, { name });
+          else await projectFilesApi.update(renameItem.id, { name });
+          setItems(prev => prev.map(i => i.id === renameItem.id ? { ...i, name } : i));
+        } catch (err) {
+          alert(err.message || "Failed to rename file.");
+        }
       }
     }
     setRenameItem(null);
