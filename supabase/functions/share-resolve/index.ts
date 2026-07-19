@@ -105,11 +105,13 @@ Deno.serve(async (req) => {
       .eq('id', link.id)
       .then(() => {})
 
-    // ── Per-media comments request (project_folder share) ────────────────────
-    if (mediaId && link.project_folder_id && link.allow_comments) {
-      const { data: mediaRow } = await supabase.from('project_media').select('folder_id').eq('id', mediaId).single()
+    // ── Per-media comments request (project_folder or whole-project share) ───
+    if (mediaId && (link.project_folder_id || link.project_id) && link.allow_comments) {
+      const { data: mediaRow } = await supabase.from('project_media').select('folder_id, project_id').eq('id', mediaId).single()
       if (!mediaRow) return json({ error: 'Media not found' }, 404)
-      const ok = await isProjectFolderDescendantOf(supabase, mediaRow.folder_id, link.project_folder_id)
+      const ok = link.project_folder_id
+        ? await isProjectFolderDescendantOf(supabase, mediaRow.folder_id, link.project_folder_id)
+        : mediaRow.project_id === link.project_id
       if (!ok) return json({ error: 'Access denied' }, 403)
       const { data: comments } = await supabase
         .from('project_media_comments')
@@ -162,8 +164,17 @@ Deno.serve(async (req) => {
         .eq('project_id', link.project_id)
         .eq('is_trashed', false)
         .order('created_at', { ascending: false })
-      const enriched = await Promise.all((assets || []).map(signMedia))
-      return json({ type: 'project', project: link.projects, assets: enriched, allowDownload: link.allow_download ?? true })
+      const enriched = await Promise.all((assets || []).map(async (m: any) => {
+        const signed = await signMedia(m)
+        return { ...signed, downloadUrl: signed.videoUrl, _source: 'media' }
+      }))
+      return json({
+        type: 'project',
+        project: link.projects,
+        assets: enriched,
+        allowDownload: link.allow_download ?? true,
+        allowComments: link.allow_comments ?? false,
+      })
     }
 
     // ── Drive file share ──────────────────────────────────────────────────────

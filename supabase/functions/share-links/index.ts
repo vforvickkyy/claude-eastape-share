@@ -28,6 +28,14 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
     if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
+    // Project owner or an accepted member with sharing rights (not viewer/reviewer)
+    async function canManageProjectSharing(pid: string): Promise<boolean> {
+      const { data: project } = await supabase.from('projects').select('user_id').eq('id', pid).single()
+      if (project?.user_id === user!.id) return true
+      const { data: member } = await supabase.from('project_members').select('role').eq('project_id', pid).eq('user_id', user!.id).eq('accepted', true).single()
+      return !!member && (member.role === 'admin' || member.role === 'owner')
+    }
+
     const url = new URL(req.url)
     const linkId          = url.searchParams.get('id')
     const projectId       = url.searchParams.get('projectId')
@@ -38,12 +46,21 @@ Deno.serve(async (req) => {
 
     // GET — list share links
     if (req.method === 'GET') {
-      let q = supabase.from('share_links').select('*, project_media(*), project_files(name, mime_type), drive_files(name, mime_type, file_size), drive_folders(name), project_folders(name)').eq('created_by', user.id).order('created_at', { ascending: false })
-      if (projectId)       q = q.eq('project_id', projectId)
-      if (mediaId)         q = q.eq('project_media_id', mediaId)
-      if (driveFileId)     q = q.eq('drive_file_id', driveFileId)
-      if (driveFolderId)   q = q.eq('drive_folder_id', driveFolderId)
-      if (projectFolderId) q = q.eq('project_folder_id', projectFolderId)
+      let q = supabase.from('share_links').select('*, project_media(*), project_files(name, mime_type), drive_files(name, mime_type, file_size), drive_folders(name), project_folders(name)').order('created_at', { ascending: false })
+
+      if (projectId) {
+        // Project-level share list (Share tab): visible to whoever can manage sharing
+        // for the project, not just the literal creator of each link.
+        if (!(await canManageProjectSharing(projectId))) return json({ error: 'Forbidden' }, 403)
+        q = q.eq('project_id', projectId)
+      } else {
+        q = q.eq('created_by', user.id)
+        if (mediaId)         q = q.eq('project_media_id', mediaId)
+        if (driveFileId)     q = q.eq('drive_file_id', driveFileId)
+        if (driveFolderId)   q = q.eq('drive_folder_id', driveFolderId)
+        if (projectFolderId) q = q.eq('project_folder_id', projectFolderId)
+      }
+
       const { data: links, error } = await q
       if (error) return json({ error: error.message }, 500)
       return json({ links: links || [] })
@@ -105,12 +122,17 @@ Deno.serve(async (req) => {
     // PUT — update
     if (req.method === 'PUT') {
       if (!linkId) return json({ error: 'id required' }, 400)
-      const body = await req.json()
-      const allowed = ['allow_download', 'allow_comments', 'password', 'expires_at', 'access_type']
-      const updates: any = {}
-      for (const key of allowed) if (body[key] !== undefined) updates[key] = body[key]
+      const { data: existing } = await supabase.from('share_links').select('id, project_id, created_by').eq('id', linkId).single()
+      if (!existing) return json({ error: 'Not found' }, 404)
+      const canModify = existing.created_by === user.id || (!!existing.project_id && await canManageProjectSharing(existing.project_id))
+      if (!canModify) return json({ error: 'Forbidden' }, 403)
 
-      const { data: updated, error } = await supabase.from('share_links').update(updates).eq('id', linkId).eq('created_by', user.id).select().single()
+      const body = await req.json()
+      const allowedFields = ['allow_download', 'allow_comments', 'password', 'expires_at', 'access_type']
+      const updates: any = {}
+      for (const key of allowedFields) if (body[key] !== undefined) updates[key] = body[key]
+
+      const { data: updated, error } = await supabase.from('share_links').update(updates).eq('id', linkId).select().single()
       if (error) return json({ error: error.message }, 500)
       return json({ link: updated })
     }
@@ -118,7 +140,12 @@ Deno.serve(async (req) => {
     // DELETE — revoke link
     if (req.method === 'DELETE') {
       if (!linkId) return json({ error: 'id required' }, 400)
-      const { error } = await supabase.from('share_links').delete().eq('id', linkId).eq('created_by', user.id)
+      const { data: existing } = await supabase.from('share_links').select('id, project_id, created_by').eq('id', linkId).single()
+      if (!existing) return json({ error: 'Not found' }, 404)
+      const canModify = existing.created_by === user.id || (!!existing.project_id && await canManageProjectSharing(existing.project_id))
+      if (!canModify) return json({ error: 'Forbidden' }, 403)
+
+      const { error } = await supabase.from('share_links').delete().eq('id', linkId)
       if (error) return json({ error: error.message }, 500)
       return json({ ok: true })
     }
